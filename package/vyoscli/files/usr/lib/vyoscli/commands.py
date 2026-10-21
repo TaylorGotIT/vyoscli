@@ -616,6 +616,12 @@ def build_tree(store: Any) -> CommandTree:
         route_tpl.add(Node(name="interface",
                            help="Egress interface",
                            value_type="str", action=_cfg_noop))
+        route_tpl.add(Node(name="blackhole",
+                           help="Silently drop packets",
+                           value_type="bool", action=_cfg_noop))
+        route_tpl.add(Node(name="reject",
+                           help="Send ICMP unreachable",
+                           value_type="bool", action=_cfg_noop))
         # Tab-completion: list prefixes already in the candidate config
         def _existing_routes(store=store):
             try:

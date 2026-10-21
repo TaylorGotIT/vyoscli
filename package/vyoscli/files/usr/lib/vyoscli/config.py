@@ -529,12 +529,19 @@ class ConfigStore:
                     self._uci("set", f"network.{section}.gateway={cfg['next-hop']}")
                 if "interface" in cfg:
                     self._uci("set", f"network.{section}.interface={cfg['interface']}")
+                # blackhole / reject
+                if cfg.get("blackhole"):
+                    self._uci("set", f"network.{section}.type=blackhole")
+                elif cfg.get("reject"):
+                    self._uci("set", f"network.{section}.type=unreachable")
                 # default interface: if only next-hop given, try eth0 (WAN)
-                if "interface" not in cfg:
+                if "interface" not in cfg and not cfg.get("blackhole") and not cfg.get("reject"):
                     self._uci("set", "network." + section + ".interface=wan")
                 notes.append(f"route {prefix} -> "
                              + (f"via {cfg.get('next-hop')}" if cfg.get("next-hop") else "")
-                             + (f" dev {cfg.get('interface')}" if cfg.get("interface") else ""))
+                             + (f" dev {cfg.get('interface')}" if cfg.get("interface") else "")
+                             + (" blackhole" if cfg.get("blackhole") else "")
+                             + (" reject" if cfg.get("reject") else ""))
             self._uci("commit", "network")
             subprocess.run(["/etc/init.d/network", "reload"],
                            capture_output=True, text=True, timeout=20)
