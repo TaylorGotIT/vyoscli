@@ -39,9 +39,9 @@ sudo apt install -y build-essential clang flex bison g++ gawk \
 ### 下载 SDK
 
 ```bash
-wget https://downloads.openwrt.org/releases/24.10.0/targets/x86/64/openwrt-sdk-24.10.0-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst
-sudo tar -I zstd -xvf openwrt-sdk-24.10.0-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst
-cd openwrt-sdk-24.10.0-x86-64_gcc-13.3.0_musl.Linux-x86_64/
+wget https://downloads.openwrt.org/releases/25.12.6/targets/x86/64/openwrt-sdk-25.12.6-x86-64_gcc-14.2.0_musl.Linux-x86_64.tar.zst
+sudo tar -I zstd -xvf openwrt-sdk-25.12.6-x86-64_gcc-14.2.0_musl.Linux-x86_64.tar.zst
+cd openwrt-sdk-25.12.6-x86-64_gcc-14.2.0_musl.Linux-x86_64/
 ```
 
 ### 放入包源码
