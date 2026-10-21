@@ -173,11 +173,19 @@ commit
 ### Static route
 
 ```
+# 普通路由
 set protocols static route 0.0.0.0/0 next-hop 192.168.1.1
+
+# 黑洞（静默丢弃）
+set protocols static route 192.168.99.0/24 blackhole
+
+# 拒绝（ICMP unreachable）
+set protocols static route 10.99.0.0/16 reject
+
 commit
 ```
 
-查看：`show ip route`
+查看：show ip route
 
 ### BGP
 
