@@ -111,6 +111,11 @@ DEFAULT_RUNNING: Dict[str, Any] = {
             "address": {},      # domain -> {ip}
         },
         "console-server": {},   # device -> {speed, ssh-port, description, alias}
+        "tcp-accelerate": {
+            "congestion-control": "bbr",   # bbr/cubic/hybla
+            "fq_codel": True,
+        },
+        "fec": {},   # UDPspeeder config
         "crontab": {},          # name -> {schedule, script, description}
         "dhcp": {},             # ifname -> {start, end, lease, dns: [...]}
         "dnsmasq": {
@@ -352,6 +357,7 @@ class ConfigStore:
         notes.extend(self._apply_ssh(old, new))
         notes.extend(self._apply_adguard(old, new))
         notes.extend(self._apply_dnsmasq(old, new))
+        notes.extend(self._apply_tcp_accelerate(old, new))
         notes.extend(self._apply_policy(old, new))
         notes.extend(self._apply_vrf(old, new))
         notes.extend(self._apply_login(old, new))
@@ -1220,6 +1226,29 @@ class ConfigStore:
             notes.append(f"dnsmasq: {new_dm.get('listen-address','0.0.0.0')}:{new_dm.get('port',53)}")
         except Exception as e:
             notes.append(f"dnsmasq apply failed: {e}")
+        return notes
+
+    def _apply_tcp_accelerate(self, old, new):
+        old_tcp = (old.get("service") or {}).get("tcp-accelerate") or {}
+        new_tcp = (new.get("service") or {}).get("tcp-accelerate") or {}
+        if old_tcp == new_tcp:
+            return []
+        notes = []
+        try:
+            cc = new_tcp.get("congestion-control", "bbr")
+            if cc == "bbr":
+                self._ensure_package("kmod-tcp-bbr", notes)
+            elif cc == "hybla":
+                self._ensure_package("kmod-tcp-hybla", notes)
+            # sysctl
+            subprocess.run(["sysctl", "-w", f"net.ipv4.tcp_congestion_control={cc}"],
+                           capture_output=True, text=True, timeout=5)
+            if new_tcp.get("fq_codel", True):
+                subprocess.run(["sysctl", "-w", "net.core.default_qdisc=fq_codel"],
+                               capture_output=True, text=True, timeout=5)
+            notes.append(f"tcp cc = {cc}, qdisc = fq_codel")
+        except Exception as e:
+            notes.append(f"tcp accelerate failed: {e}")
         return notes
 
     def _apply_policy(self, old, new):

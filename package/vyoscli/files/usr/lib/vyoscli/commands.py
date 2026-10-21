@@ -759,6 +759,14 @@ def build_tree(store: Any) -> CommandTree:
         addr.dynamic = _existing_addrs
         addr._dyn_template = addr_tpl  # type: ignore[attr-defined]
 
+        # service tcp-accelerate ...
+        tcp_acc = Node(name="tcp-accelerate", help="TCP congestion control")
+        svc.add(tcp_acc)
+        tcp_acc.add(Node(name="congestion-control", help="bbr/cubic/hybla",
+                         value_type="str", action=_cfg_noop))
+        tcp_acc.add(Node(name="fq-codel", help="Enable fq_codel qdisc",
+                         value_type="bool", action=_cfg_noop))
+
         # system login user ...
         login = Node(name="login", help="Login user management")
         sys.add(login)
