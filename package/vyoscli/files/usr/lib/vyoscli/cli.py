@@ -265,7 +265,9 @@ class Cli:
 
     # ------------ main loop ------------
     def cmdloop(self) -> None:
-        print("Welcome to vyoscli (a VyOS-style CLI for OpenWrt). Type 'exit' to quit.")
+        # set terminal title
+        print("\033]0;vyoscli - OpenWrt\007", end="")
+        print("Welcome to vyoscli (a VyOS-style CLI for OpenWrt). Type 'exit' to return to shell.")
         while self.running:
             try:
                 line = input(self._prompt()).strip()
