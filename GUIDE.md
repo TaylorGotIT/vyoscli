@@ -65,6 +65,30 @@ set system name-server 223.5.5.5
 commit
 ```
 
+### Login User
+
+本地用户管理。
+
+```
+set system login user admin full-name "Administrator"
+set system login user admin authentication plaintext-password mypass123
+commit
+```
+
+SSH 公钥：
+
+```
+set system login user admin authentication public-keys laptop key "AAAAB3NzaC1yc2E..."
+set system login user admin authentication public-keys laptop type ssh-rsa
+commit
+```
+
+禁用账号：
+
+```
+set system login user admin disable
+commit
+```
 ### Hardware asset
 
 ```

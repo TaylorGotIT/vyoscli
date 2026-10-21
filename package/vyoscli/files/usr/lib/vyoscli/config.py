@@ -36,6 +36,9 @@ DEFAULT_RUNNING: Dict[str, Any] = {
         "timezone": "Asia/Shanghai",
         "ntp": ["ntp.aliyun.com", "cn.pool.ntp.org"],
         "language": "zh_cn",
+        "login": {
+            "user": {},   # name -> {full-name, password, disable, public-keys: {id: {key, type}}}
+        },
         "hardware": {
             "vendor":  "",
             "model":   "",
@@ -342,6 +345,7 @@ class ConfigStore:
         notes.extend(self._apply_ssh(old, new))
         notes.extend(self._apply_adguard(old, new))
         notes.extend(self._apply_dnsmasq(old, new))
+        notes.extend(self._apply_login(old, new))
         notes.extend(self._apply_ipsec(old, new))
         notes.extend(self._apply_console_server(old, new))
         notes.extend(self._apply_service_disable(old, new))
@@ -1192,6 +1196,50 @@ class ConfigStore:
             notes.append(f"dnsmasq: {new_dm.get('listen-address','0.0.0.0')}:{new_dm.get('port',53)}")
         except Exception as e:
             notes.append(f"dnsmasq apply failed: {e}")
+        return notes
+
+    def _apply_login(self, old, new):
+        old_login = (old.get("system") or {}).get("login") or {}
+        new_login = (new.get("system") or {}).get("login") or {}
+        if old_login == new_login:
+            return []
+        notes = []
+        try:
+            for name, u in (new_login.get("user") or {}).items():
+                if not isinstance(u, dict):
+                    continue
+                # create user if not exists
+                subprocess.run(["id", name], capture_output=True, timeout=5)
+                if subprocess.run(["id", name], capture_output=True, timeout=5).returncode != 0:
+                    subprocess.run(["useradd", "-m", "-s", "/bin/ash", name],
+                                   capture_output=True, timeout=5)
+                # password
+                pwd = u.get("password")
+                if pwd:
+                    subprocess.run(["chpasswd"], input=f"{name}:{pwd}\n",
+                                   text=True, capture_output=True, timeout=5)
+                # disable
+                if u.get("disable"):
+                    subprocess.run(["usermod", "-L", name], capture_output=True, timeout=5)
+                else:
+                    subprocess.run(["usermod", "-U", name], capture_output=True, timeout=5)
+                # ssh keys
+                keys = u.get("public-keys") or {}
+                if keys:
+                    ssh_dir = f"/home/{name}/.ssh"
+                    subprocess.run(["mkdir", "-p", ssh_dir], capture_output=True, timeout=5)
+                    lines = []
+                    for kid, k in keys.items():
+                        if isinstance(k, dict) and k.get("key"):
+                            ktype = k.get("type", "ssh-rsa")
+                            lines.append(f"{ktype} {k['key']} {kid}")
+                    open(f"{ssh_dir}/authorized_keys", "w").write("\n".join(lines) + "\n")
+                    subprocess.run(["chmod", "600", f"{ssh_dir}/authorized_keys"],
+                                   capture_output=True, timeout=5)
+                    subprocess.run(["chown", "-R", name, ssh_dir], capture_output=True, timeout=5)
+            notes.append(f"login: {len(new_login.get('user') or {})} users")
+        except Exception as e:
+            notes.append(f"login apply failed: {e}")
         return notes
 
     def _apply_ipsec(self, old, new):

@@ -751,6 +751,26 @@ def build_tree(store: Any) -> CommandTree:
         addr.dynamic = _existing_addrs
         addr._dyn_template = addr_tpl  # type: ignore[attr-defined]
 
+        # system login user ...
+        login = Node(name="login", help="Login user management")
+        sys.add(login)
+        login_user = Node(name="user", help="Local user")
+        login.add(login_user)
+        user_dyn = Node(name="", help="Username", dynamic=True, action=_cfg_noop)
+        login_user.add(user_dyn)
+        user_dyn.add(Node(name="full-name", help="Full name", value_type="str", action=_cfg_noop))
+        user_dyn.add(Node(name="disable", help="Disable account", value_type="bool", action=_cfg_noop))
+        auth = Node(name="authentication", help="Authentication")
+        user_dyn.add(auth)
+        auth.add(Node(name="plaintext-password", help="Plain password", value_type="str", action=_cfg_noop))
+        auth.add(Node(name="encrypted-password", help="Encrypted password", value_type="str", action=_cfg_noop))
+        pk = Node(name="public-keys", help="SSH public keys")
+        auth.add(pk)
+        pk_dyn = Node(name="", help="Key identifier", dynamic=True, action=_cfg_noop)
+        pk.add(pk_dyn)
+        pk_dyn.add(Node(name="key", help="Public key content", value_type="str", action=_cfg_noop))
+        pk_dyn.add(Node(name="type", help="ssh-rsa/ssh-ed25519", value_type="str", action=_cfg_noop))
+
         # vpn ipsec ...
         vpn = Node(name="vpn", help="VPN")
         root.add(vpn)
