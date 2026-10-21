@@ -8,6 +8,7 @@
 - [System](#system)
 - [Interfaces](#interfaces)
 - [Protocols](#protocols)
+- [VPN](#vpn)
 - [Service](#service)
 - [Firewall](#firewall)
 - [NAT](#nat)
@@ -478,8 +479,6 @@ commit
 ```
 
 ---
-
-## VPN
 
 ### WireGuard
 
