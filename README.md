@@ -27,31 +27,51 @@ package/vyoscli/
 
 ## 编译到 OpenWrt
 
-1. 把整个 `package/vyoscli/` 目录拷进你的 OpenWrt SDK 源码树：
-   ```bash
-   cp -r package/vyoscli <openwrt_sdk>/package/utils/
-   ```
-2. 进入 SDK 根目录，选包：
-   ```bash
-   make menuconfig
-   # Utilities  --->  <M> vyoscli
-   ```
-3. 编译：
-   ```bash
-   make package/vyoscli/compile V=s -j$(nproc)
-   ```
-4. 产出 ipk 在：
-   ```
-   bin/packages/<arch>/base/vyoscli_0.1.0-1_all.ipk
-   ```
-5. 装到路由器：
-   ```bash
-   scp bin/packages/<arch>/base/vyoscli_0.1.0-1_all.ipk root@router:/tmp/
-   ssh root@router 'opkg install /tmp/vyoscli_0.1.0-1_all.ipk'
-   ```
+### 安装编译依赖
 
-依赖：`python3` + `python3-readline`（Makefile 里已声明，opkg 会自动拉）。
+```bash
+sudo apt install -y build-essential clang flex bison g++ gawk \
+  gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev \
+  python3-distutils rsync unzip zlib1g-dev file wget python3-pyelftools \
+  bash bc curl zstd
+```
 
+### 下载 SDK
+
+```bash
+wget https://downloads.openwrt.org/releases/24.10.0/targets/x86/64/openwrt-sdk-24.10.0-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+sudo tar -I zstd -xvf openwrt-sdk-24.10.0-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+cd openwrt-sdk-24.10.0-x86-64_gcc-13.3.0_musl.Linux-x86_64/
+```
+
+### 放入包源码
+
+```bash
+mkdir -p package/utils
+# 把本项目 package/vyoscli/ 上传到 package/utils/ 下
+```
+
+### 编译
+
+```bash
+make defconfig
+make menuconfig
+# Utilities  --->  <M> vyoscli
+make package/utils/vyoscli/compile V=s
+```
+
+### 产出
+
+```bash
+find bin/ -name 'vyoscli*.ipk'
+```
+
+### 安装到路由器
+
+```bash
+scp bin/packages/x86_64/base/vyoscli_*.ipk root@router:/tmp/
+ssh root@router 'opkg install /tmp/vyoscli_*.ipk'
+```
 ## 使用
 
 登录路由器后执行：
