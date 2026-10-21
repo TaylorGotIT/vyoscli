@@ -425,6 +425,8 @@ def build_tree(store: Any) -> CommandTree:
                            value_type="ipv4", action=_cfg_noop))
         sys_named.add(Node(name="timezone", help="IANA timezone (e.g. Asia/Shanghai)",
                            value_type="str", action=_cfg_noop))
+        sys.add(Node(name="domain-search", help="Domain search suffix (repeatable)",
+                     value_type="str", action=_cfg_noop))
         sys_named.add(Node(name="ntp", help="NTP server hostname (repeatable)",
                            value_type="str", action=_cfg_noop))
         sys_named.add(Node(name="language", help="System locale (e.g. zh_cn, en)",

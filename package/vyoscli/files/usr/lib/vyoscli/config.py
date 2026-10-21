@@ -32,6 +32,7 @@ DEFAULT_RUNNING: Dict[str, Any] = {
     "system": {
         "host-name": "OpenWrt",
         "name-server": ["1.1.1.1", "8.8.8.8"],
+        "domain-search": [],
         "dns": [],   # system resolver (/etc/resolv.conf head)
         "timezone": "Asia/Shanghai",
         "ntp": ["ntp.aliyun.com", "cn.pool.ntp.org"],
@@ -411,6 +412,14 @@ class ConfigStore:
                 self._uci("add_list", f"dhcp.@dnsmasq[0].server={srv}")
             self._uci("commit", "dhcp")
             notes.append(f"dns servers -> {', '.join(new_dns)}")
+            # domain-search
+            new_search = (new.get("system") or {}).get("domain-search") or []
+            if new_search:
+                try:
+                    self._uci("set", f"dhcp.@dnsmasq[0].localuse=1")
+                    self._uci("commit", "dhcp")
+                except Exception:
+                    pass
         except Exception as e:  # noqa: BLE001
             notes.append(f"dns apply failed: {e}")
         return notes
