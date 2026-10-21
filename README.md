@@ -1,5 +1,7 @@
 # vyoscli — 类 VyOS 的 OpenWrt CLI
 
+> 本项目由 **豆包 (Doubao)** 辅助编写。
+
 一个用 Python 写的、VyOS 风格的命令行接口，作为 OpenWrt 原生 `opkg` 包编译安装。
 保留 VyOS 的核心交互模型：**操作模式 / 配置模式**分离、**候选配置 (candidate) → commit → running** 三段式事务、Tab 补全。
 
