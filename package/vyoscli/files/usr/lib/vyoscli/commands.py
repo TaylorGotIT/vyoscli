@@ -773,6 +773,20 @@ def build_tree(store: Any) -> CommandTree:
         pk_dyn.add(Node(name="key", help="Public key content", value_type="str", action=_cfg_noop))
         pk_dyn.add(Node(name="type", help="ssh-rsa/ssh-ed25519", value_type="str", action=_cfg_noop))
 
+        # policy route-redirect ...
+        pol = Node(name="policy", help="Policy")
+        root.add(pol)
+        rr = Node(name="route-redirect", help="Transparent proxy redirect")
+        pol.add(rr)
+        rr_dyn = Node(name="", help="Policy name", dynamic=True, action=_cfg_noop)
+        rr.add(rr_dyn)
+        rr_rule = Node(name="rule", help="Rule")
+        rr_dyn.add(rr_rule)
+        rr_rule_dyn = Node(name="", help="Rule number", dynamic=True, action=_cfg_noop)
+        rr_rule.add(rr_rule_dyn)
+        rr_rule_dyn.add(Node(name="dport", help="Destination port to match", value_type="port", action=_cfg_noop))
+        rr_rule_dyn.add(Node(name="redirect-to", help="Redirect to IP:port", value_type="str", action=_cfg_noop))
+
         # vrf name ...
         vrf = Node(name="vrf", help="Virtual Routing and Forwarding")
         root.add(vrf)

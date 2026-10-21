@@ -76,6 +76,9 @@ DEFAULT_RUNNING: Dict[str, Any] = {
             }
         }
     },
+    "policy": {
+        "route-redirect": {},   # name -> {rule: {num: {dport, redirect-to}}}
+    },
     "vrf": {
         "name": {},   # name -> {table: int}
     },
@@ -349,6 +352,7 @@ class ConfigStore:
         notes.extend(self._apply_ssh(old, new))
         notes.extend(self._apply_adguard(old, new))
         notes.extend(self._apply_dnsmasq(old, new))
+        notes.extend(self._apply_policy(old, new))
         notes.extend(self._apply_vrf(old, new))
         notes.extend(self._apply_login(old, new))
         notes.extend(self._apply_ipsec(old, new))
@@ -1209,6 +1213,37 @@ class ConfigStore:
             notes.append(f"dnsmasq: {new_dm.get('listen-address','0.0.0.0')}:{new_dm.get('port',53)}")
         except Exception as e:
             notes.append(f"dnsmasq apply failed: {e}")
+        return notes
+
+    def _apply_policy(self, old, new):
+        old_pol = (old.get("policy") or {}).get("route-redirect") or {}
+        new_pol = (new.get("policy") or {}).get("route-redirect") or {}
+        if old_pol == new_pol:
+            return []
+        notes = []
+        try:
+            # flush old table
+            subprocess.run(["nft", "add", "table", "inet", "vyoscli_policy"],
+                           capture_output=True, timeout=5)
+            subprocess.run(["nft", "flush", "table", "inet", "vyoscli_policy"],
+                           capture_output=True, timeout=5)
+            for name, pol in new_pol.items():
+                if not isinstance(pol, dict):
+                    continue
+                chain = f"rredir_{name}"
+                subprocess.run(["nft", "add", "chain", "inet", "vyoscli_policy", chain,
+                                "{ type nat hook prerouting priority -100; }"],
+                               capture_output=True, timeout=5)
+                for rnum, rule in (pol.get("rule") or {}).items():
+                    dport = rule.get("dport")
+                    rto = rule.get("redirect-to")
+                    if dport and rto:
+                        subprocess.run(["nft", "add", "rule", "inet", "vyoscli_policy", chain,
+                                        f"tcp dport {dport} redirect to {rto}"],
+                                       capture_output=True, timeout=5)
+            notes.append(f"policy: {len(new_pol)} route-redirect")
+        except Exception as e:
+            notes.append(f"policy apply failed: {e}")
         return notes
 
     def _apply_vrf(self, old, new):
