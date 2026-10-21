@@ -1,0 +1,19 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2026 vyoscli
+START=99
+STOP=10
+USE_PROCD=1
+
+start_service() {
+    procd_open_instance vyoscli
+    # This CLI is interactive; we don't run it as a daemon.
+    # On boot we just make sure the config directory exists and running.json
+    # has been materialised. Real deployments would push config into UCI/netifd.
+    [ -d /etc/vyoscli ] || mkdir -p /etc/vyoscli
+    procd_close_instance
+}
+
+reload_service() {
+    stop
+    start
+}

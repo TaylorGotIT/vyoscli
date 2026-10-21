@@ -1,0 +1,3 @@
+#!/bin/sh
+# vyoscli launcher: run the Python package as a module.
+PYTHONPATH=/usr/lib exec /usr/bin/python3 -m vyoscli "$@"
