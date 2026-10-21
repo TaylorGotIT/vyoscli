@@ -773,6 +773,15 @@ def build_tree(store: Any) -> CommandTree:
         pk_dyn.add(Node(name="key", help="Public key content", value_type="str", action=_cfg_noop))
         pk_dyn.add(Node(name="type", help="ssh-rsa/ssh-ed25519", value_type="str", action=_cfg_noop))
 
+        # vrf name ...
+        vrf = Node(name="vrf", help="Virtual Routing and Forwarding")
+        root.add(vrf)
+        vrf_name = Node(name="name", help="VRF instance")
+        vrf.add(vrf_name)
+        vrf_dyn = Node(name="", help="VRF name", dynamic=True, action=_cfg_noop)
+        vrf_name.add(vrf_dyn)
+        vrf_dyn.add(Node(name="table", help="Routing table ID", value_type="int", action=_cfg_noop))
+
         # vpn ipsec ...
         vpn = Node(name="vpn", help="VPN")
         root.add(vpn)

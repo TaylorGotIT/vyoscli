@@ -76,6 +76,9 @@ DEFAULT_RUNNING: Dict[str, Any] = {
             }
         }
     },
+    "vrf": {
+        "name": {},   # name -> {table: int}
+    },
     "nat": {
         "source": {},       # rule-id -> {out-interface, translation}
         "destination": {},  # rule-id -> {in-interface, port, to}
@@ -346,6 +349,7 @@ class ConfigStore:
         notes.extend(self._apply_ssh(old, new))
         notes.extend(self._apply_adguard(old, new))
         notes.extend(self._apply_dnsmasq(old, new))
+        notes.extend(self._apply_vrf(old, new))
         notes.extend(self._apply_login(old, new))
         notes.extend(self._apply_ipsec(old, new))
         notes.extend(self._apply_console_server(old, new))
@@ -1205,6 +1209,30 @@ class ConfigStore:
             notes.append(f"dnsmasq: {new_dm.get('listen-address','0.0.0.0')}:{new_dm.get('port',53)}")
         except Exception as e:
             notes.append(f"dnsmasq apply failed: {e}")
+        return notes
+
+    def _apply_vrf(self, old, new):
+        old_vrf = (old.get("vrf") or {}).get("name") or {}
+        new_vrf = (new.get("vrf") or {}).get("name") or {}
+        if old_vrf == new_vrf:
+            return []
+        notes = []
+        try:
+            for name in set(old_vrf.keys()) - set(new_vrf.keys()):
+                subprocess.run(["ip", "link", "del", name],
+                               capture_output=True, timeout=5)
+            for name, cfg in new_vrf.items():
+                table = cfg.get("table", 1000)
+                r = subprocess.run(["ip", "link", "show", name],
+                                   capture_output=True, timeout=5)
+                if r.returncode != 0:
+                    subprocess.run(["ip", "link", "add", name, "type", "vrf", "table", str(table)],
+                                   capture_output=True, timeout=5)
+                    subprocess.run(["ip", "link", "set", name, "up"],
+                                   capture_output=True, timeout=5)
+            notes.append(f"vrf: {len(new_vrf)} instances")
+        except Exception as e:
+            notes.append(f"vrf apply failed: {e}")
         return notes
 
     def _apply_login(self, old, new):
