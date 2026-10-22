@@ -831,10 +831,12 @@ class ConfigStore:
                     continue
                 self._uci("set", f"network.{tun}=interface")
                 self._uci("set", f"network.{tun}.proto={enc}")
-                if cfg.get("local-ip"):
-                    self._uci("set", f"network.{tun}.localip={cfg['local-ip']}")
-                if cfg.get("remote-ip"):
-                    self._uci("set", f"network.{tun}.peeraddr={cfg['remote-ip']}")
+                local = cfg.get("local-ip") or cfg.get("source-address")
+                remote = cfg.get("remote-ip") or cfg.get("remote")
+                if local:
+                    self._uci("set", f"network.{tun}.localip={local}")
+                if remote:
+                    self._uci("set", f"network.{tun}.peeraddr={remote}")
                 if cfg.get("address"):
                     self._uci("set", f"network.{tun}.ipaddr={cfg['address']}")
             self._uci("commit", "network")
