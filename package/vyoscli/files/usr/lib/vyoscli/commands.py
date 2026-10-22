@@ -760,7 +760,7 @@ def build_tree(store: Any) -> CommandTree:
         addr._dyn_template = addr_tpl  # type: ignore[attr-defined]
 
         # service accelerate ...
-        acc = Node(name="accelerate", help="KCP acceleration (kcptun)")
+        acc = Node(name="kcp", help="KCP tunnel (kcptun)")
         svc.add(acc)
         acc_dyn = Node(name="", help="Tunnel name", dynamic=True, action=_cfg_noop)
         acc.add(acc_dyn)

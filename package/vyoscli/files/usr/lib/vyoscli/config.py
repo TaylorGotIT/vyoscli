@@ -116,7 +116,7 @@ DEFAULT_RUNNING: Dict[str, Any] = {
             "fq_codel": True,
         },
         "fec": {},   # UDPspeeder config
-        "accelerate": {},   # name -> {mode, local-listen-ip, local-listen-port, server-listen-ip, server-listen-port, destination-ip, destination-port, kcp-mode, key}
+        "kcp": {},   # name -> {mode, local-listen-ip, local-listen-port, server-listen-ip, server-listen-port, destination-ip, destination-port, kcp-mode, key}
         "crontab": {},          # name -> {schedule, script, description}
         "dhcp": {},             # ifname -> {start, end, lease, dns: [...]}
         "dnsmasq": {
@@ -358,7 +358,7 @@ class ConfigStore:
         notes.extend(self._apply_ssh(old, new))
         notes.extend(self._apply_adguard(old, new))
         notes.extend(self._apply_dnsmasq(old, new))
-        notes.extend(self._apply_accelerate(old, new))
+        notes.extend(self._apply_kcp(old, new))
         notes.extend(self._apply_tcp_accelerate(old, new))
         notes.extend(self._apply_policy(old, new))
         notes.extend(self._apply_vrf(old, new))
@@ -1230,9 +1230,9 @@ class ConfigStore:
             notes.append(f"dnsmasq apply failed: {e}")
         return notes
 
-    def _apply_accelerate(self, old, new):
-        old_acc = (old.get("service") or {}).get("accelerate") or {}
-        new_acc = (new.get("service") or {}).get("accelerate") or {}
+    def _apply_kcp(self, old, new):
+        old_acc = (old.get("service") or {}).get("kcp") or {}
+        new_acc = (new.get("service") or {}).get("kcp") or {}
         if old_acc == new_acc:
             return []
         notes = []
@@ -1263,14 +1263,14 @@ class ConfigStore:
                 conf += "stop() {\n"
                 conf += f"    pkill -f 'kcptun-{mode}' 2>/dev/null\n"
                 conf += "}\n"
-                open(f"/etc/init.d/acc_{name}", "w").write(conf)
-                subprocess.run(["chmod", "+x", f"/etc/init.d/acc_{name}"],
+                open(f"/etc/init.d/kcp_{name}", "w").write(conf)
+                subprocess.run(["chmod", "+x", f"/etc/init.d/kcp_{name}"],
                                capture_output=True, timeout=5)
-                subprocess.run(["/etc/init.d", f"acc_{name}", "restart"],
+                subprocess.run(["/etc/init.d", f"kcp_{name}", "restart"],
                                capture_output=True, text=True, timeout=10)
-            notes.append(f"accelerate: {len(new_acc)} tunnels")
+            notes.append(f"kcp: {len(new_acc)} tunnels")
         except Exception as e:
-            notes.append(f"accelerate apply failed: {e}")
+            notes.append(f"kcp apply failed: {e}")
         return notes
 
     def _apply_tcp_accelerate(self, old, new):
