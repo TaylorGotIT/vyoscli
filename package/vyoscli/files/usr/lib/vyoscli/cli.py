@@ -177,6 +177,10 @@ class Cli:
             return ""
         head, *rest = tokens
 
+        # run <op-command>: execute op-mode command from config mode
+        if head == "run":
+            return self._run_op(rest)
+
         # top-level verbs
         if head == "commit":
             # variants: commit | commit confirm | commit confirmed [minutes]
