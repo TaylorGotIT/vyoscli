@@ -342,42 +342,57 @@ class ConfigStore:
         return problems
 
     def _apply_all(self, old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
+        """按依赖优先级下发配置：system -> interfaces -> protocols -> vpn -> service"""
         notes: List[str] = []
         if not self._have_uci():
             notes.append("(no uci on this host, changes kept in vyoscli JSON only)")
             return notes
-        notes.extend(self._apply_interfaces(old, new))
-        notes.extend(self._apply_wireless(old, new))
-        notes.extend(self._apply_interface_roles(old, new))
-        notes.extend(self._apply_firewall(old, new))
-        notes.extend(self._apply_nat(old, new))
-        notes.extend(self._apply_wireguard(old, new))
-        notes.extend(self._apply_openvpn(old, new))
-        notes.extend(self._apply_tunnel(old, new))
-        notes.extend(self._apply_vxlan(old, new))
-        notes.extend(self._apply_bgp(old, new))
+
+        # 1. system 基础（hostname/DNS/login）
         notes.extend(self._apply_hostname(old, new))
         notes.extend(self._apply_system_meta(old, new))
         notes.extend(self._apply_name_servers(old, new))
         notes.extend(self._apply_system_dns(old, new))
+        notes.extend(self._apply_login(old, new))
+
+        # 2. interfaces（IP/bridge/wireless/vrf）
+        notes.extend(self._apply_interfaces(old, new))
+        notes.extend(self._apply_wireless(old, new))
+        notes.extend(self._apply_interface_roles(old, new))
+        notes.extend(self._apply_vrf(old, new))
+
+        # 3. protocols（static route/BGP/policy）
         notes.extend(self._apply_static_routes(old, new))
-        notes.extend(self._apply_smartdns(old, new))
-        notes.extend(self._apply_crontab(old, new))
+        notes.extend(self._apply_bgp(old, new))
+        notes.extend(self._apply_policy(old, new))
+
+        # 4. firewall / nat
+        notes.extend(self._apply_firewall(old, new))
+        notes.extend(self._apply_nat(old, new))
+
+        # 5. vpn（wireguard/openvpn/tunnel/vxlan/ipsec）
+        notes.extend(self._apply_wireguard(old, new))
+        notes.extend(self._apply_openvpn(old, new))
+        notes.extend(self._apply_tunnel(old, new))
+        notes.extend(self._apply_vxlan(old, new))
+        notes.extend(self._apply_ipsec(old, new))
+
+        # 6. service（dhcp/ssh/dns/sqm/kcp/qos）
         notes.extend(self._apply_dhcp(old, new))
         notes.extend(self._apply_ssh(old, new))
         notes.extend(self._apply_adguard(old, new))
         notes.extend(self._apply_dnsmasq(old, new))
+        notes.extend(self._apply_smartdns(old, new))
         notes.extend(self._apply_traffic_policy(old, new))
         notes.extend(self._apply_sqm(old, new))
         notes.extend(self._apply_kcp(old, new))
         notes.extend(self._apply_tcp_accelerate(old, new))
-        notes.extend(self._apply_policy(old, new))
-        notes.extend(self._apply_vrf(old, new))
-        notes.extend(self._apply_login(old, new))
-        notes.extend(self._apply_ipsec(old, new))
         notes.extend(self._apply_console_server(old, new))
-        notes.extend(self._apply_service_disable(old, new))
         notes.extend(self._apply_containers(old, new))
+
+        # 7. other
+        notes.extend(self._apply_crontab(old, new))
+        notes.extend(self._apply_service_disable(old, new))
         return notes
 
     def _apply_interfaces(self, old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
