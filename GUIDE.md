@@ -546,26 +546,58 @@ commit
 ```
 
 ### DHCP
+### DHCP Server
+
+#### 基本配置
 
 ```
-set service dhcp br0 start 192.168.1.100
-set service dhcp br0 end 192.168.1.200
-set service dhcp br0 lease 12h
-set service dhcp br0 gateway 192.168.1.1
-set service dhcp br0 dns 192.168.1.1
+set service dhcp-server shared-network-name vlan2 subnet 192.168.2.0/24
+set service dhcp-server shared-network-name vlan2 interface br2
+set service dhcp-server shared-network-name vlan2 gateway 192.168.2.1
+set service dhcp-server shared-network-name vlan2 dns 192.168.2.1
+set service dhcp-server shared-network-name vlan2 domain vlan2.fnet.org
 commit
 ```
+
+#### 地址池
+
+```
+set service dhcp-server shared-network-name vlan2 range 0 start 192.168.2.20
+set service dhcp-server shared-network-name vlan2 range 0 stop 192.168.2.200
+commit
+```
+
+#### MAC-IP 静态绑定
+
+可绑定 DHCP 范围外的 IP：
+
+```
+set service dhcp-server shared-network-name vlan2 static-mapping 201 ip-address 192.168.2.201
+set service dhcp-server shared-network-name vlan2 static-mapping 201 mac-address a4:ae:12:f7:91:16
+commit
+```
+
+#### Domain Search
+
+自动在主机名后加域名后缀：
+
+```
+set service dhcp-server shared-network-name dhcp_wlan1 domain-search fnetlink.com
+commit
+```
+
+#### WPAD（option 252）
+
+自动下发 Web 代理发现 URL：
+
+```
+set service dhcp-server shared-network-name dhcp_wlan1 wpad-url http://192.168.9.1:8080
+commit
+```
+
+Windows / 苹果手机自动生效，安卓需手动设置代理。
 
 查看租约：`show dhcp lease`
-
-##### MAC-IP 绑定
-
-```
-set service dhcp br0 static 00:11:22:33:44:55 ip 192.168.1.10
-set service dhcp br0 static 66:77:88:99:AA:BB ip 192.168.1.11
-commit
-```
-
 ### DNS Forwarding
 
 基于 dnsmasq 的 DNS 转发器。
