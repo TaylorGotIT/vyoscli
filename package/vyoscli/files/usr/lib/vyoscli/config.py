@@ -1243,18 +1243,16 @@ class ConfigStore:
                     continue
                 mode = cfg.get("mode", "c")
                 kcp_mode = cfg.get("kcp-mode", "fast3")
-                server_ip = cfg.get("server-listen-ip", "")
-                server_port = cfg.get("server-listen-port", 9991)
+                local_ip = cfg.get("local-ip", "0.0.0.0")
+                local_port = cfg.get("local-port", 9991)
+                remote_ip = cfg.get("remote-ip", "")
+                remote_port = cfg.get("remote-port", 0)
                 if mode == "s":
-                    # server: -t dest:port -l :port
-                    dest_ip = cfg.get("destination-ip", "127.0.0.1")
-                    dest_port = cfg.get("destination-port", 10064)
-                    cmd = f"kcptun-server -t {dest_ip}:{dest_port} -l :{server_port} -mode {kcp_mode} -nocomp -sockbuf 16777217 -dscp 46"
+                    # server: -t remote:port -l local:port
+                    cmd = f"kcptun-server -t {remote_ip}:{remote_port} -l {local_ip}:{local_port} -mode {kcp_mode} -nocomp -sockbuf 16777217 -dscp 46"
                 else:
-                    # client: -r server:port -l :port
-                    local_ip = cfg.get("local-listen-ip", "0.0.0.0")
-                    local_port = cfg.get("local-listen-port", 22222)
-                    cmd = f"kcptun-client -r {server_ip}:{server_port} -l {local_ip}:{local_port} -mode {kcp_mode} -nocomp -autoexpire 900 -sockbuf 16777217 -dscp 46"
+                    # client: -r remote:port -l local:port
+                    cmd = f"kcptun-client -r {remote_ip}:{remote_port} -l {local_ip}:{local_port} -mode {kcp_mode} -nocomp -autoexpire 900 -sockbuf 16777217 -dscp 46"
                 conf = "#!/bin/sh /etc/rc.common\n"
                 conf += "START=99\n"
                 conf += "start() {\n"

@@ -766,15 +766,10 @@ def build_tree(store: Any) -> CommandTree:
         acc.add(acc_dyn)
         acc_dyn.add(Node(name="mode", help="c/client or s/server", value_type="str", action=_cfg_noop))
         acc_dyn.add(Node(name="kcp-mode", help="fast2/fast3/normal", value_type="str", action=_cfg_noop))
-        # server side
-        acc_dyn.add(Node(name="server-listen-ip", help="Server listen IP", value_type="ipv4", action=_cfg_noop))
-        acc_dyn.add(Node(name="server-listen-port", help="Server listen UDP port", value_type="port", action=_cfg_noop))
-        # client side
-        acc_dyn.add(Node(name="local-listen-ip", help="Client local listen IP", value_type="ipv4", action=_cfg_noop))
-        acc_dyn.add(Node(name="local-listen-port", help="Client local listen TCP port", value_type="port", action=_cfg_noop))
-        # server side destination
-        acc_dyn.add(Node(name="destination-ip", help="Server destination IP", value_type="ipv4", action=_cfg_noop))
-        acc_dyn.add(Node(name="destination-port", help="Server destination TCP port", value_type="port", action=_cfg_noop))
+        acc_dyn.add(Node(name="local-ip", help="Local listen IP", value_type="ipv4", action=_cfg_noop))
+        acc_dyn.add(Node(name="local-port", help="Local listen port", value_type="port", action=_cfg_noop))
+        acc_dyn.add(Node(name="remote-ip", help="Remote IP", value_type="ipv4", action=_cfg_noop))
+        acc_dyn.add(Node(name="remote-port", help="Remote port", value_type="port", action=_cfg_noop))
 
         # service tcp-accelerate ...
         tcp_acc = Node(name="tcp-accelerate", help="TCP congestion control")
