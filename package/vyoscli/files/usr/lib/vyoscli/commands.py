@@ -25,237 +25,27 @@ def _run(cmd: List[str]) -> str:
         return f"{cmd[0]} failed: {e}"
 
 
-# ---------- show version ----------
-def _op_show_log(ctx: Any, value: Any) -> str:
-    import subprocess
-    try:
-        r = subprocess.run(["logread"], capture_output=True, text=True, timeout=10)
-        return r.stdout or r.stderr or "(empty log)"
-    except Exception as e:
-        return f"logread failed: {e}"
 
-
-def _op_show_history(ctx: Any, value: Any) -> str:
-    import readline
-    n = readline.get_current_history_length()
-    if n == 0:
-        return "No history."
-    out = []
-    for i in range(1, n + 1):
-        out.append(f"  {i:4d}  {readline.get_history_item(i)}")
-    return "\n".join(out)
-
-
-def _op_show_version(ctx: Any, value: Any) -> str:
-    uname = platform.uname()
-    sys_cfg = ctx.store.get(["system"], candidate=False) or {}
-    host = sys_cfg.get("host-name", "OpenWrt")
-    hw = sys_cfg.get("hardware") or {}
-
-    # Best-effort detection, fallback to placeholders.
-    def _read(path: str) -> str:
-        try:
-            with open(path, encoding="utf-8") as f:
-                return f.read().strip()
-        except Exception:
-            return ""
-
-    openwrt_ver = _read("/etc/openwrt_release")
-    for line in openwrt_ver.splitlines():
-        if line.startswith("DISTRIB_DESCRIPTION="):
-            openwrt_ver = line.split("=", 1)[1].strip().strip("'\"")
-            break
-    else:
-        openwrt_ver = openwrt_ver or "OpenWrt"
-
-    board = _read("/tmp/sysinfo/model") or _read("/tmp/sysinfo/board_name") or uname.machine
-    boot = "installed image" if "x86" in uname.machine or board else "unknown"
-    system_type = "bare metal" if "x86" in uname.machine else board
-
-    rows = [
-        ("Version",         openwrt_ver),
-        ("Linux Kernel",    uname.release),
-        ("Hostname",        host),
-        ("Architecture",    uname.machine),
-        ("Python Version",  platform.python_version()),
-        ("Vyoscli Version", "0.1.0"),
-        ("Boot Via",        boot),
-        ("System Type",     system_type),
-        ("Hardware Vendor", hw.get("vendor")  or "(not set)"),
-        ("Hardware Model",  hw.get("model")   or "(not set)"),
-        ("Hardware S/N",    hw.get("serial")  or "(not set)"),
-    ]
-    width = max(len(k) for k, _ in rows) + 2
-    return "\n".join(f"{k.ljust(width)}{v}" for k, v in rows)
-
-
-# ---------- show configuration [commands|json] ----------
-def _op_show_configuration(ctx: Any, value: Any) -> str:
-    return ctx.store.render_tree(ctx.store.running)
-
-
-def _op_show_configuration_commands(ctx: Any, value: Any) -> str:
-    lines = ctx.store.render_set_commands(ctx.store.running)
-    return "\n".join(lines) if lines else "(empty)"
-
-
-def _op_show_configuration_json(ctx: Any, value: Any) -> str:
-    return json.dumps(ctx.store.running, indent=2, sort_keys=True)
-
-
-# ---------- show interface ----------
-def _op_show_interfaces(ctx: Any, value: Any) -> str:
-    import subprocess
-    # get descriptions from config
-    eth_cfg = ctx.store.get(["interfaces", "ethernet"], candidate=False) or {}
-    br_cfg = ctx.store.get(["interfaces", "bridge"], candidate=False) or {}
-    desc_map = {}
-    for cfg in (eth_cfg, br_cfg):
-        for name, c in cfg.items():
-            if isinstance(c, dict) and c.get("description"):
-                desc_map[name] = c["description"]
-
-    # read real interfaces from ip addr
-    try:
-        r = subprocess.run(["ip", "-o", "addr"], capture_output=True, text=True, timeout=5)
-        out = r.stdout
-    except Exception:
-        out = ""
-
-    # parse
-    rows = []
-    cur_name = None
-    for line in out.splitlines():
-        parts = line.split()
-        if len(parts) < 4:
-            continue
-        iface = parts[1]
-        if iface == cur_name:
-            continue
-        cur_name = iface
-        state = "u" if "UP" in line else "D"
-        # get inet/inet6
-        addr = "--"
-        for p in parts:
-            if p.startswith("inet "):
-                idx = parts.index(p)
-                addr = parts[idx + 1]
-                break
-        rows.append((iface, addr, state, desc_map.get(iface, "")))
-
-    # sort: lo first, then eth, then others
-    rows.sort(key=lambda x: (0 if x[0] == "lo" else (1 if x[0].startswith("eth") else 2), x[0]))
-
-    name_w = max(len(r[0]) for r in rows) if rows else 10
-    name_w = max(name_w, 10)
-    addr_w = max(len(r[1]) for r in rows) if rows else 15
-    addr_w = max(addr_w, 15)
-
-    lines = [
-        "Codes: S - State, L - Link, u - Up, D - Down, A - Admin Down",
-        "Interface".ljust(name_w + 2) +
-        "IP Address".ljust(addr_w + 2) +
-        "S/L   Description",
-        "-" * (name_w + addr_w + 30),
-    ]
-    for iface, addr, state, desc in rows:
-        lines.append(
-            iface.ljust(name_w + 2) +
-            addr.ljust(addr_w + 2) +
-            f"{state}/{state}  ".ljust(6) +
-            desc
-        )
-    return "\n".join(lines)
-
-
-# ---------- show system <sub> ----------
-def _op_show_system_summary(ctx: Any, value: Any) -> str:
-    return (
-        "Possible completions:\n"
-        "  uptime           Show how long the system has been up\n"
-        "  memory           Show system memory usage\n"
-        "  storage          Show filesystem usage\n"
-        "  processes        Show running processes\n"
-        "  kernel-messages Show kernel ring buffer (last 30 lines)\n"
-        "  login            Show local user accounts"
-    )
-
-
-def _op_show_system_uptime(ctx: Any, value: Any) -> str:
-    return _run(["uptime"])
-
-
-def _op_show_system_memory(ctx: Any, value: Any) -> str:
-    return _run(["free", "-m"])
-
-
-def _op_show_system_storage(ctx: Any, value: Any) -> str:
-    return _run(["df", "-h"])
-
-
-def _op_show_system_processes(ctx: Any, value: Any) -> str:
-    out = _run(["ps", "w"])
-    # keep first 30 lines
-    return "\n".join(out.splitlines()[:30])
-
-
-def _op_show_system_kmsg(ctx: Any, value: Any) -> str:
-    out = _run(["dmesg"])
-    return "\n".join(out.splitlines()[-30:])
-
-
-def _op_show_system_login(ctx: Any, value: Any) -> str:
-    users = []
-    try:
-        with open("/etc/passwd", encoding="utf-8") as f:
-            for line in f:
-                parts = line.strip().split(":")
-                if len(parts) >= 6:
-                    name, _, uid, _, _, home = parts[:6]
-                    if int(uid) >= 0 and name not in ("nobody",):
-                        users.append(f"{name:<20}uid={uid:<6}{home}")
-    except FileNotFoundError:
-        return "(no /etc/passwd on this host)"
-    return "\n".join(users) if users else "(no users)"
-
-
-# ---------- show ip route ----------
-def _ip_route(extra: List[str]) -> str:
-    return _run(["ip", "route"] + extra)
-
-
-def _op_show_ip_route(ctx: Any, value: Any) -> str:
-    return _ip_route([])
-
-
-def _op_show_ip_route_static(ctx: Any, value: Any) -> str:
-    out = _ip_route([])
-    lines = [l for l in out.splitlines()
-             if " proto static" in l or l.startswith("S")]
-    return "\n".join(lines) if lines else "(no static routes)"
-
-
-def _op_show_ip_route_connected(ctx: Any, value: Any) -> str:
-    return _ip_route(["show", "scope", "link"])
-
-
-def _op_show_ip_route_summary(ctx: Any, value: Any) -> str:
-    out = _ip_route([])
-    lines = [l for l in out.splitlines() if l.strip()]
-    kinds = {}
-    for l in lines:
-        # default / connected / static / ...
-        tag = "other"
-        if l.startswith("default"):
-            tag = "default"
-        elif "scope link" in l:
-            tag = "connected"
-        elif " proto static" in l:
-            tag = "static"
-        kinds[tag] = kinds.get(tag, 0) + 1
-    rows = [f"  {k:<12}{v} routes" for k, v in sorted(kinds.items())]
-    return "Total: " + str(len(lines)) + "\n" + "\n".join(rows)
-
+from .op_show import (
+    _op_show_log,
+    _op_show_history,
+    _op_show_version,
+    _op_show_configuration,
+    _op_show_configuration_commands,
+    _op_show_configuration_json,
+    _op_show_interfaces,
+    _op_show_system_summary,
+    _op_show_system_uptime,
+    _op_show_system_memory,
+    _op_show_system_storage,
+    _op_show_system_processes,
+    _op_show_system_kmsg,
+    _op_show_system_login,
+    _op_show_ip_route,
+    _op_show_ip_route_static,
+    _op_show_ip_route_connected,
+    _op_show_ip_route_summary,
+)
 
 # ---------- ping ----------
 def _op_ping(ctx: Any, value: str) -> str:
