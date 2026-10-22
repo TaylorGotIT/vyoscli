@@ -759,6 +759,16 @@ def build_tree(store: Any) -> CommandTree:
         addr.dynamic = _existing_addrs
         addr._dyn_template = addr_tpl  # type: ignore[attr-defined]
 
+        # service kcp ...
+        kcp = Node(name="kcp", help="KCP tunnel (kcptun)")
+        svc.add(kcp)
+        kcp_dyn = Node(name="", help="Tunnel name", dynamic=True, action=_cfg_noop)
+        kcp.add(kcp_dyn)
+        kcp_dyn.add(Node(name="local-port", help="Local UDP port", value_type="port", action=_cfg_noop))
+        kcp_dyn.add(Node(name="target", help="Target host:port", value_type="str", action=_cfg_noop))
+        kcp_dyn.add(Node(name="key", help="PSK key", value_type="str", action=_cfg_noop))
+        kcp_dyn.add(Node(name="mode", help="fast2/fast3/normal", value_type="str", action=_cfg_noop))
+
         # service tcp-accelerate ...
         tcp_acc = Node(name="tcp-accelerate", help="TCP congestion control")
         svc.add(tcp_acc)

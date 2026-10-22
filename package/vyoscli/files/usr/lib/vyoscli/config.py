@@ -116,6 +116,7 @@ DEFAULT_RUNNING: Dict[str, Any] = {
             "fq_codel": True,
         },
         "fec": {},   # UDPspeeder config
+        "kcp": {},   # kcptun config: name -> {local-port, target, key, mode}
         "crontab": {},          # name -> {schedule, script, description}
         "dhcp": {},             # ifname -> {start, end, lease, dns: [...]}
         "dnsmasq": {
@@ -357,6 +358,7 @@ class ConfigStore:
         notes.extend(self._apply_ssh(old, new))
         notes.extend(self._apply_adguard(old, new))
         notes.extend(self._apply_dnsmasq(old, new))
+        notes.extend(self._apply_kcp(old, new))
         notes.extend(self._apply_tcp_accelerate(old, new))
         notes.extend(self._apply_policy(old, new))
         notes.extend(self._apply_vrf(old, new))
@@ -1226,6 +1228,39 @@ class ConfigStore:
             notes.append(f"dnsmasq: {new_dm.get('listen-address','0.0.0.0')}:{new_dm.get('port',53)}")
         except Exception as e:
             notes.append(f"dnsmasq apply failed: {e}")
+        return notes
+
+    def _apply_kcp(self, old, new):
+        old_kcp = (old.get("service") or {}).get("kcp") or {}
+        new_kcp = (new.get("service") or {}).get("kcp") or {}
+        if old_kcp == new_kcp:
+            return []
+        notes = []
+        try:
+            self._ensure_package("kcptun", notes)
+            for name, cfg in new_kcp.items():
+                if not isinstance(cfg, dict):
+                    continue
+                local_port = cfg.get("local-port", 9000)
+                target = cfg.get("target", "127.0.0.1:22")
+                key = cfg.get("key", "secret")
+                mode = cfg.get("mode", "fast3")
+                conf = "#!/bin/sh /etc/rc.common\n"
+                conf += "START=99\n"
+                conf += "start() {\n"
+                conf += f"    kcptun-server -l :{local_port} -t {target} -key {key} -crypt aes -mode {mode} --mtu 1400 > /tmp/kcp-{name}.log 2>&1 &\n"
+                conf += "}\n"
+                conf += "stop() {\n"
+                conf += "    pkill -f kcptun-server 2>/dev/null\n"
+                conf += "}\n"
+                open(f"/etc/init.d/kcp_{name}", "w").write(conf)
+                subprocess.run(["chmod", "+x", f"/etc/init.d/kcp_{name}"],
+                               capture_output=True, timeout=5)
+                subprocess.run(["/etc/init.d", f"kcp_{name}", "restart"],
+                               capture_output=True, text=True, timeout=10)
+            notes.append(f"kcp: {len(new_kcp)} tunnels")
+        except Exception as e:
+            notes.append(f"kcp apply failed: {e}")
         return notes
 
     def _apply_tcp_accelerate(self, old, new):
