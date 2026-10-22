@@ -993,22 +993,31 @@ def build_tree(store: Any) -> CommandTree:
         cron.dynamic = _existing_cron
         cron._dyn_template = cron_tpl  # type: ignore[attr-defined]
 
-        # service dhcp <ifname> ...
-        dhcp = Node(name="dhcp", help="DHCP server on an interface")
+        # service dhcp-server shared-network-name <name> ...
+        dhcp = Node(name="dhcp-server", help="DHCP server")
         svc.add(dhcp)
-        dhcp_tpl = Node(name="*", help="Per-interface DHCP")
-        dhcp_tpl.add(Node(name="start", help="Pool start IP (e.g. 192.168.1.100)",
-                          value_type="ipv4", action=_cfg_noop))
-        dhcp_tpl.add(Node(name="end", help="Pool end IP (e.g. 192.168.1.200)",
-                          value_type="ipv4", action=_cfg_noop))
-        dhcp_tpl.add(Node(name="lease", help="Lease time (e.g. 12h, 1d)",
-                          value_type="str", action=_cfg_noop))
-        dhcp_tpl.add(Node(name="dns", help="DNS server handed to clients (repeatable)",
-                          value_type="ipv4", action=_cfg_noop))
-        # static lease: mac -> ip
-        static = Node(name="static", help="Static MAC-IP binding", dynamic=True, action=_cfg_noop)
+        dhcp_shared = Node(name="shared-network-name", help="Shared network name", dynamic=True, action=_cfg_noop)
+        dhcp.add(dhcp_shared)
+        dhcp_tpl = Node(name="*", help="Per-subnet DHCP")
+        dhcp_shared.add(dhcp_tpl)
+        dhcp_tpl.add(Node(name="subnet", help="Subnet CIDR (e.g. 192.168.1.0/24)",
+                          value_type="ipv4net", action=_cfg_noop))
+        dhcp_tpl.add(Node(name="interface", help="Interface name", value_type="str", action=_cfg_noop))
+        dhcp_tpl.add(Node(name="gateway", help="Default gateway", value_type="ipv4", action=_cfg_noop))
+        dhcp_tpl.add(Node(name="dns", help="DNS server (repeatable)", value_type="ipv4", action=_cfg_noop))
+        dhcp_tpl.add(Node(name="domain", help="Domain name", value_type="str", action=_cfg_noop))
+        dhcp_tpl.add(Node(name="domain-search", help="Domain search suffix", value_type="str", action=_cfg_noop))
+        dhcp_tpl.add(Node(name="wpad-url", help="WPAD URL (option 252)", value_type="str", action=_cfg_noop))
+        # range
+        range_node = Node(name="range", help="DHCP range", dynamic=True, action=_cfg_noop)
+        dhcp_tpl.add(range_node)
+        range_node.add(Node(name="start", help="Range start IP", value_type="ipv4", action=_cfg_noop))
+        range_node.add(Node(name="stop", help="Range end IP", value_type="ipv4", action=_cfg_noop))
+        # static mapping
+        static = Node(name="static-mapping", help="Static MAC-IP binding", dynamic=True, action=_cfg_noop)
         dhcp_tpl.add(static)
-        static.add(Node(name="ip", help="Fixed IP for this MAC", value_type="ipv4", action=_cfg_noop))
+        static.add(Node(name="ip-address", help="Fixed IP", value_type="ipv4", action=_cfg_noop))
+        static.add(Node(name="mac-address", help="MAC address", value_type="str", action=_cfg_noop))
         def _existing_dhcp(store=store):
             try:
                 return list((store.candidate.get("service", {})

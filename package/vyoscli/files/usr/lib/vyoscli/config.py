@@ -127,7 +127,7 @@ DEFAULT_RUNNING: Dict[str, Any] = {
         "kcp": {},   # name -> {mode, local-listen-ip, local-listen-port, remote-listen-ip, remote-listen-port, destination-ip, destination-port, kcp-mode, key}
 
         "crontab": {},          # name -> {schedule, script, description}
-        "dhcp": {},             # ifname -> {start, end, lease, dns: [...], static: {mac: ip}}
+        "dhcp": {},             # name -> {subnet, gateway, dns, domain, domain-search, range-start, range-end, static: {name: {ip, mac}}}
         "dnsmasq": {
             "port": 53,
             "listen-address": "0.0.0.0",
@@ -1198,44 +1198,55 @@ class ConfigStore:
             return []
         notes = []
         try:
-            for ifname, cfg in new_d.items():
+            for name, cfg in new_d.items():
                 if not isinstance(cfg, dict):
                     continue
-                s = f"vyos_dhcp_{ifname}"
+                s = f"vyos_dhcp_{name}"
+                subnet = cfg.get("subnet", "")
+                interface = cfg.get("interface", name)
                 self._uci("set", f"dhcp.{s}=dhcp")
-                self._uci("set", f"dhcp.{s}.interface={ifname}")
-                start = cfg.get("start", "")
-                end = cfg.get("end", "")
-                if start and end:
+                self._uci("set", f"dhcp.{s}.interface={interface}")
+                self._uci("set", f"dhcp.{s}.dhcpv4=server")
+                # range
+                rs = cfg.get("range-start", "")
+                re_ = cfg.get("range-end", "")
+                if rs and re_:
                     try:
-                        host_start = int(start.split(".")[-1])
-                        host_end = int(end.split(".")[-1])
+                        host_start = int(rs.split(".")[-1])
+                        host_end = int(re_.split(".")[-1])
                         limit = max(1, host_end - host_start + 1)
                         self._uci("set", f"dhcp.{s}.start={host_start}")
                         self._uci("set", f"dhcp.{s}.limit={limit}")
                     except ValueError:
                         pass
-                if cfg.get("lease"):
-                    self._uci("set", f"dhcp.{s}.leasetime={cfg['lease']}")
-                self._uci("set", f"dhcp.{s}.dhcpv4=server")
-                # clear existing dns options then re-add
+                # options
                 try:
                     self._uci("delete", f"dhcp.{s}.dhcp_option")
                 except subprocess.CalledProcessError:
                     pass
+                if cfg.get("gateway"):
+                    self._uci("add_list", f"dhcp.{s}.dhcp_option=router,{cfg['gateway']}")
                 for d in cfg.get("dns") or []:
                     self._uci("add_list", f"dhcp.{s}.dhcp_option=option:dns,{d}")
+                if cfg.get("domain"):
+                    self._uci("add_list", f"dhcp.{s}.dhcp_option=option:domain,{cfg['domain']}")
+                if cfg.get("domain-search"):
+                    self._uci("add_list", f"dhcp.{s}.dhcp_option=option:domain-search,{cfg['domain-search']}")
+                if cfg.get("wpad-url"):
+                    self._uci("add_list", f"dhcp.{s}.dhcp_option=option:252,{cfg['wpad-url']}")
                 # static leases
-                for mac, ip in (cfg.get("static") or {}).items():
-                    hs = f"vyos_dhcp_host_{mac.replace(':', '_')}"
+                for sname, scfg in (cfg.get("static-mapping") or {}).items():
+                    if not isinstance(scfg, dict):
+                        continue
+                    hs = f"vyos_dhcp_host_{name}_{sname}"
                     self._uci("set", f"dhcp.{hs}=host")
-                    self._uci("set", f"dhcp.{hs}.name={mac}")
-                    self._uci("set", f"dhcp.{hs}.mac={mac}")
-                    self._uci("set", f"dhcp.{hs}.ip={ip}")
+                    self._uci("set", f"dhcp.{hs}.name={sname}")
+                    self._uci("set", f"dhcp.{hs}.mac={scfg.get('mac', '')}")
+                    self._uci("set", f"dhcp.{hs}.ip={scfg.get('ip-address', '')}")
             self._uci("commit", "dhcp")
             subprocess.run(["/etc/init.d/dnsmasq", "reload"],
                            capture_output=True, text=True, timeout=10)
-            notes.append(f"dhcp: {len(new_d)} interface(s) configured")
+            notes.append(f"dhcp: {len(new_d)} subnet(s) configured")
         except Exception as e:  # noqa: BLE001
             notes.append(f"dhcp apply failed: {e}")
         return notes
