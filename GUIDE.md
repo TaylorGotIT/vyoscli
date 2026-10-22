@@ -498,6 +498,33 @@ set protocols bgp network 192.168.1.0/24
 commit
 ```
 
+
+#### Community-list + Route-map
+
+按 BGP community 分流到不同下一跳：
+
+```
+# community-list
+set policy community-list 80 rule 10 action permit
+set policy community-list 80 rule 10 description to_hk
+set policy community-list 80 rule 10 regex 65000:9939
+
+# route-map match community
+set protocols route-map bgp-from-RSVR permit 100 description to_hk
+set protocols route-map bgp-from-RSVR permit 100 match community community-list 80
+set protocols route-map bgp-from-RSVR permit 100 set ip-next-hop 10.70.124.121
+set protocols route-map bgp-from-RSVR permit 100 set local-preference 200
+
+# peer-group
+set protocols bgp peer-group RSVR remote-as 65000
+set protocols bgp peer-group RSVR update-source 10.20.182.144
+set protocols bgp peer-group RSVR route-map-import bgp-from-RSVR
+set protocols bgp peer-group RSVR soft-reconfiguration inbound
+
+# neighbor 加入 peer-group
+set protocols bgp neighbor 10.10.99.160 peer-group RSVR
+commit
+```
 ---
 
 ## Service
@@ -530,6 +557,14 @@ commit
 ```
 
 查看租约：`show dhcp lease`
+
+##### MAC-IP 绑定
+
+```
+set service dhcp br0 static 00:11:22:33:44:55 ip 192.168.1.10
+set service dhcp br0 static 66:77:88:99:AA:BB ip 192.168.1.11
+commit
+```
 
 ### DNS Forwarding
 
@@ -702,6 +737,23 @@ set service crontab update-domains command /etc/vyoscli/scripts/update-domains.s
 commit
 ```
 
+
+### SQM
+
+智能队列管理，解决 bufferbloat，游戏低延迟。
+
+```
+set service sqm interface eth0
+set service sqm download 100000
+set service sqm upload 10000
+set service sqm qdisc cake
+commit
+```
+
+| qdisc | 说明 |
+|---|---|
+| cake | 现代 AQM，自动公平分配带宽（推荐） |
+| fq_codel | 经典队列管理 |
 ### TCP Accelerate
 
 BBR / Hybla 拥塞控制 + fq_codel 队列，优化高丢包跨境链路。
