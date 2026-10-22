@@ -565,7 +565,7 @@ class ConfigStore:
                 if not isinstance(cfg, dict):
                     continue
                 # pick a deterministic section name from the prefix
-                slug = prefix.replace("/", "_").replace(":", "_")
+                slug = prefix.replace("/", "_").replace(":", "_").replace(".", "_")
                 section = f"vyos_route_{slug}"
                 self._uci("set", f"network.{section}=route")
                 self._uci("set", f"network.{section}.target={prefix}")
@@ -1353,6 +1353,15 @@ class ConfigStore:
             download = new_sqm.get("download", 100000)
             upload = new_sqm.get("upload", 10000)
             qdisc = new_sqm.get("qdisc", "cake")
+            # create sections if missing
+            try:
+                self._uci("get", "sqm.@general[0]")
+            except subprocess.CalledProcessError:
+                self._uci("add", "sqm", "general")
+            try:
+                self._uci("get", "sqm.@queue[0]")
+            except subprocess.CalledProcessError:
+                self._uci("add", "sqm", "queue")
             self._uci("set", "sqm.@general[0].enabled=1")
             self._uci("set", f"sqm.@queue[0].interface={iface}")
             self._uci("set", f"sqm.@queue[0].download={download}")

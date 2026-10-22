@@ -829,17 +829,18 @@ def build_tree(store: Any) -> CommandTree:
         sqm.add(Node(name="upload", help="Upload bandwidth kbps", value_type="int", action=_cfg_noop))
         sqm.add(Node(name="qdisc", help="cake / fq_codel", value_type="str", action=_cfg_noop))
 
-        # service accelerate ...
+        # service kcp ...
         acc = Node(name="kcp", help="KCP tunnel (kcptun)")
         svc.add(acc)
-        acc_dyn = Node(name="", help="Tunnel name", dynamic=True, action=_cfg_noop)
-        acc.add(acc_dyn)
-        acc_dyn.add(Node(name="mode", help="c/client or s/server", value_type="str", action=_cfg_noop))
-        acc_dyn.add(Node(name="kcp-mode", help="fast2/fast3/normal", value_type="str", action=_cfg_noop))
-        acc_dyn.add(Node(name="local-ip", help="Local listen IP", value_type="ipv4", action=_cfg_noop))
-        acc_dyn.add(Node(name="local-port", help="Local listen port", value_type="port", action=_cfg_noop))
-        acc_dyn.add(Node(name="remote-ip", help="Remote IP", value_type="ipv4", action=_cfg_noop))
-        acc_dyn.add(Node(name="remote-port", help="Remote port", value_type="port", action=_cfg_noop))
+        acc_tpl = Node(name="*", help="Tunnel name")
+        acc_tpl.add(Node(name="mode", help="c/client or s/server", value_type="str", action=_cfg_noop))
+        acc_tpl.add(Node(name="kcp-mode", help="fast2/fast3/normal", value_type="str", action=_cfg_noop))
+        acc_tpl.add(Node(name="local-ip", help="Local listen IP", value_type="ipv4", action=_cfg_noop))
+        acc_tpl.add(Node(name="local-port", help="Local listen port", value_type="port", action=_cfg_noop))
+        acc_tpl.add(Node(name="remote-ip", help="Remote IP", value_type="ipv4", action=_cfg_noop))
+        acc_tpl.add(Node(name="remote-port", help="Remote port", value_type="port", action=_cfg_noop))
+        acc.dynamic = lambda: []
+        acc._dyn_template = acc_tpl
 
         # service tcp-accelerate ...
         tcp_acc = Node(name="tcp-accelerate", help="TCP congestion control")
