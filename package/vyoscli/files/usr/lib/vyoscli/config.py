@@ -285,10 +285,22 @@ class ConfigStore:
         notes.append(f"  -> {pkg} install FAILED: {r.stderr.strip()[:200]}")
         return False
 
+    def _ensure_ss(self) -> None:
+        """Auto-install ip-full if ss is missing."""
+        try:
+            subprocess.run(["ss", "--version"], capture_output=True, timeout=5)
+        except FileNotFoundError:
+            try:
+                subprocess.run(["opkg", "install", "ip-full"],
+                               capture_output=True, text=True, timeout=60)
+            except Exception:
+                pass
+
     def _address_port_in_use(self, ip: str, port: int) -> bool:
         """Return True if binding (ip, port) conflicts with an existing listener."""
+        self._ensure_ss()
         try:
-            r = subprocess.run(["netstat", "-tulnp"], capture_output=True, text=True, timeout=5)
+            r = subprocess.run(["ss", "-tulnp"], capture_output=True, text=True, timeout=5)
         except Exception:
             return False
         for line in r.stdout.splitlines()[1:]:
