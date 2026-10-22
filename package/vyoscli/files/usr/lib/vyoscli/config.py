@@ -122,12 +122,6 @@ DEFAULT_RUNNING: Dict[str, Any] = {
         },
         "fec": {},   # UDPspeeder config
         "kcp": {},   # name -> {mode, local-listen-ip, local-listen-port, remote-listen-ip, remote-listen-port, destination-ip, destination-port, kcp-mode, key}
-        "sqm": {
-            "interface": "eth0",
-            "download": 100000,  # kbps
-            "upload": 10000,
-            "qdisc": "cake",
-        },
 
         "crontab": {},          # name -> {schedule, script, description}
         "dhcp": {},             # ifname -> {start, end, lease, dns: [...], static: {mac: ip}}
@@ -1309,8 +1303,17 @@ class ConfigStore:
         return notes
 
     def _apply_sqm(self, old, new):
-        old_sqm = (old.get("service") or {}).get("sqm") or {}
-        new_sqm = (new.get("service") or {}).get("sqm") or {}
+        # find sqm config on any ethernet interface
+        old_eth = (old.get("interfaces") or {}).get("ethernet") or {}
+        new_eth = (new.get("interfaces") or {}).get("ethernet") or {}
+        old_sqm = {}
+        new_sqm = {}
+        for iface, cfg in new_eth.items():
+            if isinstance(cfg, dict) and cfg.get("sqm"):
+                new_sqm = {"interface": iface, **cfg["sqm"]}
+        for iface, cfg in old_eth.items():
+            if isinstance(cfg, dict) and cfg.get("sqm"):
+                old_sqm = {"interface": iface, **cfg["sqm"]}
         if old_sqm == new_sqm:
             return []
         notes = []
