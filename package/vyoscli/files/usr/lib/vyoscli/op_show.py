@@ -167,6 +167,26 @@ def _op_show_interfaces(ctx: Any, value: Any) -> str:
     return "\n".join(lines)
 
 
+def _op_show_interface_detail(ctx: Any, value: Any) -> str:
+    import subprocess
+    if not value:
+        return "Usage: show interface ethernet <ifname>"
+    try:
+        r = subprocess.run(["ip", "addr", "show", value], capture_output=True, text=True, timeout=5)
+        out = r.stdout.strip()
+        if not out:
+            return f"Interface {value} not found."
+        # add stats
+        try:
+            s = subprocess.run(["ip", "-s", "link", "show", value], capture_output=True, text=True, timeout=5)
+            out += "\n\n" + s.stdout.strip()
+        except Exception:
+            pass
+        return out
+    except Exception as e:
+        return f"show interface failed: {e}"
+
+
 def _op_show_system_summary(ctx: Any, value: Any) -> str:
     return (
         "Possible completions:\n"
