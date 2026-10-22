@@ -491,6 +491,16 @@ def build_tree(store: Any) -> CommandTree:
         tn.dynamic = _existing_tn
         tn._dyn_template = tn_tpl  # type: ignore[attr-defined]
 
+        # interfaces loopback lo ...
+        lb = Node(name="loopback", help="Loopback interface")
+        if_root.add(lb)
+        lb_tpl = Node(name="*", help="Per-loopback")
+        lb_tpl.add(Node(name="address", help="IP address/prefix",
+                        value_type="ipv4net", action=_cfg_noop))
+        lb_tpl.add(Node(name="description", help="Description", value_type="str", action=_cfg_noop))
+        lb.dynamic = lambda: ["lo"]
+        lb._dyn_template = lb_tpl
+
         # interfaces dummy dum0 ...
         dm = Node(name="dummy", help="Dummy interface")
         if_root.add(dm)
