@@ -118,7 +118,13 @@ DEFAULT_RUNNING: Dict[str, Any] = {
             "fq_codel": True,
         },
         "fec": {},   # UDPspeeder config
-        "kcp": {},   # name -> {mode, local-listen-ip, local-listen-port, server-listen-ip, server-listen-port, destination-ip, destination-port, kcp-mode, key}
+        "kcp": {},   # name -> {mode, local-listen-ip, local-listen-port, remote-listen-ip, remote-listen-port, destination-ip, destination-port, kcp-mode, key}
+        "zero-init": {
+            "wan-if": "eth0",
+            "lan-if": "eth1",
+            "wan-test-ip": [],
+            "redirect-dns": False,
+        },
         "crontab": {},          # name -> {schedule, script, description}
         "dhcp": {},             # ifname -> {start, end, lease, dns: [...], static: {mac: ip}}
         "dnsmasq": {
@@ -360,6 +366,7 @@ class ConfigStore:
         notes.extend(self._apply_ssh(old, new))
         notes.extend(self._apply_adguard(old, new))
         notes.extend(self._apply_dnsmasq(old, new))
+        notes.extend(self._apply_zero_init(old, new))
         notes.extend(self._apply_kcp(old, new))
         notes.extend(self._apply_tcp_accelerate(old, new))
         notes.extend(self._apply_policy(old, new))
@@ -1268,6 +1275,51 @@ class ConfigStore:
             notes.append(f"dnsmasq: {new_dm.get('listen-address','0.0.0.0')}:{new_dm.get('port',53)}")
         except Exception as e:
             notes.append(f"dnsmasq apply failed: {e}")
+        return notes
+
+    def _apply_zero_init(self, old, new):
+        old_zi = (old.get("service") or {}).get("zero-init") or {}
+        new_zi = (new.get("service") or {}).get("zero-init") or {}
+        if old_zi == new_zi:
+            return []
+        notes = []
+        try:
+            wan_if = new_zi.get("wan-if", "eth0")
+            lan_if = new_zi.get("lan-if", "eth1")
+            wan_test_ips = new_zi.get("wan-test-ip") or []
+            # 1. create bridge
+            subprocess.run(["ip", "link", "add", "name", "br199", "type", "bridge"],
+                           capture_output=True, timeout=5)
+            subprocess.run(["ip", "link", "set", lan_if, "master", "br199"],
+                           capture_output=True, timeout=5)
+            subprocess.run(["ip", "link", "set", wan_if, "master", "br199"],
+                           capture_output=True, timeout=5)
+            subprocess.run(["ip", "link", "set", "br199", "up"],
+                           capture_output=True, timeout=5)
+            # 2. generate nft rules
+            nft_conf = "#!/usr/sbin/nft -f\n"
+            nft_conf += f"define LAN_IF = {lan_if}\n"
+            nft_conf += f"define WAN_IF = {wan_if}\n"
+            nft_conf += f"define BR_IF = br199\n"
+            nft_conf += f"define MARK = 199\n"
+            nft_conf += "define WAN_NET = { "
+            for ip in wan_test_ips:
+                nft_conf += f" {ip}/32,"
+            nft_conf += " }\n"
+            nft_conf += "delete table bridge epoch_bridge\n"
+            nft_conf += "add table bridge epoch_bridge\n"
+            nft_conf += "add table bridge epoch_bridge {\n"
+            nft_conf += "  chain prerouting {\n"
+            nft_conf += f"    type filter hook prerouting priority 0; policy accept;\n"
+            nft_conf += f"    iifname {lan_if} ether daddr != 01:80:c2:00:00:00 counter accept\n"
+            nft_conf += "  }\n"
+            nft_conf += "}\n"
+            open("/etc/vyoscli/zero-init.nft", "w").write(nft_conf)
+            subprocess.run(["nft", "-f", "/etc/vyoscli/zero-init.nft"],
+                           capture_output=True, text=True, timeout=5)
+            notes.append(f"zero-init: bridge {lan_if}<->{wan_if}, {len(wan_test_ips)} test IPs")
+        except Exception as e:
+            notes.append(f"zero-init failed: {e}")
         return notes
 
     def _apply_kcp(self, old, new):
