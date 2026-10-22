@@ -421,6 +421,25 @@ PC 和网关都以为对方在直接通信，不知道中间串了台 OpenWrt。
 设备断电/故障时，eth0/eth1 物理直连，流量自动透传，不影响客户上网。
 ### Dummy
 
+##### Trunk 多 VLAN
+
+如果上行是 trunk 多 VLAN，开启 VLAN 感知：
+
+```
+set interfaces bridge br100 vlan-aware true
+set interfaces bridge br100 vlan 100 untagged eth1
+set interfaces bridge br100 vlan 100 tagged eth0
+set interfaces bridge br100 vlan 200 untagged eth1
+set interfaces bridge br100 vlan 200 tagged eth0
+commit
+```
+
+| 配置 | 说明 |
+|---|---|
+| vlan-aware | 开启 VLAN 过滤 |
+| untagged eth1 | eth1 接 PC，无标签 |
+| tagged eth0 | eth0 接网关，trunk 带标签 |
+
 ```
 set interfaces dummy dum0 address 10.255.0.1/32
 commit
