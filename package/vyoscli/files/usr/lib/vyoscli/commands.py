@@ -161,12 +161,10 @@ def _op_show_smartdns(ctx: Any, value: Any) -> str:
         return out.stdout or out.stderr or "(smartdns not running)"
     except Exception:
         try:
-            out = subprocess.run(["ss", "-lunp"], capture_output=True, text=True, timeout=5)
+            out = subprocess.run(["netstat", "-lunp"], capture_output=True, text=True, timeout=5)
             return out.stdout
         except Exception as e:  # noqa: BLE001
             return f"smartdns status failed: {e}"
-    except Exception as e:  # noqa: BLE001
-        return f"ping failed: {e}"
 
 
 def _cfg_noop(ctx: Any, value: Any) -> str:
