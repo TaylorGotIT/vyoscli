@@ -58,6 +58,12 @@ class Node:
                 node = node.children[tok]
                 i += 1
                 continue
+            # prefix match: unique child starting with tok
+            matches = [c for c in node.children if c.startswith(tok)]
+            if len(matches) == 1:
+                node = node.children[matches[0]]
+                i += 1
+                continue
             # dynamic children: any token is accepted (used for
             # parametric nodes like ethX or CIDR prefixes). dynamic()
             # is only consulted for Tab completion hints.

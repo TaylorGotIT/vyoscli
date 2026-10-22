@@ -159,7 +159,18 @@ class Cli:
         # maybe the action lives one level deeper but user gave extra tokens
         if node.action is not None:
             return node.action(self.ctx, " ".join(remaining) or None)
-        return f"Invalid command: {' '.join(tokens)} (try '?')"
+        # pass-through to system shell (ping/nslookup/ls/...)
+        import subprocess
+        try:
+            r = subprocess.run(tokens, capture_output=True, text=True, timeout=30)
+            out = r.stdout
+            if r.stderr:
+                out += r.stderr
+            return out or f"Command exited {r.returncode}"
+        except FileNotFoundError:
+            return f"Invalid command: {' '.join(tokens)} (try '?')"
+        except Exception as e:
+            return f"Command error: {e}"
 
     def _run_cfg(self, tokens: List[str]) -> str:
         if not tokens:
