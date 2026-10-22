@@ -17,6 +17,17 @@
 | 包 | 触发条件 | 大小 |
 |---|---|---|
 | smartdns | `set service smartdns ...` commit | ~0.5 MB |
+| adguardhome | `set service adguard ...` commit | ~10 MB |
+| dnsmasq | OpenWrt 默认已装 | - |
+| frr | `set protocols bgp ...` commit | ~5 MB |
+| kmod-tcp-bbr | `set service tcp-accelerate congestion-control bbr` commit | ~0.1 MB |
+| kmod-tcp-hybla | `set service tcp-accelerate congestion-control hybla` commit | ~0.1 MB |
+| kcptun | `set service kcp ...` commit | ~2 MB |
+| kmod-wireguard / wireguard-tools | `set interfaces wireguard ...` commit | ~1 MB |
+| openvpn-openssl | `set interfaces openvpn ...` commit | ~2 MB |
+| strongswan | `set vpn ipsec ...` commit | ~3 MB |
+| conserver | `set service console-server ...` commit | ~0.5 MB |
+| dropbear | OpenWrt 默认已装 | - |
 | podman | `set container ...` commit | ~20 MB |
 | podman-plugins | `set container ...` commit | ~5 MB |
 
@@ -35,6 +46,13 @@ commit
 #   installing optional package: smartdns ...
 #     -> smartdns installed
 #   smartdns reloaded
+
+# 哪天想开 BBR
+set service tcp-accelerate congestion-control bbr
+commit
+# 输出：
+#   installing optional package: kmod-tcp-bbr ...
+#   tcp cc = bbr, qdisc = fq_codel
 
 # 哪天想跑容器
 set container nginx image nginx:alpine
