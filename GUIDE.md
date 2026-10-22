@@ -403,6 +403,56 @@ set service crontab update-domains schedule "0 3 * * *"
 set service crontab update-domains command /etc/vyoscli/scripts/update-domains.sh
 commit
 ```
+
+### TCP Accelerate
+
+BBR / Hybla 拥塞控制 + fq_codel 队列，优化高丢包跨境链路。
+
+```
+set service tcp-accelerate congestion-control bbr
+set service tcp-accelerate fq-codel true
+commit
+```
+
+| congestion-control | 适用场景 |
+|---|---|
+| bbr | 高丢包跨境链路（推荐） |
+| hybla | 卫星链路 |
+| cubic | 默认 |
+
+### KCP Accelerate
+
+kcptun UDP 隧道，配合 OpenVPN over TCP 使用，高丢包链路加速。
+
+#### CE 端（客户端）
+
+```
+set service kcp acc1 mode c
+set service kcp acc1 local-ip 192.168.144.201
+set service kcp acc1 local-port 22222
+set service kcp acc1 remote-ip 192.168.144.202
+set service kcp acc1 remote-port 9991
+set service kcp acc1 kcp-mode fast3
+commit
+```
+
+#### PE 端（服务端）
+
+```
+set service kcp acc1 mode s
+set service kcp acc1 local-ip 192.168.144.202
+set service kcp acc1 local-port 9991
+set service kcp acc1 remote-ip 192.168.144.202
+set service kcp acc1 remote-port 10064
+set service kcp acc1 kcp-mode fast3
+commit
+```
+
+| kcp-mode | 效果 |
+|---|---|
+| fast2 | 10% 重发，延迟低 |
+| fast3 | 20% 重发，丢包补偿（推荐） |
+| normal | 标准模式 |
 ## VPN
 
 ### IPsec Site-to-Site
