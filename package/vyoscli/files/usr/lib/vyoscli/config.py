@@ -1286,38 +1286,31 @@ class ConfigStore:
         try:
             wan_if = new_zi.get("wan-if", "eth0")
             lan_if = new_zi.get("lan-if", "eth1")
-            wan_test_ips = new_zi.get("wan-test-ip") or []
-            # 1. create bridge
-            subprocess.run(["ip", "link", "add", "name", "br199", "type", "bridge"],
+            br_ip = new_zi.get("bridge-ip", "192.168.1.1/24")
+            # 1. create bridge br0
+            subprocess.run(["ip", "link", "add", "name", "br0", "type", "bridge"],
                            capture_output=True, timeout=5)
-            subprocess.run(["ip", "link", "set", lan_if, "master", "br199"],
+            subprocess.run(["ip", "link", "set", lan_if, "master", "br0"],
                            capture_output=True, timeout=5)
-            subprocess.run(["ip", "link", "set", wan_if, "master", "br199"],
+            subprocess.run(["ip", "link", "set", wan_if, "master", "br0"],
                            capture_output=True, timeout=5)
-            subprocess.run(["ip", "link", "set", "br199", "up"],
+            subprocess.run(["ip", "addr", "add", br_ip, "dev", "br0"],
                            capture_output=True, timeout=5)
-            # 2. generate nft rules
-            nft_conf = "#!/usr/sbin/nft -f\n"
-            nft_conf += f"define LAN_IF = {lan_if}\n"
-            nft_conf += f"define WAN_IF = {wan_if}\n"
-            nft_conf += f"define BR_IF = br199\n"
-            nft_conf += f"define MARK = 199\n"
-            nft_conf += "define WAN_NET = { "
-            for ip in wan_test_ips:
-                nft_conf += f" {ip}/32,"
-            nft_conf += " }\n"
-            nft_conf += "delete table bridge epoch_bridge\n"
-            nft_conf += "add table bridge epoch_bridge\n"
-            nft_conf += "add table bridge epoch_bridge {\n"
-            nft_conf += "  chain prerouting {\n"
-            nft_conf += f"    type filter hook prerouting priority 0; policy accept;\n"
-            nft_conf += f"    iifname {lan_if} ether daddr != 01:80:c2:00:00:00 counter accept\n"
-            nft_conf += "  }\n"
-            nft_conf += "}\n"
-            open("/etc/vyoscli/zero-init.nft", "w").write(nft_conf)
-            subprocess.run(["nft", "-f", "/etc/vyoscli/zero-init.nft"],
-                           capture_output=True, text=True, timeout=5)
-            notes.append(f"zero-init: bridge {lan_if}<->{wan_if}, {len(wan_test_ips)} test IPs")
+            subprocess.run(["ip", "link", "set", "br0", "up"],
+                           capture_output=True, timeout=5)
+            # 2. enable IP forwarding
+            subprocess.run(["sysctl", "-w", "net.ipv4.ip_forward=1"],
+                           capture_output=True, timeout=5)
+            # 3. NAT (PC -> internet via br0)
+            subprocess.run(["nft", "add", "table", "ip", "zero_init"],
+                           capture_output=True, timeout=5)
+            subprocess.run(["nft", "add", "chain", "ip", "zero_init", "postrouting",
+                            "{ type nat hook postrouting priority 100; }"],
+                           capture_output=True, timeout=5)
+            subprocess.run(["nft", "add", "rule", "ip", "zero_init", "postrouting",
+                            "oifname", "br0", "masquerade"],
+                           capture_output=True, timeout=5)
+            notes.append(f"zero-init: bridge br0 {lan_if}<->{wan_if}, ip={br_ip}")
         except Exception as e:
             notes.append(f"zero-init failed: {e}")
         return notes
