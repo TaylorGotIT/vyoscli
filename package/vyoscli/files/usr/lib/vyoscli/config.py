@@ -288,7 +288,7 @@ class ConfigStore:
     def _address_port_in_use(self, ip: str, port: int) -> bool:
         """Return True if binding (ip, port) conflicts with an existing listener."""
         try:
-            r = subprocess.run(["ss", "-tulnp"], capture_output=True, text=True, timeout=5)
+            r = subprocess.run(["netstat", "-tulnp"], capture_output=True, text=True, timeout=5)
         except Exception:
             return False
         for line in r.stdout.splitlines()[1:]:
