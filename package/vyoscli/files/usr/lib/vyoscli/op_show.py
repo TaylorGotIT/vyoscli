@@ -77,50 +77,91 @@ def _op_show_interfaces(ctx: Any, value: Any) -> str:
             if isinstance(c, dict) and c.get("description"):
                 desc_map[name] = c["description"]
 
+    # get link info (mac, mtu, state)
+    try:
+        r = subprocess.run(["ip", "-o", "link"], capture_output=True, text=True, timeout=5)
+        link_out = r.stdout
+    except Exception:
+        link_out = ""
+
+    # parse link info
+    link_map = {}
+    for line in link_out.splitlines():
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        iface = parts[1].rstrip(":")
+        state = "u" if "UP" in line else "D"
+        # get mac (ether)
+        mac = "--"
+        for i, p in enumerate(parts):
+            if p == "link/ether":
+                mac = parts[i + 1]
+                break
+        # get mtu
+        mtu = "1500"
+        for i, p in enumerate(parts):
+            if p == "mtu":
+                mtu = parts[i + 1]
+                break
+        link_map[iface] = (mac, mtu, state)
+
+    # get addr info
     try:
         r = subprocess.run(["ip", "-o", "addr"], capture_output=True, text=True, timeout=5)
-        out = r.stdout
+        addr_out = r.stdout
     except Exception:
-        out = ""
+        addr_out = ""
 
-    rows = []
-    cur_name = None
-    for line in out.splitlines():
+    # parse addr info
+    addr_map = {}
+    for line in addr_out.splitlines():
         parts = line.split()
         if len(parts) < 4:
             continue
         iface = parts[1]
-        if iface == cur_name:
-            continue
-        cur_name = iface
-        state = "u" if "UP" in line else "D"
-        addr = "--"
-        for p in parts:
-            if p.startswith("inet "):
-                idx = parts.index(p)
-                addr = parts[idx + 1]
+        for i, p in enumerate(parts):
+            if p in ("inet", "inet6"):
+                if iface not in addr_map:
+                    addr_map[iface] = []
+                addr_map[iface].append(parts[i + 1])
                 break
-        rows.append((iface, addr, state, desc_map.get(iface, "")))
 
+    # build rows
+    rows = []
+    for iface in link_map:
+        mac, mtu, state = link_map[iface]
+        addrs = addr_map.get(iface, [])
+        addr = addrs[0] if addrs else "--"
+        rows.append((iface, addr, mac, mtu, state, desc_map.get(iface, "")))
+
+    # sort: lo first, then eth, then others
     rows.sort(key=lambda x: (0 if x[0] == "lo" else (1 if x[0].startswith("eth") else 2), x[0]))
 
+    # column widths
     name_w = max(len(r[0]) for r in rows) if rows else 10
     name_w = max(name_w, 10)
     addr_w = max(len(r[1]) for r in rows) if rows else 15
-    addr_w = max(addr_w, 15)
+    addr_w = max(addr_w, 18)
+    mac_w = 17
+    mtu_w = 6
 
     lines = [
         "Codes: S - State, L - Link, u - Up, D - Down, A - Admin Down",
         "Interface".ljust(name_w + 2) +
         "IP Address".ljust(addr_w + 2) +
-        "S/L   Description",
-        "-" * (name_w + addr_w + 30),
+        "MAC".ljust(mac_w + 2) +
+        "MTU".ljust(mtu_w + 2) +
+        "S/L    Description",
+        "-" * (name_w + addr_w + mac_w + mtu_w + 30),
     ]
-    for iface, addr, state, desc in rows:
+    for iface, addr, mac, mtu, state, desc in rows:
         lines.append(
             iface.ljust(name_w + 2) +
             addr.ljust(addr_w + 2) +
-            f"{state}/{state}  ".ljust(6) +
+            mac.ljust(mac_w + 2) +
+            mtu.ljust(mtu_w + 2) +
+            f"{state}/{state}   ".ljust(6) +
             desc
         )
     return "\n".join(lines)
