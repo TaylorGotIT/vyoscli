@@ -812,6 +812,14 @@ def build_tree(store: Any) -> CommandTree:
         sh_dyn.add(Node(name="bandwidth", help="Total bandwidth (e.g. 100mbit)", value_type="str", action=_cfg_noop))
         sh_dyn.add(Node(name="per-ip", help="Per-IP bandwidth limit (e.g. 10mbit)", value_type="str", action=_cfg_noop))
 
+        # service sqm ...
+        sqm = Node(name="sqm", help="SQM smart queue management")
+        svc.add(sqm)
+        sqm.add(Node(name="interface", help="WAN interface", value_type="str", action=_cfg_noop))
+        sqm.add(Node(name="download", help="Download bandwidth kbps", value_type="int", action=_cfg_noop))
+        sqm.add(Node(name="upload", help="Upload bandwidth kbps", value_type="int", action=_cfg_noop))
+        sqm.add(Node(name="qdisc", help="cake / fq_codel", value_type="str", action=_cfg_noop))
+
         # service accelerate ...
         acc = Node(name="kcp", help="KCP tunnel (kcptun)")
         svc.add(acc)

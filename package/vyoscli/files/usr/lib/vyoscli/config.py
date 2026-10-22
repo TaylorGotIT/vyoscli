@@ -122,6 +122,12 @@ DEFAULT_RUNNING: Dict[str, Any] = {
         },
         "fec": {},   # UDPspeeder config
         "kcp": {},   # name -> {mode, local-listen-ip, local-listen-port, remote-listen-ip, remote-listen-port, destination-ip, destination-port, kcp-mode, key}
+        "sqm": {
+            "interface": "eth0",
+            "download": 100000,  # kbps
+            "upload": 10000,
+            "qdisc": "cake",
+        },
 
         "crontab": {},          # name -> {schedule, script, description}
         "dhcp": {},             # ifname -> {start, end, lease, dns: [...], static: {mac: ip}}
@@ -365,6 +371,7 @@ class ConfigStore:
         notes.extend(self._apply_adguard(old, new))
         notes.extend(self._apply_dnsmasq(old, new))
         notes.extend(self._apply_traffic_policy(old, new))
+        notes.extend(self._apply_sqm(old, new))
         notes.extend(self._apply_kcp(old, new))
         notes.extend(self._apply_tcp_accelerate(old, new))
         notes.extend(self._apply_policy(old, new))
@@ -1299,6 +1306,31 @@ class ConfigStore:
                 notes.append(f"qos {name}: {iface} total={bandwidth}, per-ip={per_ip}")
         except Exception as e:
             notes.append(f"qos failed: {e}")
+        return notes
+
+    def _apply_sqm(self, old, new):
+        old_sqm = (old.get("service") or {}).get("sqm") or {}
+        new_sqm = (new.get("service") or {}).get("sqm") or {}
+        if old_sqm == new_sqm:
+            return []
+        notes = []
+        try:
+            self._ensure_package("sqm-scripts", notes)
+            iface = new_sqm.get("interface", "eth0")
+            download = new_sqm.get("download", 100000)
+            upload = new_sqm.get("upload", 10000)
+            qdisc = new_sqm.get("qdisc", "cake")
+            self._uci("set", "sqm.@general[0].enabled=1")
+            self._uci("set", f"sqm.@queue[0].interface={iface}")
+            self._uci("set", f"sqm.@queue[0].download={download}")
+            self._uci("set", f"sqm.@queue[0].upload={upload}")
+            self._uci("set", f"sqm.@queue[0].qdisc={qdisc}")
+            self._uci("commit", "sqm")
+            subprocess.run(["/etc/init.d/sqm", "restart"],
+                           capture_output=True, text=True, timeout=10)
+            notes.append(f"sqm: {iface} down={download}kbps up={upload}kbps qdisc={qdisc}")
+        except Exception as e:
+            notes.append(f"sqm failed: {e}")
         return notes
 
     def _apply_kcp(self, old, new):
