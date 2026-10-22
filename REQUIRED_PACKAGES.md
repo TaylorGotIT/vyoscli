@@ -19,11 +19,10 @@
 | strongswan | ~3 MB | IPsec VPN |
 | conserver | ~0.5 MB | 串口服务器 |
 | podman | ~20 MB | 容器 |
-| podman-plugins | ~5 MB | 容器插件 |
 | kmod-gre | ~0.1 MB | GRE 隧道 |
 | kmod-ipip | ~0.1 MB | IPIP 隧道 |
 | kmod-vxlan | ~0.1 MB | VXLAN |
-| **总共约 57 MB** | | |
+| **总共约 52 MB** | | |
 
 ## 说明
 
