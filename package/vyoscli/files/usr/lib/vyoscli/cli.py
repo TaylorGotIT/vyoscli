@@ -71,11 +71,28 @@ class Cli:
     def _setup_readline(self) -> None:
         if not _HAVE_READLINE:
             return
+        self._hist_path = os.path.expanduser("~/.vyoscli_history")
+        try:
+            readline.read_history_file(self._hist_path)
+        except Exception:
+            pass
+        readline.set_history_length(1000)
         readline.set_completer(self._completer)
         readline.parse_and_bind("tab: complete")
         readline.parse_and_bind("set show-all-if-ambiguous on")
         readline.set_completer_delims(" \t\n")
         readline.set_completion_display_matches_hook(self._display_matches)
+
+    def _save_history(self) -> None:
+        if not _HAVE_READLINE:
+            return
+        try:
+            readline.write_history_file(self._hist_path)
+        except Exception:
+            pass
+
+    def postloop(self) -> None:
+        self._save_history()
 
     def _completer(self, text: str, state: int) -> Optional[str]:
         if not _HAVE_READLINE:
@@ -159,6 +176,28 @@ class Cli:
         suffix = f" [{path}]" if path else ""
         return f"root@{host}# {suffix}"
 
+    def _suggest(self, word: str, candidates: list) -> str:
+        """Simple typo suggestion: find closest match by edit distance."""
+        if not word or not candidates:
+            return ""
+        best = None
+        best_dist = 999
+        for c in candidates:
+            # simple: common prefix length
+            prefix_len = 0
+            for a, b in zip(word, c):
+                if a == b:
+                    prefix_len += 1
+                else:
+                    break
+            dist = len(word) + len(c) - 2 * prefix_len
+            if dist < best_dist:
+                best_dist = dist
+                best = c
+        if best and best_dist <= max(3, len(word) // 2):
+            return f"  (did you mean: {best}?)"
+        return ""
+
     # ------------ command dispatch ------------
     def _run_op(self, tokens: List[str]) -> str:
         node, remaining, matched = self.tree.op_root.walk(tokens)
@@ -180,7 +219,10 @@ class Cli:
                 out += r.stderr
             return out or f"Command exited {r.returncode}"
         except FileNotFoundError:
-            return f"Invalid command: {' '.join(tokens)} (try '?')"
+            # suggest closest match
+            top = list(self.tree.op_root.children.keys())
+            sug = self._suggest(tokens[0], top)
+            return f"Invalid command: {' '.join(tokens)} (try '?'){sug}"
         except Exception as e:
             return f"Command error: {e}"
 
@@ -210,6 +252,8 @@ class Cli:
             return self.store.rollback_to(ts)
         if head == "discard":
             return self.store.discard()
+        if head == "compare":
+            return self.store.compare()
         if head == "save":
             return self.store.save()
         if head == "up":

@@ -26,6 +26,15 @@ def _run(cmd: List[str]) -> str:
 
 
 # ---------- show version ----------
+def _op_show_log(ctx: Any, value: Any) -> str:
+    import subprocess
+    try:
+        r = subprocess.run(["logread"], capture_output=True, text=True, timeout=10)
+        return r.stdout or r.stderr or "(empty log)"
+    except Exception as e:
+        return f"logread failed: {e}"
+
+
 def _op_show_history(ctx: Any, value: Any) -> str:
     import readline
     n = readline.get_current_history_length()
@@ -348,6 +357,7 @@ def build_tree(store: Any) -> CommandTree:
     tree.op("show interface", help="Show interface summary",
             action=_op_show_interfaces)
     tree.op("show history", help="Show command history", action=_op_show_history)
+    tree.op("show log", help="Show system log (logread)", action=_op_show_log)
 
     # show configuration [commands|json]
     show_cfg = Node(name="configuration", help="Show running configuration",

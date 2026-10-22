@@ -1895,6 +1895,22 @@ class ConfigStore:
         self._dump(self.candidate_path, self.candidate)
         return "Changes discarded."
 
+    def compare(self) -> str:
+        running_cmds = set(self.render_set_commands(self.running))
+        candidate_cmds = set(self.render_set_commands(self.candidate))
+        added = sorted(candidate_cmds - running_cmds)
+        removed = sorted(running_cmds - candidate_cmds)
+        if not added and not removed:
+            return "No changes."
+        out = []
+        if added:
+            out.append("[added]")
+            out.extend(f"  + {c}" for c in added)
+        if removed:
+            out.append("[removed]")
+            out.extend(f"  - {c}" for c in removed)
+        return "\n".join(out)
+
     def save(self) -> str:
         self._dump(self.running_path, self.running)
         return "Saved to /etc/vyoscli/running.json"
