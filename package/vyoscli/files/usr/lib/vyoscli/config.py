@@ -120,7 +120,7 @@ DEFAULT_RUNNING: Dict[str, Any] = {
         "fec": {},   # UDPspeeder config
         "kcp": {},   # name -> {mode, local-listen-ip, local-listen-port, server-listen-ip, server-listen-port, destination-ip, destination-port, kcp-mode, key}
         "crontab": {},          # name -> {schedule, script, description}
-        "dhcp": {},             # ifname -> {start, end, lease, dns: [...]}
+        "dhcp": {},             # ifname -> {start, end, lease, dns: [...], static: {mac: ip}}
         "dnsmasq": {
             "port": 53,
             "listen-address": "0.0.0.0",
@@ -1191,6 +1191,13 @@ class ConfigStore:
                     pass
                 for d in cfg.get("dns") or []:
                     self._uci("add_list", f"dhcp.{s}.dhcp_option=option:dns,{d}")
+                # static leases
+                for mac, ip in (cfg.get("static") or {}).items():
+                    hs = f"vyos_dhcp_host_{mac.replace(':', '_')}"
+                    self._uci("set", f"dhcp.{hs}=host")
+                    self._uci("set", f"dhcp.{hs}.name={mac}")
+                    self._uci("set", f"dhcp.{hs}.mac={mac}")
+                    self._uci("set", f"dhcp.{hs}.ip={ip}")
             self._uci("commit", "dhcp")
             subprocess.run(["/etc/init.d/dnsmasq", "reload"],
                            capture_output=True, text=True, timeout=10)

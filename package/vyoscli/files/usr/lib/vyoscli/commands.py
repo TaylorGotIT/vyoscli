@@ -975,6 +975,10 @@ def build_tree(store: Any) -> CommandTree:
                           value_type="str", action=_cfg_noop))
         dhcp_tpl.add(Node(name="dns", help="DNS server handed to clients (repeatable)",
                           value_type="ipv4", action=_cfg_noop))
+        # static lease: mac -> ip
+        static = Node(name="static", help="Static MAC-IP binding", dynamic=True, action=_cfg_noop)
+        dhcp_tpl.add(static)
+        static.add(Node(name="ip", help="Fixed IP for this MAC", value_type="ipv4", action=_cfg_noop))
         def _existing_dhcp(store=store):
             try:
                 return list((store.candidate.get("service", {})
