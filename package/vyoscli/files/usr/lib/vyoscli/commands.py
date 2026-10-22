@@ -493,6 +493,10 @@ def build_tree(store: Any) -> CommandTree:
         br_tpl = Node(name="*", help="Per-bridge")
         br_tpl.add(Node(name="port", help="Add a port (repeatable)",
                         value_type="str", action=_cfg_noop))
+        br_tpl.add(Node(name="mac", help="Bridge MAC address (for rebinding)",
+                        value_type="str", action=_cfg_noop))
+        br_tpl.add(Node(name="mac-rebinding", help="Enable transparent bridge (bump-in-the-wire)",
+                        value_type="bool", action=_cfg_noop))
         def _existing_br(store=store):
             try:
                 return list((store.candidate.get("interfaces", {}).get("bridge", {}) or {}).keys())
@@ -796,13 +800,6 @@ def build_tree(store: Any) -> CommandTree:
                 return []
         addr.dynamic = _existing_addrs
         addr._dyn_template = addr_tpl  # type: ignore[attr-defined]
-
-        # service zero-init ...
-        zi = Node(name="zero-init", help="Bump-in-the-wire transparent bridge")
-        svc.add(zi)
-        zi.add(Node(name="wan-if", help="WAN interface (upstream)", value_type="str", action=_cfg_noop))
-        zi.add(Node(name="lan-if", help="LAN interface (downstream PC)", value_type="str", action=_cfg_noop))
-        zi.add(Node(name="bridge-ip", help="Bridge IP (PC gateway)", value_type="str", action=_cfg_noop))
 
         # service accelerate ...
         acc = Node(name="kcp", help="KCP tunnel (kcptun)")

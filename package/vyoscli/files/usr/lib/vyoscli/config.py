@@ -119,12 +119,7 @@ DEFAULT_RUNNING: Dict[str, Any] = {
         },
         "fec": {},   # UDPspeeder config
         "kcp": {},   # name -> {mode, local-listen-ip, local-listen-port, remote-listen-ip, remote-listen-port, destination-ip, destination-port, kcp-mode, key}
-        "zero-init": {
-            "wan-if": "eth0",
-            "lan-if": "eth1",
-            "wan-test-ip": [],
-            "redirect-dns": False,
-        },
+
         "crontab": {},          # name -> {schedule, script, description}
         "dhcp": {},             # ifname -> {start, end, lease, dns: [...], static: {mac: ip}}
         "dnsmasq": {
@@ -366,7 +361,6 @@ class ConfigStore:
         notes.extend(self._apply_ssh(old, new))
         notes.extend(self._apply_adguard(old, new))
         notes.extend(self._apply_dnsmasq(old, new))
-        notes.extend(self._apply_zero_init(old, new))
         notes.extend(self._apply_kcp(old, new))
         notes.extend(self._apply_tcp_accelerate(old, new))
         notes.extend(self._apply_policy(old, new))
@@ -1275,44 +1269,6 @@ class ConfigStore:
             notes.append(f"dnsmasq: {new_dm.get('listen-address','0.0.0.0')}:{new_dm.get('port',53)}")
         except Exception as e:
             notes.append(f"dnsmasq apply failed: {e}")
-        return notes
-
-    def _apply_zero_init(self, old, new):
-        old_zi = (old.get("service") or {}).get("zero-init") or {}
-        new_zi = (new.get("service") or {}).get("zero-init") or {}
-        if old_zi == new_zi:
-            return []
-        notes = []
-        try:
-            wan_if = new_zi.get("wan-if", "eth0")
-            lan_if = new_zi.get("lan-if", "eth1")
-            br_ip = new_zi.get("bridge-ip", "192.168.1.1/24")
-            # 1. create bridge br0
-            subprocess.run(["ip", "link", "add", "name", "br0", "type", "bridge"],
-                           capture_output=True, timeout=5)
-            subprocess.run(["ip", "link", "set", lan_if, "master", "br0"],
-                           capture_output=True, timeout=5)
-            subprocess.run(["ip", "link", "set", wan_if, "master", "br0"],
-                           capture_output=True, timeout=5)
-            subprocess.run(["ip", "addr", "add", br_ip, "dev", "br0"],
-                           capture_output=True, timeout=5)
-            subprocess.run(["ip", "link", "set", "br0", "up"],
-                           capture_output=True, timeout=5)
-            # 2. enable IP forwarding
-            subprocess.run(["sysctl", "-w", "net.ipv4.ip_forward=1"],
-                           capture_output=True, timeout=5)
-            # 3. NAT (PC -> internet via br0)
-            subprocess.run(["nft", "add", "table", "ip", "zero_init"],
-                           capture_output=True, timeout=5)
-            subprocess.run(["nft", "add", "chain", "ip", "zero_init", "postrouting",
-                            "{ type nat hook postrouting priority 100; }"],
-                           capture_output=True, timeout=5)
-            subprocess.run(["nft", "add", "rule", "ip", "zero_init", "postrouting",
-                            "oifname", "br0", "masquerade"],
-                           capture_output=True, timeout=5)
-            notes.append(f"zero-init: bridge br0 {lan_if}<->{wan_if}, ip={br_ip}")
-        except Exception as e:
-            notes.append(f"zero-init failed: {e}")
         return notes
 
     def _apply_kcp(self, old, new):
