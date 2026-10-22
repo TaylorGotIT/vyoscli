@@ -35,7 +35,11 @@
 | commit confirm | 取消挂起的定时器 |
 | rollback [ts] | 手动回滚到任意历史快照 |
 | discard | 丢弃未提交修改 |
+| compare | 对比 running vs candidate 差异 |
+| run xxx | cfg 模式下执行 op 命令 |
 | Tab 补全 | 两列对齐：命令名 + help 描述 |
+| 前缀匹配 | 前几个字母唯一就补全 |
+| 历史持久化 | 重启后命令历史还在 |
 
 ## op 模式
 
@@ -44,7 +48,10 @@
 | `configure` | 进入配置模式 |
 | `exit` / `quit` | 退出 CLI |
 | `show version` | 版本/内核/架构/硬件资产卡 |
-| `show interface` | 接口 IP 摘要（多 IP 换行） |
+| `show interface` | 接口摘要（MAC/MTU/状态/描述） |
+| `show interface ethernet eth0` | 单接口详情（ip addr + 统计） |
+| `show history` | 命令历史 |
+| `show log` | 系统日志 logread |
 | `show configuration` | running 配置树形缩进 |
 | `show configuration commands` | running 配置为 `set ...` 脚本 |
 | `show configuration json` | running 配置为 JSON |
@@ -353,10 +360,44 @@ commit
 ```
 set interfaces ethernet eth0 description WAN
 set interfaces ethernet eth0 address dhcp
+set interfaces ethernet eth0 mtu 1500
+set interfaces ethernet eth0 mac aa:bb:cc:dd:ee:ff
+set interfaces ethernet eth0 duplex auto
+set interfaces ethernet eth0 speed auto
+set interfaces ethernet eth0 vrf default
+set interfaces ethernet eth0 vif 10 address 10.0.0.1/24
 
 set interfaces ethernet eth1 description LAN
 set interfaces ethernet eth1 address 192.168.1.1/24
 set interfaces ethernet eth1 address 192.168.2.1/24
+commit
+```
+
+### Loopback
+
+```
+set interfaces loopback lo address 10.255.0.1/32
+set interfaces loopback lo description router-id
+commit
+```
+
+### Dummy
+
+```
+set interfaces dummy dum10 address 10.255.255.1/32
+set interfaces dummy dum10 description "loopback test"
+commit
+```
+
+### Tunnel (GRE/IPIP)
+
+```
+set interfaces tunnel tun10 encapsulation gre
+set interfaces tunnel tun10 source-address 192.168.1.1
+set interfaces tunnel tun10 remote 10.0.0.2
+set interfaces tunnel tun10 address 10.10.10.1/30
+set interfaces tunnel tun10 description "site-a to site-b"
+set interfaces tunnel tun10 mtu 1476
 commit
 ```
 
@@ -379,13 +420,19 @@ commit
 ```
 
 ### Bridge
-### Bridge
 
-#### 普通桥接
+#### 普通桥接 + STP
 
 ```
 set interfaces bridge br0 member eth1
+set interfaces bridge br0 member eth2
 set interfaces bridge br0 address 192.168.1.1/24
+set interfaces bridge br0 stp true
+set interfaces bridge br0 priority 32768
+set interfaces bridge br0 forwarding-delay 14
+set interfaces bridge br0 hello-time 2
+set interfaces bridge br0 max-age 20
+set interfaces bridge br0 aging 300
 commit
 ```
 
