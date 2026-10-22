@@ -397,8 +397,7 @@ def build_tree(store: Any) -> CommandTree:
         ("reload", "Reload a system service"),
     ]:
         tree.op(f"{verb} service", help=f"{help_txt} (e.g. ssh/firewall/dnsmasq)",
-                value_type="str", action=_op_service_action(verb),
-                dynamic_completion=_op_list_services)
+                value_type="str", action=_op_service_action(verb))
 
     # show container / dhcp lease / smartdns
     tree.op("show container", help="List running podman containers",
