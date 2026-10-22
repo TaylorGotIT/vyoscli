@@ -673,6 +673,44 @@ def build_tree(store: Any) -> CommandTree:
                         value_type="str", action=_cfg_noop))
         rm_set.add(Node(name="next-hop", help="Set next-hop",
                         value_type="ipv4", action=_cfg_noop))
+        # match
+        rm_match = Node(name="match", help="Match condition")
+        rm_rule.add(rm_match)
+        rm_match_com = Node(name="community", help="Match community-list")
+        rm_match.add(rm_match_com)
+        rm_match_com.add(Node(name="community-list", help="Community-list number",
+                              value_type="str", action=_cfg_noop))
+
+        # policy community-list
+        pol = Node(name="policy", help="Routing policy")
+        root.add(pol)
+        comlist = Node(name="community-list", help="BGP community-list")
+        pol.add(comlist)
+        cl_num = Node(name="", help="List number", dynamic=True, action=_cfg_noop)
+        comlist.add(cl_num)
+        cl_rule = Node(name="rule", help="Rule number", dynamic=True, action=_cfg_noop)
+        cl_num.add(cl_rule)
+        cl_rule.add(Node(name="action", help="permit/deny", value_type="str", action=_cfg_noop))
+        cl_rule.add(Node(name="description", help="Description", value_type="str", action=_cfg_noop))
+        cl_rule.add(Node(name="regex", help="Community regex", value_type="str", action=_cfg_noop))
+
+        # bgp peer-group
+        bgp_pg = Node(name="peer-group", help="BGP peer group")
+        proto_bgp = None
+        for n in root.children:
+            if n.name == "protocols":
+                for c in n.children:
+                    if c.name == "bgp":
+                        proto_bgp = c
+                        break
+        if proto_bgp:
+            pg_dyn = Node(name="", help="Peer-group name", dynamic=True, action=_cfg_noop)
+            proto_bgp.add(bgp_pg)
+            bgp_pg.add(pg_dyn)
+            pg_dyn.add(Node(name="remote-as", help="Remote AS", value_type="int", action=_cfg_noop))
+            pg_dyn.add(Node(name="update-source", help="Update source IP", value_type="ipv4", action=_cfg_noop))
+            pg_dyn.add(Node(name="route-map-import", help="Inbound route-map", value_type="str", action=_cfg_noop))
+            pg_dyn.add(Node(name="soft-reconfiguration", help="Soft reconfig inbound", value_type="str", action=_cfg_noop))
 
         # service smartdns ...
         svc = Node(name="service", help="System services")

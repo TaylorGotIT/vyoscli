@@ -93,10 +93,12 @@ DEFAULT_RUNNING: Dict[str, Any] = {
         "bgp": {
             "local-as": None,
             "router-id": None,
-            "neighbor": {},   # ip -> {remote-as, description, route-map-in, route-map-out}
+            "neighbor": {},   # ip -> {remote-as, description, route-map-in, route-map-out, peer-group}
+            "peer-group": {},  # name -> {remote-as, update-source, route-map-import, soft-reconfiguration}
             "network": [],   # prefixes
         },
-        "route-map": {},   # name -> {permit: {rule: {set: {}}}},
+        "route-map": {},   # name -> {permit: {rule: {set: {}, match: {}}}},
+        "community-list": {},  # num -> {rule: {regex, description, action}},
     },
     "service": {
         "smartdns": {
@@ -845,6 +847,26 @@ class ConfigStore:
                         self._uci("set", f"frr.{s}.peer_asn={nb['remote-as']}")
                     if nb.get("description"):
                         self._uci("set", f"frr.{s}.description={nb['description']}")
+                for pgname, pg in (new_b.get("peer-group") or {}).items():
+                    if not isinstance(pg, dict):
+                        continue
+                    s = f"vyos_bgp_pg_{pgname}"
+                    self._uci("set", f"frr.{s}=bgp_peer_group")
+                    self._uci("set", f"frr.{s}.peer_group={pgname}")
+                    if pg.get("remote-as"):
+                        self._uci("set", f"frr.{s}.peer_asn={pg['remote-as']}")
+                    if pg.get("update-source"):
+                        self._uci("set", f"frr.{s}.update_source={pg['update-source']}")
+                    if pg.get("route-map-import"):
+                        self._uci("set", f"frr.{s}.route_map_in={pg['route-map-import']}")
+                for ip, nb in (new_b.get("neighbor") or {}).items():
+                    if not isinstance(nb, dict):
+                        continue
+                    if nb.get("peer-group"):
+                        s = f"vyos_bgp_nb_{ip.replace('.', '_').replace(':', '_')}"
+                        self._uci("set", f"frr.{s}=bgp_neighbor")
+                        self._uci("set", f"frr.{s}.peer_ip={ip}")
+                        self._uci("set", f"frr.{s}.peer_group={nb['peer-group']}")
                 for net in new_b.get("network") or []:
                     s = f"vyos_bgp_net_{net.replace('/', '_').replace('.', '_')}"
                     self._uci("set", f"frr.{s}=bgp_network")
@@ -860,16 +882,27 @@ class ConfigStore:
             # strip old marked block
             import re
             old_conf = re.sub(r"# --- vyoscli:route-map:begin ---.*?# --- vyoscli:route-map:end ---\n?", "", old_conf, flags=re.S)
+            # community-list
+            comlists = (new.get("policy") or {}).get("community-list") or {}
             block = []
-            if rmaps:
+            if rmaps or comlists:
                 block.append("# --- vyoscli:route-map:begin ---")
+                for clnum, clbody in comlists.items():
+                    if not isinstance(clbody, dict):
+                        continue
+                    for ruleno, rule in (clbody or {}).items():
+                        regex = (rule or {}).get("regex", "")
+                        block.append(f"bgp community-list {clnum} permit {regex}")
                 for name, body in rmaps.items():
                     if not isinstance(body, dict):
                         continue
                     for action, rules in body.items():
                         for ruleno, rbody in (rules or {}).items():
                             sets = (rbody or {}).get("set") or {}
+                            matches = (rbody or {}).get("match") or {}
                             block.append(f"route-map {name} {action} {ruleno}")
+                            for k, v in matches.items():
+                                block.append(f"  match {k.replace('-', ' ')} {v}")
                             for k, v in sets.items():
                                 block.append(f"  set {k.replace('-', ' ')} {v}")
                 block.append("# --- vyoscli:route-map:end ---")
