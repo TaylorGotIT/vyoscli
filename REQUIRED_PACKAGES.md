@@ -12,7 +12,6 @@
 | frr | ~5 MB | BGP 动态路由 |
 | kmod-tcp-bbr | ~0.1 MB | BBR 拥塞控制 |
 | kmod-tcp-hybla | ~0.1 MB | Hybla 拥塞控制 |
-| kcptun | ~2 MB | KCP 加速隧道 |
 | kmod-wireguard | ~0.5 MB | WireGuard VPN |
 | wireguard-tools | ~0.5 MB | WireGuard 工具 |
 | openvpn-openssl | ~2 MB | OpenVPN |
