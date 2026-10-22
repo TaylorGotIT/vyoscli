@@ -424,7 +424,7 @@ def build_tree(store: Any) -> CommandTree:
                            value_type="ipv4", action=_cfg_noop))
         sys_named.add(Node(name="timezone", help="IANA timezone (e.g. Asia/Shanghai)",
                            value_type="str", action=_cfg_noop))
-        sys.add(Node(name="domain-search", help="Domain search suffix (repeatable)",
+        sys_named.add(Node(name="domain-search", help="Domain search suffix (repeatable)",
                      value_type="str", action=_cfg_noop))
         sys_named.add(Node(name="ntp", help="NTP server hostname (repeatable)",
                            value_type="str", action=_cfg_noop))
@@ -647,7 +647,7 @@ def build_tree(store: Any) -> CommandTree:
 
         # protocols bgp ...
         bgp = Node(name="bgp", help="BGP routing (FRR)")
-        protos.add(bgp)
+        proto.add(bgp)
         bgp.add(Node(name="local-as", help="Local AS number",
                      value_type="int", action=_cfg_noop))
         bgp.add(Node(name="router-id", help="BGP router-id",
@@ -669,7 +669,7 @@ def build_tree(store: Any) -> CommandTree:
 
         # protocols route-map ...
         rm = Node(name="route-map", help="Route-map policy")
-        protos.add(rm)
+        proto.add(rm)
         rm_name = Node(name="", help="Route-map name", dynamic=True, action=_cfg_noop)
         rm.add(rm_name)
         rm_action = Node(name="permit", help="Permit rule", action=_cfg_noop)
@@ -710,9 +710,9 @@ def build_tree(store: Any) -> CommandTree:
         # bgp peer-group
         bgp_pg = Node(name="peer-group", help="BGP peer group")
         proto_bgp = None
-        for n in root.children:
+        for n in root.children.values():
             if n.name == "protocols":
-                for c in n.children:
+                for c in n.children.values():
                     if c.name == "bgp":
                         proto_bgp = c
                         break
@@ -851,7 +851,7 @@ def build_tree(store: Any) -> CommandTree:
 
         # system login user ...
         login = Node(name="login", help="Login user management")
-        sys.add(login)
+        sys_named.add(login)
         login_user = Node(name="user", help="Local user")
         login.add(login_user)
         user_dyn = Node(name="", help="Username", dynamic=True, action=_cfg_noop)
