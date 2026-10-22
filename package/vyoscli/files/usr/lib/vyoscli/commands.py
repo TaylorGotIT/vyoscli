@@ -26,6 +26,17 @@ def _run(cmd: List[str]) -> str:
 
 
 # ---------- show version ----------
+def _op_show_history(ctx: Any, value: Any) -> str:
+    import readline
+    n = readline.get_current_history_length()
+    if n == 0:
+        return "No history."
+    out = []
+    for i in range(1, n + 1):
+        out.append(f"  {i:4d}  {readline.get_history_item(i)}")
+    return "\n".join(out)
+
+
 def _op_show_version(ctx: Any, value: Any) -> str:
     uname = platform.uname()
     sys_cfg = ctx.store.get(["system"], candidate=False) or {}
@@ -336,6 +347,7 @@ def build_tree(store: Any) -> CommandTree:
     tree.op("show version", help="Show system version", action=_op_show_version)
     tree.op("show interface", help="Show interface summary",
             action=_op_show_interfaces)
+    tree.op("show history", help="Show command history", action=_op_show_history)
 
     # show configuration [commands|json]
     show_cfg = Node(name="configuration", help="Show running configuration",
