@@ -27,6 +27,7 @@ def _run(cmd: List[str]) -> str:
 
 
 from .op_show import (
+    _op_show_dependencies,
     _op_show_log,
     _op_show_history,
     _op_show_version,
@@ -192,6 +193,7 @@ def build_tree(store: Any) -> CommandTree:
 
     # show version / interface
     tree.op("show version", help="Show system version", action=_op_show_version)
+    tree.op("show dependencies", help="Check required packages", action=_op_show_dependencies)
     tree.op("show interface", help="Show interface summary",
             action=_op_show_interfaces)
     # show interface ethernet <ifname>

@@ -2,6 +2,56 @@
 from typing import Any
 
 
+REQUIRED_PACKAGES = [
+    ("python3", "python3"),
+    ("python3-readline", "python3-readline"),
+    ("ip-full", "ip"),
+    ("smartdns", "smartdns"),
+    ("adguardhome", "AdGuardHome"),
+    ("frr", "vtysh"),
+    ("kmod-tcp-bbr", "kmod-tcp-bbr"),
+    ("kmod-tcp-hybla", "kmod-tcp-hybla"),
+    ("kmod-wireguard", "wg"),
+    ("wireguard-tools", "wg"),
+    ("openvpn-openssl", "openvpn"),
+    ("strongswan-minimal", "ipsec"),
+    ("conserver", "conserver"),
+    ("podman", "podman"),
+    ("kmod-gre", "kmod-gre"),
+    ("kmod-ipip", "kmod-ipip"),
+    ("kmod-vxlan", "kmod-vxlan"),
+    ("tc", "tc"),
+    ("sqm-scripts", "sqm"),
+]
+
+
+def _op_show_dependencies(ctx: Any, value: Any) -> str:
+    import shutil
+    import subprocess
+    out = ["Package Status:"]
+    out.append(f"{'Package':<25} {'Status':<10}")
+    out.append(f"{'-'*25} {'-'*10}")
+    missing = []
+    for pkg, bin_name in REQUIRED_PACKAGES:
+        # Check if installed via opkg
+        r = subprocess.run(["opkg", "list-installed", pkg], capture_output=True, text=True, timeout=5)
+        installed = pkg in r.stdout
+        if installed:
+            status = "OK"
+        else:
+            status = "MISSING"
+            missing.append(pkg)
+        out.append(f"{pkg:<25} {status:<10}")
+    out.append("")
+    if missing:
+        out.append(f"Missing: {', '.join(missing)}")
+        out.append("Install with:")
+        out.append(f"  opkg install {' '.join(missing)}")
+    else:
+        out.append("All dependencies installed.")
+    return "\n".join(out)
+
+
 def _op_show_log(ctx: Any, value: Any) -> str:
     import subprocess
     try:
