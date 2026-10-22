@@ -317,6 +317,28 @@ def build_tree(store: Any) -> CommandTree:
                           value_type="ipv4net", action=_cfg_noop))
         template.add(Node(name="description", help="Interface description",
                           value_type="str", action=_cfg_noop))
+        template.add(Node(name="mtu", help="MTU (default 1500)",
+                          value_type="int", action=_cfg_noop))
+        template.add(Node(name="mac", help="MAC address",
+                          value_type="str", action=_cfg_noop))
+        template.add(Node(name="duplex", help="Duplex mode: auto|half|full",
+                          value_type="str", action=_cfg_noop))
+        template.add(Node(name="speed", help="Speed: auto|10|100|1000|2500|10000",
+                          value_type="str", action=_cfg_noop))
+        template.add(Node(name="vrf", help="VRF instance name",
+                          value_type="str", action=_cfg_noop))
+        template.add(Node(name="disable", help="Administratively disable",
+                          value_type="bool", action=_cfg_noop))
+        # vif (802.1Q)
+        vif_node = Node(name="vif", help="Virtual Local Area Network (VLAN) ID")
+        vif_tpl = Node(name="*", help="VLAN ID")
+        vif_tpl.add(Node(name="address", help="IPv4 address/prefix",
+                         value_type="ipv4net", action=_cfg_noop))
+        vif_tpl.add(Node(name="description", help="Interface description",
+                         value_type="str", action=_cfg_noop))
+        vif_node.dynamic = lambda: ["10", "20", "100"]
+        vif_node._dyn_template = vif_tpl
+        template.add(vif_node)
         eth.dynamic = lambda: ["lo", "eth0", "eth1", "eth2", "wlan0"]
         eth._dyn_template = template  # type: ignore[attr-defined]
 
