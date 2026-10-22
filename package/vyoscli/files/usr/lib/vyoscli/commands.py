@@ -491,6 +491,25 @@ def build_tree(store: Any) -> CommandTree:
         tn.dynamic = _existing_tn
         tn._dyn_template = tn_tpl  # type: ignore[attr-defined]
 
+        # interfaces dummy dum0 ...
+        dm = Node(name="dummy", help="Dummy interface")
+        if_root.add(dm)
+        dm_tpl = Node(name="*", help="Per-dummy")
+        dm_tpl.add(Node(name="address", help="IP address/prefix",
+                        value_type="ipv4net", action=_cfg_noop))
+        dm_tpl.add(Node(name="description", help="Description", value_type="str", action=_cfg_noop))
+        dm_tpl.add(Node(name="mtu", help="MTU (default 1500)", value_type="int", action=_cfg_noop))
+        dm_tpl.add(Node(name="mac", help="MAC address", value_type="str", action=_cfg_noop))
+        dm_tpl.add(Node(name="disable", help="Administratively disable", value_type="bool", action=_cfg_noop))
+        dm_tpl.add(Node(name="vrf", help="VRF instance name", value_type="str", action=_cfg_noop))
+        def _existing_dm(store=store):
+            try:
+                return list((store.candidate.get("interfaces", {}).get("dummy", {}) or {}).keys())
+            except Exception:
+                return []
+        dm.dynamic = _existing_dm
+        dm._dyn_template = dm_tpl
+
         # interfaces vxlan vxlan0 ...
         vx = Node(name="vxlan", help="VXLAN tunnel")
         if_root.add(vx)
