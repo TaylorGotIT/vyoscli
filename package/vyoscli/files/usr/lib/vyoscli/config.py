@@ -1764,7 +1764,6 @@ class ConfigStore:
             return []
         notes = []
         self._ensure_package("podman", notes)
-        self._ensure_package("podman-plugins", notes)
         if shutil.which("podman") is None:
             return ["(podman install failed; container config kept in vyoscli JSON)"]
         try:
