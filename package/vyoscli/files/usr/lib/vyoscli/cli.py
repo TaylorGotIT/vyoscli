@@ -84,9 +84,20 @@ class Cli:
         tokens = buf.split()
         if buf.endswith(" "):
             tokens.append("")
-        names = [n for n, _ in self._matches_with_help(tokens)]
+        matches = self._matches_with_help(tokens)
+        names = [n for n, _ in matches]
         filtered = [n for n in names if n.startswith(text)]
-        return filtered[state] if state < len(filtered) else None
+        if state >= len(filtered):
+            return None
+        # if unique match and it's a leaf, append space
+        if len(filtered) == 1:
+            name = filtered[0]
+            # check if this node has children (not a leaf)
+            help_map = dict(matches)
+            # if help is a value hint or <Enter>, it's a leaf -> add space
+            if help_map.get(name) in ("value", "") or name.startswith("<") or name == "<Enter>":
+                return name + " "
+        return filtered[state]
 
     def _matches_with_help(self, tokens: List[str]) -> List[tuple]:
         """Return [(name, help), ...] for the next token in current context."""
