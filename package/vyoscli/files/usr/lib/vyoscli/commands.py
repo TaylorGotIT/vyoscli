@@ -105,25 +105,66 @@ def _op_show_configuration_json(ctx: Any, value: Any) -> str:
 
 # ---------- show interface ----------
 def _op_show_interfaces(ctx: Any, value: Any) -> str:
-    ifs = ctx.store.get(["interfaces", "ethernet"], candidate=False) or {}
-    name_w, addr_w = 16, 24
-    lines = ["Interface".ljust(name_w) + "IP Address".ljust(addr_w) + "Description"]
-    lines.append("-" * (name_w + addr_w + 20))
-    for name, cfg in sorted(ifs.items()):
-        if not isinstance(cfg, dict):
+    import subprocess
+    # get descriptions from config
+    eth_cfg = ctx.store.get(["interfaces", "ethernet"], candidate=False) or {}
+    br_cfg = ctx.store.get(["interfaces", "bridge"], candidate=False) or {}
+    desc_map = {}
+    for cfg in (eth_cfg, br_cfg):
+        for name, c in cfg.items():
+            if isinstance(c, dict) and c.get("description"):
+                desc_map[name] = c["description"]
+
+    # read real interfaces from ip addr
+    try:
+        r = subprocess.run(["ip", "-o", "addr"], capture_output=True, text=True, timeout=5)
+        out = r.stdout
+    except Exception:
+        out = ""
+
+    # parse
+    rows = []
+    cur_name = None
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) < 4:
             continue
-        addrs = cfg.get("address", []) or []
-        if isinstance(addrs, str):
-            addrs = [addrs]
-        desc = cfg.get("description", "")
-        if not addrs:
-            lines.append(name.ljust(name_w) + "--".ljust(addr_w) + desc)
+        iface = parts[1]
+        if iface == cur_name:
             continue
-        for i, addr in enumerate(addrs):
-            row_name = name if i == 0 else ""
-            row_desc = desc if i == 0 else ""
-            lines.append(row_name.ljust(name_w) +
-                         str(addr).ljust(addr_w) + row_desc)
+        cur_name = iface
+        state = "u" if "UP" in line else "D"
+        # get inet/inet6
+        addr = "--"
+        for p in parts:
+            if p.startswith("inet "):
+                idx = parts.index(p)
+                addr = parts[idx + 1]
+                break
+        rows.append((iface, addr, state, desc_map.get(iface, "")))
+
+    # sort: lo first, then eth, then others
+    rows.sort(key=lambda x: (0 if x[0] == "lo" else (1 if x[0].startswith("eth") else 2), x[0]))
+
+    name_w = max(len(r[0]) for r in rows) if rows else 10
+    name_w = max(name_w, 10)
+    addr_w = max(len(r[1]) for r in rows) if rows else 15
+    addr_w = max(addr_w, 15)
+
+    lines = [
+        "Codes: S - State, L - Link, u - Up, D - Down, A - Admin Down",
+        "Interface".ljust(name_w + 2) +
+        "IP Address".ljust(addr_w + 2) +
+        "S/L   Description",
+        "-" * (name_w + addr_w + 30),
+    ]
+    for iface, addr, state, desc in rows:
+        lines.append(
+            iface.ljust(name_w + 2) +
+            addr.ljust(addr_w + 2) +
+            f"{state}/{state}  ".ljust(6) +
+            desc
+        )
     return "\n".join(lines)
 
 
