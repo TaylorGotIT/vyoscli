@@ -371,6 +371,9 @@ commit
 ```
 
 ### Bridge
+### Bridge
+
+#### 普通桥接
 
 ```
 set interfaces bridge br0 member eth1
@@ -378,6 +381,44 @@ set interfaces bridge br0 address 192.168.1.1/24
 commit
 ```
 
+#### 透明桥接（bump-in-the-wire）
+
+串接在 PC 和网关之间，设备像一根透明网线，插上即用。
+
+```
+set interfaces bridge br100 mac-rebinding
+set interfaces bridge br100 mac cc:d3:9d:92:30:bd
+set interfaces bridge br100 member interface eth0
+set interfaces bridge br100 member interface eth1
+set interfaces bridge br100 address 192.168.1.2/24
+commit
+```
+
+| 配置 | 说明 |
+|---|---|
+| mac-rebinding | 启用透明桥接模式 |
+| mac | 桥接口 MAC 地址（用于劫持流量） |
+| member interface eth0 | WAN 侧（接网关） |
+| member interface eth1 | LAN 侧（接 PC） |
+| address | 设备管理 IP（和网关同网段） |
+
+##### 工作原理
+
+1. **网关发现**：自动探测 WAN 侧网关 MAC/IP
+2. **二层劫持**：PC 发往网关的包，目的 MAC 改成 br100 的 MAC，交给本机处理
+3. **流量伪装**：本机发出去的包，源 MAC 改回 PC 的 MAC，网关以为是 PC 直接发的
+
+##### 拓扑
+
+```
+PC ---- eth1 [OpenWrt br100] eth0 ---- 网关 ---- 互联网
+```
+
+PC 和网关都以为对方在直接通信，不知道中间串了台 OpenWrt。
+
+##### bypass 保护
+
+设备断电/故障时，eth0/eth1 物理直连，流量自动透传，不影响客户上网。
 ### Dummy
 
 ```
