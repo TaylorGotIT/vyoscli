@@ -85,6 +85,9 @@ DEFAULT_RUNNING: Dict[str, Any] = {
     "traffic-policy": {
         "shaper": {},  # name -> {interface, bandwidth, per-ip}
     },
+    "interfaces": {
+        "bridge": {},  # br0 -> {port: [], mac, mac-rebinding, address, vlan-aware, vlan: {vid: {untagged: [], tagged: []}}}
+    },
     "nat": {
         "source": {},       # rule-id -> {out-interface, translation}
         "destination": {},  # rule-id -> {in-interface, port, to}
@@ -399,6 +402,31 @@ class ConfigStore:
                 addrs = [addrs]
             for addr in addrs:
                 self._uci("add_list", f"network.{section}.ipaddr={addr}")
+        # bridge VLAN
+        bridges = (new.get("interfaces") or {}).get("bridge") or {}
+        for brname, brcfg in bridges.items():
+            if not isinstance(brcfg, dict):
+                continue
+            br_sec = f"vyos_br_{brname}"
+            self._uci("set", f"network.{br_sec}=interface")
+            self._uci("set", f"network.{br_sec}.type=bridge")
+            self._uci("set", f"network.{br_sec}.proto=static")
+            if brcfg.get("vlan-aware"):
+                self._uci("set", f"network.{br_sec}.vlan_filtering=1")
+            for port in brcfg.get("port") or []:
+                self._uci("add_list", f"network.{br_sec}.ports={port}")
+            # vlan entries
+            for vid, vcfg in (brcfg.get("vlan") or {}).items():
+                if not isinstance(vcfg, dict):
+                    continue
+                vsec = f"vyos_br_{brname}_vlan{vid}"
+                self._uci("set", f"network.{vsec}=bridge-vlan")
+                self._uci("set", f"network.{vsec}.device={brname}")
+                self._uci("set", f"network.{vsec}.vlan={vid}")
+                for p in vcfg.get("untagged") or []:
+                    self._uci("add_list", f"network.{vsec}.ports={p}:u*")
+                for p in vcfg.get("tagged") or []:
+                    self._uci("add_list", f"network.{vsec}.ports={p}:t*")
         self._uci("commit", "network")
         try:
             subprocess.run(["/etc/init.d/network", "reload"],

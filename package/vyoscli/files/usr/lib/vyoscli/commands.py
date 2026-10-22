@@ -497,6 +497,13 @@ def build_tree(store: Any) -> CommandTree:
                         value_type="str", action=_cfg_noop))
         br_tpl.add(Node(name="mac-rebinding", help="Enable transparent bridge (bump-in-the-wire)",
                         value_type="bool", action=_cfg_noop))
+        br_tpl.add(Node(name="vlan-aware", help="Enable VLAN filtering",
+                        value_type="bool", action=_cfg_noop))
+        # vlan sub-tree
+        vlan = Node(name="vlan", help="VLAN membership", dynamic=True, action=_cfg_noop)
+        br_tpl.add(vlan)
+        vlan.add(Node(name="untagged", help="Untagged port (repeatable)", value_type="str", action=_cfg_noop))
+        vlan.add(Node(name="tagged", help="Tagged port (repeatable)", value_type="str", action=_cfg_noop))
         def _existing_br(store=store):
             try:
                 return list((store.candidate.get("interfaces", {}).get("bridge", {}) or {}).keys())
