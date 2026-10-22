@@ -499,10 +499,13 @@ def build_tree(store: Any) -> CommandTree:
         br_tpl.add(Node(name="vlan-aware", help="Enable VLAN filtering",
                         value_type="bool", action=_cfg_noop))
         # vlan sub-tree
-        vlan = Node(name="vlan", help="VLAN membership", dynamic=True, action=_cfg_noop)
+        vlan = Node(name="vlan", help="VLAN membership", action=_cfg_noop)
         br_tpl.add(vlan)
-        vlan.add(Node(name="untagged", help="Untagged port (repeatable)", value_type="str", action=_cfg_noop))
-        vlan.add(Node(name="tagged", help="Tagged port (repeatable)", value_type="str", action=_cfg_noop))
+        vlan_tpl = Node(name="*", help="VLAN ID")
+        vlan_tpl.add(Node(name="untagged", help="Untagged port (repeatable)", value_type="str", action=_cfg_noop))
+        vlan_tpl.add(Node(name="tagged", help="Tagged port (repeatable)", value_type="str", action=_cfg_noop))
+        vlan.dynamic = lambda: []
+        vlan._dyn_template = vlan_tpl
         def _existing_br(store=store):
             try:
                 return list((store.candidate.get("interfaces", {}).get("bridge", {}) or {}).keys())
@@ -995,10 +998,9 @@ def build_tree(store: Any) -> CommandTree:
         # service dhcp-server shared-network-name <name> ...
         dhcp = Node(name="dhcp-server", help="DHCP server")
         svc.add(dhcp)
-        dhcp_shared = Node(name="shared-network-name", help="Shared network name", dynamic=True, action=_cfg_noop)
+        dhcp_shared = Node(name="shared-network-name", help="Shared network name", action=_cfg_noop)
         dhcp.add(dhcp_shared)
         dhcp_tpl = Node(name="*", help="Per-subnet DHCP")
-        dhcp_shared.add(dhcp_tpl)
         dhcp_tpl.add(Node(name="subnet", help="Subnet CIDR (e.g. 192.168.1.0/24)",
                           value_type="ipv4net", action=_cfg_noop))
         dhcp_tpl.add(Node(name="interface", help="Interface name", value_type="str", action=_cfg_noop))
@@ -1008,23 +1010,30 @@ def build_tree(store: Any) -> CommandTree:
         dhcp_tpl.add(Node(name="domain-search", help="Domain search suffix", value_type="str", action=_cfg_noop))
         dhcp_tpl.add(Node(name="wpad-url", help="WPAD URL (option 252)", value_type="str", action=_cfg_noop))
         # range
-        range_node = Node(name="range", help="DHCP range", dynamic=True, action=_cfg_noop)
+        range_node = Node(name="range", help="DHCP range", action=_cfg_noop)
         dhcp_tpl.add(range_node)
-        range_node.add(Node(name="start", help="Range start IP", value_type="ipv4", action=_cfg_noop))
-        range_node.add(Node(name="stop", help="Range end IP", value_type="ipv4", action=_cfg_noop))
+        range_tpl = Node(name="*", help="Range index")
+        range_tpl.add(Node(name="start", help="Range start IP", value_type="ipv4", action=_cfg_noop))
+        range_tpl.add(Node(name="stop", help="Range end IP", value_type="ipv4", action=_cfg_noop))
+        range_node.dynamic = lambda: []
+        range_node._dyn_template = range_tpl
         # static mapping
-        static = Node(name="static-mapping", help="Static MAC-IP binding", dynamic=True, action=_cfg_noop)
+        static = Node(name="static-mapping", help="Static MAC-IP binding", action=_cfg_noop)
         dhcp_tpl.add(static)
-        static.add(Node(name="ip-address", help="Fixed IP", value_type="ipv4", action=_cfg_noop))
-        static.add(Node(name="mac-address", help="MAC address", value_type="str", action=_cfg_noop))
-        def _existing_dhcp(store=store):
+        static_tpl = Node(name="*", help="Mapping name")
+        static_tpl.add(Node(name="ip-address", help="Fixed IP", value_type="ipv4", action=_cfg_noop))
+        static_tpl.add(Node(name="mac-address", help="MAC address", value_type="str", action=_cfg_noop))
+        static.dynamic = lambda: []
+        static._dyn_template = static_tpl
+        def _existing_dhcp_shared(store=store):
             try:
                 return list((store.candidate.get("service", {})
-                             .get("dhcp", {}) or {}).keys())
+                             .get("dhcp-server", {})
+                             .get("shared-network-name", {}) or {}).keys())
             except Exception:
                 return []
-        dhcp.dynamic = _existing_dhcp
-        dhcp._dyn_template = dhcp_tpl  # type: ignore[attr-defined]
+        dhcp_shared.dynamic = _existing_dhcp_shared
+        dhcp_shared._dyn_template = dhcp_tpl  # type: ignore[attr-defined]
 
         # service ssh ... (dropbear)
         ssh = Node(name="ssh", help="SSH access (dropbear)")
