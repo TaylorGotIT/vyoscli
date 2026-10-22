@@ -73,6 +73,7 @@ class Cli:
             return
         readline.set_completer(self._completer)
         readline.parse_and_bind("tab: complete")
+        readline.parse_and_bind("set show-all-if-ambiguous on")
         readline.set_completer_delims(" \t\n")
         readline.set_completion_display_matches_hook(self._display_matches)
 
