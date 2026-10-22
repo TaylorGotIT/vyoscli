@@ -380,13 +380,30 @@ def build_tree(store: Any) -> CommandTree:
         br = Node(name="bridge", help="Bridge device")
         if_root.add(br)
         br_tpl = Node(name="*", help="Per-bridge")
-        br_tpl.add(Node(name="port", help="Add a port (repeatable)",
+        br_tpl.add(Node(name="address", help="IP address/prefix",
+                        value_type="ipv4net", action=_cfg_noop))
+        br_tpl.add(Node(name="description", help="Description", value_type="str", action=_cfg_noop))
+        br_tpl.add(Node(name="member", help="Bridge member interfaces",
                         value_type="str", action=_cfg_noop))
-        br_tpl.add(Node(name="mac", help="Bridge MAC address (for rebinding)",
-                        value_type="str", action=_cfg_noop))
-        br_tpl.add(Node(name="mac-rebinding", help="Enable transparent bridge (bump-in-the-wire)",
+        br_tpl.add(Node(name="mac", help="MAC address", value_type="str", action=_cfg_noop))
+        br_tpl.add(Node(name="mtu", help="MTU (default 1500)", value_type="int", action=_cfg_noop))
+        br_tpl.add(Node(name="disable", help="Administratively disable", value_type="bool", action=_cfg_noop))
+        br_tpl.add(Node(name="vrf", help="VRF instance name", value_type="str", action=_cfg_noop))
+        br_tpl.add(Node(name="enable-vlan", help="Enable VLAN aware bridge",
                         value_type="bool", action=_cfg_noop))
-        br_tpl.add(Node(name="vlan-aware", help="Enable VLAN filtering",
+        br_tpl.add(Node(name="stp", help="Enable spanning tree protocol",
+                        value_type="bool", action=_cfg_noop))
+        br_tpl.add(Node(name="priority", help="Bridge priority (default 32768)",
+                        value_type="int", action=_cfg_noop))
+        br_tpl.add(Node(name="forwarding-delay", help="Forwarding delay (default 14)",
+                        value_type="int", action=_cfg_noop))
+        br_tpl.add(Node(name="hello-time", help="Hello time (default 2)",
+                        value_type="int", action=_cfg_noop))
+        br_tpl.add(Node(name="max-age", help="Max age (default 20)",
+                        value_type="int", action=_cfg_noop))
+        br_tpl.add(Node(name="aging", help="MAC aging interval (default 300)",
+                        value_type="int", action=_cfg_noop))
+        br_tpl.add(Node(name="mac-rebinding", help="Enable transparent bridge (bump-in-the-wire)",
                         value_type="bool", action=_cfg_noop))
         # vlan sub-tree
         vlan = Node(name="vlan", help="VLAN membership", action=_cfg_noop)
