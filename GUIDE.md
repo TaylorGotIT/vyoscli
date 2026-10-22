@@ -275,6 +275,14 @@ root@OpenWrt:~$ commit confirm
 
 ---
 
+### 配置撤销
+
+| 命令 | 说明 |
+|---|---|
+| discard | 撤销未提交的改动，回到 running 状态 |
+| rollback 1 | 回滚到上一个 commit 快照 |
+| commit confirmed 5 | 5 分钟内没确认自动回滚（远程改配置防踢下线） |
+
 ## System
 
 ### Hostname
