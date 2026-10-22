@@ -470,14 +470,19 @@ def build_tree(store: Any) -> CommandTree:
         ov._dyn_template = ov_tpl  # type: ignore[attr-defined]
 
         # interfaces tunnel tun0 ...
-        tn = Node(name="tunnel", help="GRE/IPIP tunnel")
+        tn = Node(name="tunnel", help="Tunnel interfaces (GRE/IPIP/SIT/IP6IP6)")
         if_root.add(tn)
         tn_tpl = Node(name="*", help="Per-tunnel")
-        tn_tpl.add(Node(name="encapsulation", help="gre | ipip", value_type="str", action=_cfg_noop))
-        tn_tpl.add(Node(name="local-ip", help="Local outer IPv4", value_type="ipv4", action=_cfg_noop))
-        tn_tpl.add(Node(name="remote-ip", help="Remote outer IPv4", value_type="ipv4", action=_cfg_noop))
+        tn_tpl.add(Node(name="encapsulation", help="gre | ipip | sit | ip6ip6", value_type="str", action=_cfg_noop))
+        tn_tpl.add(Node(name="source-address", help="Source outer IP", value_type="ipv4", action=_cfg_noop))
+        tn_tpl.add(Node(name="source-interface", help="Source interface", value_type="str", action=_cfg_noop))
+        tn_tpl.add(Node(name="remote", help="Tunnel remote address", value_type="ipv4", action=_cfg_noop))
         tn_tpl.add(Node(name="address", help="Inner tunnel IPv4/prefix",
                         value_type="ipv4net", action=_cfg_noop))
+        tn_tpl.add(Node(name="description", help="Description", value_type="str", action=_cfg_noop))
+        tn_tpl.add(Node(name="mtu", help="MTU (default 1476)", value_type="int", action=_cfg_noop))
+        tn_tpl.add(Node(name="disable", help="Administratively disable", value_type="bool", action=_cfg_noop))
+        tn_tpl.add(Node(name="vrf", help="VRF instance name", value_type="str", action=_cfg_noop))
         def _existing_tn(store=store):
             try:
                 return list((store.candidate.get("interfaces", {}).get("tunnel", {}) or {}).keys())
