@@ -82,6 +82,9 @@ DEFAULT_RUNNING: Dict[str, Any] = {
     "vrf": {
         "name": {},   # name -> {table: int}
     },
+    "traffic-policy": {
+        "shaper": {},  # name -> {interface, bandwidth, per-ip}
+    },
     "nat": {
         "source": {},       # rule-id -> {out-interface, translation}
         "destination": {},  # rule-id -> {in-interface, port, to}
@@ -361,6 +364,7 @@ class ConfigStore:
         notes.extend(self._apply_ssh(old, new))
         notes.extend(self._apply_adguard(old, new))
         notes.extend(self._apply_dnsmasq(old, new))
+        notes.extend(self._apply_traffic_policy(old, new))
         notes.extend(self._apply_kcp(old, new))
         notes.extend(self._apply_tcp_accelerate(old, new))
         notes.extend(self._apply_policy(old, new))
@@ -1269,6 +1273,32 @@ class ConfigStore:
             notes.append(f"dnsmasq: {new_dm.get('listen-address','0.0.0.0')}:{new_dm.get('port',53)}")
         except Exception as e:
             notes.append(f"dnsmasq apply failed: {e}")
+        return notes
+
+    def _apply_traffic_policy(self, old, new):
+        old_tp = (old.get("traffic-policy") or {}).get("shaper") or {}
+        new_tp = (new.get("traffic-policy") or {}).get("shaper") or {}
+        if old_tp == new_tp:
+            return []
+        notes = []
+        try:
+            self._ensure_package("tc", notes)
+            for name, cfg in new_tp.items():
+                if not isinstance(cfg, dict):
+                    continue
+                iface = cfg.get("interface", "eth0")
+                bandwidth = cfg.get("bandwidth", "100mbit")
+                per_ip = cfg.get("per-ip", "10mbit")
+                # root qdisc
+                subprocess.run(["tc", "qdisc", "add", "dev", iface, "root", "handle", "1:", "htb", "default", "10"],
+                               capture_output=True, timeout=5)
+                # default class
+                subprocess.run(["tc", "class", "add", "dev", iface, "parent", "1:", "classid", "1:10",
+                                "htb", "rate", bandwidth, "ceil", bandwidth],
+                               capture_output=True, timeout=5)
+                notes.append(f"qos {name}: {iface} total={bandwidth}, per-ip={per_ip}")
+        except Exception as e:
+            notes.append(f"qos failed: {e}")
         return notes
 
     def _apply_kcp(self, old, new):

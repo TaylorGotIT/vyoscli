@@ -801,6 +801,17 @@ def build_tree(store: Any) -> CommandTree:
         addr.dynamic = _existing_addrs
         addr._dyn_template = addr_tpl  # type: ignore[attr-defined]
 
+        # traffic-policy shaper ...
+        tp = Node(name="traffic-policy", help="QoS traffic shaping")
+        root.add(tp)
+        shaper = Node(name="shaper", help="Per-IP bandwidth limiter")
+        tp.add(shaper)
+        sh_dyn = Node(name="", help="Policy name", dynamic=True, action=_cfg_noop)
+        shaper.add(sh_dyn)
+        sh_dyn.add(Node(name="interface", help="Egress interface", value_type="str", action=_cfg_noop))
+        sh_dyn.add(Node(name="bandwidth", help="Total bandwidth (e.g. 100mbit)", value_type="str", action=_cfg_noop))
+        sh_dyn.add(Node(name="per-ip", help="Per-IP bandwidth limit (e.g. 10mbit)", value_type="str", action=_cfg_noop))
+
         # service accelerate ...
         acc = Node(name="kcp", help="KCP tunnel (kcptun)")
         svc.add(acc)
