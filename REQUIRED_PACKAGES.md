@@ -1,69 +1,29 @@
 # vyoscli 依赖策略
 
-## 硬依赖（装 vyoscli 必装）
+## 全部硬依赖（装 vyoscli 必装，15 个包）
 
 | 包 | 大小 | 用途 |
 |---|---|---|
 | python3 | ~5 MB | 运行时 |
 | python3-readline | ~0.5 MB | Tab 补全 |
-| ip-full | ~0.5 MB | `show ip route` |
+| ip-full | ~0.5 MB | `show ip route` / `ss` |
+| smartdns | ~0.5 MB | DNS 策略 |
+| adguardhome | ~10 MB | 广告过滤 DNS |
+| frr | ~5 MB | BGP 动态路由 |
+| kmod-tcp-bbr | ~0.1 MB | BBR 拥塞控制 |
+| kmod-tcp-hybla | ~0.1 MB | Hybla 拥塞控制 |
+| kcptun | ~2 MB | KCP 加速隧道 |
+| kmod-wireguard | ~0.5 MB | WireGuard VPN |
+| wireguard-tools | ~0.5 MB | WireGuard 工具 |
+| openvpn-openssl | ~2 MB | OpenVPN |
+| strongswan | ~3 MB | IPsec VPN |
+| conserver | ~0.5 MB | 串口服务器 |
+| podman | ~20 MB | 容器 |
+| podman-plugins | ~5 MB | 容器插件 |
+| **总共约 56 MB** | | |
 
-**总共约 6 MB**，即使 16 MB 闪存的路由器也能装。
+## 说明
 
-## 按需自动安装（commit 时才装）
-
-写了对应配置才触发 `opkg install`，没用到就不占空间。
-
-| 包 | 触发条件 | 大小 |
-|---|---|---|
-| smartdns | `set service smartdns ...` commit | ~0.5 MB |
-| adguardhome | `set service adguard ...` commit | ~10 MB |
-| dnsmasq | OpenWrt 默认已装 | - |
-| frr | `set protocols bgp ...` commit | ~5 MB |
-| kmod-tcp-bbr | `set service tcp-accelerate congestion-control bbr` commit | ~0.1 MB |
-| kmod-tcp-hybla | `set service tcp-accelerate congestion-control hybla` commit | ~0.1 MB |
-| kcptun | `set service kcp ...` commit | ~2 MB |
-| kmod-wireguard / wireguard-tools | `set interfaces wireguard ...` commit | ~1 MB |
-| openvpn-openssl | `set interfaces openvpn ...` commit | ~2 MB |
-| strongswan | `set vpn ipsec ...` commit | ~3 MB |
-| conserver | `set service console-server ...` commit | ~0.5 MB |
-| dropbear | OpenWrt 默认已装 | - |
-| podman | `set container ...` commit | ~20 MB |
-| podman-plugins | `set container ...` commit | ~5 MB |
-
-## 工作流程示例
-
-```
-# 全新安装 vyoscli，只有 6 MB 基础包
-opkg install vyoscli.ipk
-
-# 你只用基本 CLI，不碰 smartdns/container → 永远不会装 podman
-
-# 哪天想用 DNS 策略
-set service smartdns server cf ip 1.1.1.1
-commit
-# 输出：
-#   installing optional package: smartdns ...
-#     -> smartdns installed
-#   smartdns reloaded
-
-# 哪天想开 BBR
-set service tcp-accelerate congestion-control bbr
-commit
-# 输出：
-#   installing optional package: kmod-tcp-bbr ...
-#   tcp cc = bbr, qdisc = fq_codel
-
-# 哪天想跑容器
-set container nginx image nginx:alpine
-commit
-# 输出：
-#   installing optional package: podman ...
-#   installing optional package: podman-plugins ...
-#     -> podman installed
-#   started container nginx
-```
-
-## 前提
-
-路由器要能联网（或本地有 opkg 源），第一次 commit 触发安装时会下载。如果设备离线，commit 会提示 install FAILED 但不破坏现有配置。
+- 装 vyoscli 时全部依赖自动安装
+- 适合闪存 128 MB 以上的路由器
+- 如果设备闪存紧张，可以删掉 Makefile DEPENDS 里不需要的包，改成按需安装
