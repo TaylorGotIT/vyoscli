@@ -1303,17 +1303,8 @@ class ConfigStore:
         return notes
 
     def _apply_sqm(self, old, new):
-        # find sqm config on any ethernet interface
-        old_eth = (old.get("interfaces") or {}).get("ethernet") or {}
-        new_eth = (new.get("interfaces") or {}).get("ethernet") or {}
-        old_sqm = {}
-        new_sqm = {}
-        for iface, cfg in new_eth.items():
-            if isinstance(cfg, dict) and cfg.get("sqm"):
-                new_sqm = {"interface": iface, **cfg["sqm"]}
-        for iface, cfg in old_eth.items():
-            if isinstance(cfg, dict) and cfg.get("sqm"):
-                old_sqm = {"interface": iface, **cfg["sqm"]}
+        old_sqm = (old.get("service") or {}).get("sqm") or {}
+        new_sqm = (new.get("service") or {}).get("sqm") or {}
         if old_sqm == new_sqm:
             return []
         notes = []

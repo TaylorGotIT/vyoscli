@@ -450,12 +450,6 @@ def build_tree(store: Any) -> CommandTree:
                           value_type="ipv4net", action=_cfg_noop))
         template.add(Node(name="description", help="Interface description",
                           value_type="str", action=_cfg_noop))
-        # sqm sub-tree
-        sqm = Node(name="sqm", help="SQM smart queue management")
-        template.add(sqm)
-        sqm.add(Node(name="download", help="Download bandwidth kbps", value_type="int", action=_cfg_noop))
-        sqm.add(Node(name="upload", help="Upload bandwidth kbps", value_type="int", action=_cfg_noop))
-        sqm.add(Node(name="qdisc", help="cake / fq_codel", value_type="str", action=_cfg_noop))
         eth.dynamic = lambda: ["lo", "eth0", "eth1", "eth2", "wlan0"]
         eth._dyn_template = template  # type: ignore[attr-defined]
 
@@ -817,6 +811,14 @@ def build_tree(store: Any) -> CommandTree:
         sh_dyn.add(Node(name="interface", help="Egress interface", value_type="str", action=_cfg_noop))
         sh_dyn.add(Node(name="bandwidth", help="Total bandwidth (e.g. 100mbit)", value_type="str", action=_cfg_noop))
         sh_dyn.add(Node(name="per-ip", help="Per-IP bandwidth limit (e.g. 10mbit)", value_type="str", action=_cfg_noop))
+
+        # service sqm ...
+        sqm = Node(name="sqm", help="SQM smart queue management")
+        svc.add(sqm)
+        sqm.add(Node(name="interface", help="WAN interface", value_type="str", action=_cfg_noop))
+        sqm.add(Node(name="download", help="Download bandwidth kbps", value_type="int", action=_cfg_noop))
+        sqm.add(Node(name="upload", help="Upload bandwidth kbps", value_type="int", action=_cfg_noop))
+        sqm.add(Node(name="qdisc", help="cake / fq_codel", value_type="str", action=_cfg_noop))
 
         # service accelerate ...
         acc = Node(name="kcp", help="KCP tunnel (kcptun)")
