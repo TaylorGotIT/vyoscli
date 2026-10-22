@@ -381,8 +381,12 @@ class ConfigStore:
         return notes
 
     def _apply_interfaces(self, old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
+        old_if = old.get("interfaces") or {}
+        new_if = new.get("interfaces") or {}
+        if old_if == new_if:
+            return []
         notes: List[str] = []
-        eth = (new.get("interfaces") or {}).get("ethernet") or {}
+        eth = (new_if.get("ethernet") or {})
         for ifname, cfg in eth.items():
             if not isinstance(cfg, dict) or ifname == "lo":
                 continue
@@ -403,7 +407,7 @@ class ConfigStore:
             for addr in addrs:
                 self._uci("add_list", f"network.{section}.ipaddr={addr}")
         # bridge VLAN
-        bridges = (new.get("interfaces") or {}).get("bridge") or {}
+        bridges = (new_if.get("bridge") or {})
         for brname, brcfg in bridges.items():
             if not isinstance(brcfg, dict):
                 continue
