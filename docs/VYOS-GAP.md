@@ -235,3 +235,35 @@ network-emulator/cake 的完整参数与 class match 规则。
 树数据的唯一手改源是 `schema/config-tree.json`；`config_tree.py` 由
 `scripts/build-config-tree.py` 生成，`docs/COMMANDS.md` 由
 `scripts/gen-command-reference.py` 生成，CI 会校验两者与源一致。
+
+## 最终状态（本轮迭代）
+
+### 已落地（真机验证）
+
+- firewall：`ipv4/ipv6 input|forward|output filter`、`group`、`global-options`
+  （nft `vyos_fw`，sysctl/state-policy 生效）
+- nat44 完整匹配/转换、静态 1:1、hairpin；nat66
+- system：syslog / conntrack / sysctl / watchdog / flow-accounting
+- interfaces：pppoe；vti/geneve（代码就绪，测试镜像无内核模块）
+- policy：access-list / prefix-list / as-path-list / route-map 扩展
+  （渲染到 FRR，**真机验证被操作策略拒绝**）
+- protocols：OSPF / RIP / BFD
+- service：ntp / lldp / snmp / router-advert / https（只读 API，支持 TLS）
+- high-availability：VRRP group / sync-group
+- pki：ca / certificate / key-pair / dh
+- qos：shaper / limiter / fq-codel / cake + 接口绑定
+- load-balancing：HAProxy frontend/backend
+- vpn：OpenConnect（ocserv，TLS 已验证）
+- 技术债：`schema/config-tree.json` 为唯一手改源，生成链 + CI 校验
+
+### 未落地
+
+| 项 | 原因 |
+|---|---|
+| L2TP / SSTP 服务端 | OpenWrt 镜像无 accel-ppp / SSTP server 包 |
+| dhcp-relay | 只有裸 isc-dhcp-relay 二进制，67 端口与 dnsmasq 冲突 |
+| bonding / macsec / wwan | 内核无 bonding/macsec 模块、无 wwan 硬件 |
+| VTI / Geneve | 代码就绪，镜像内核无 vti/geneve 模块 |
+| MPLS / SR、nat64 / cgnat | 内核/包不支持（无 Jool/SIIT、无 MPLS 栈） |
+| WAN 多线负载 | mwan3 与 VyOS 语义差异较大，且会接管路由/防火墙，按需再评估 |
+| policy 真机验证 | SSH 操作策略拒绝执行验证命令，未重试 |
