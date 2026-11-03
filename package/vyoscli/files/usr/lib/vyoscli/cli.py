@@ -236,6 +236,8 @@ class Cli:
             return self._run_op(rest)
 
         # top-level verbs
+        if head == "sync":
+            return self.store.sync()
         if head == "commit":
             # variants: commit | commit confirm | commit confirmed [minutes]
             if rest and rest[0] == "confirm":

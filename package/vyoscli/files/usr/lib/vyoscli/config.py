@@ -487,12 +487,61 @@ class ConfigStore:
         notes.extend(self._apply_service_disable(old, new))
         return notes
 
+    def _network_map(self) -> Dict[str, Dict[str, Any]]:
+        """Map device name -> the UCI section that owns it.
+
+        ``direct`` means the interface references the device itself
+        (``network.wan.device='eth1'``); ``direct=False`` means the device is a
+        port of a bridge (``eth0`` in ``br-lan``), which is L2-only from
+        netifd's point of view.
+        """
+        secs: Dict[str, Dict[str, str]] = {}
+        try:
+            text = self._uci("show", "network").stdout
+        except Exception:
+            return {}
+        for line in text.splitlines():
+            lhs, _, raw = line.partition("=")
+            if not lhs.startswith("network."):
+                continue
+            path = lhs[len("network."):]
+            if "." in path:
+                sec, key = path.split(".", 1)
+                secs.setdefault(sec, {})[key] = raw.strip("'\"")
+            else:
+                secs.setdefault(path, {})["__type__"] = raw.strip("'\"")
+
+        mapping: Dict[str, Dict[str, Any]] = {}
+        for sec, opts in secs.items():
+            if opts.get("__type__") != "interface":
+                continue
+            dev = opts.get("device") or opts.get("ifname")
+            if dev:
+                mapping[dev] = {"section": sec, "proto": opts.get("proto", ""),
+                                "direct": True}
+        # devices (bridges) are shared by every port; the owning interface is
+        # whichever section references the bridge as its device.
+        for sec, opts in secs.items():
+            if opts.get("__type__") != "device" or opts.get("type") != "bridge":
+                continue
+            bridge = opts.get("name") or sec
+            owner = mapping.get(bridge)
+            if not owner:
+                continue
+            for port in (opts.get("ports") or "").split():
+                port = port.split(":")[0]
+                mapping.setdefault(port, {"section": owner["section"],
+                                          "proto": owner["proto"],
+                                          "direct": False})
+        return mapping
+
     def _apply_interfaces(self, old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
         old_if = old.get("interfaces") or {}
         new_if = new.get("interfaces") or {}
         if old_if == new_if:
             return []
         notes: List[str] = []
+        mapping = self._network_map()
         eth = (new_if.get("ethernet") or {})
         for ifname, cfg in eth.items():
             if not isinstance(cfg, dict) or ifname == "lo":
@@ -505,17 +554,27 @@ class ConfigStore:
                 continue
             section = self._find_uci_section("network", "ifname", ifname)
             if section is None:
-                owner = self._find_uci_section("network", "device", ifname)
+                owner = mapping.get(ifname)
                 if owner is not None:
-                    # eth1 already belongs to network.wan: creating a second
-                    # static interface on it is how a LAN address ended up on
-                    # the WAN port on a live box.
-                    notes.append(f"{ifname}: already used by network.{owner}, "
-                                 f"skipped (refusing to create a duplicate)")
-                    continue
-                section = f"vyos_{ifname}"
-                self._uci("set", f"network.{section}=interface")
-                notes.append(f"uci: created network.{section} for {ifname}")
+                    if not owner["direct"]:
+                        notes.append(
+                            f"{ifname}: is a port of network.{owner['section']} "
+                            f"({owner['proto']}), configure the bridge instead")
+                        continue
+                    if (owner["proto"] or "").lower() not in ("static", "none", ""):
+                        notes.append(
+                            f"{ifname}: network.{owner['section']} uses proto "
+                            f"'{owner['proto']}', refusing to replace it")
+                        continue
+                    # Static interface on this device: take it over instead of
+                    # creating a second logical interface on the same port.
+                    section = owner["section"]
+                    notes.append(f"{ifname}: applied to existing "
+                                 f"network.{section}")
+                else:
+                    section = f"vyos_{ifname}"
+                    self._uci("set", f"network.{section}=interface")
+                    notes.append(f"uci: created network.{section} for {ifname}")
             self._uci("set", f"network.{section}.ifname={ifname}")
             self._uci("set", f"network.{section}.proto=static")
             try:
@@ -1181,8 +1240,17 @@ class ConfigStore:
         notes = []
         try:
             # ---- wan/lan role ----
-            old_role = old_if.get("role") or {}
-            new_role = new_if.get("role") or {}
+            # Legacy JSON keeps interfaces.role = {lan: eth1}; the command tree
+            # writes interfaces.lan.device = eth1. Accept both.
+            old_role = dict(old_if.get("role") or {})
+            new_role = dict(new_if.get("role") or {})
+            for role in ("lan", "wan"):
+                cfg = new_if.get(role)
+                if isinstance(cfg, dict) and cfg.get("device"):
+                    new_role[role] = cfg["device"]
+                old_cfg = old_if.get(role)
+                if isinstance(old_cfg, dict) and old_cfg.get("device"):
+                    old_role[role] = old_cfg["device"]
             if old_role != new_role:
                 for role, dev in new_role.items():
                     self._uci("set", f"network.{role}=interface")
@@ -1877,6 +1945,12 @@ class ConfigStore:
         new_ip = (new.get("vpn") or {}).get("ipsec") or {}
         if old_ip == new_ip:
             return []
+        # The default JSON carries an (disabled) remote-access block; writing
+        # /etc/ipsec.conf for it would be pointless and surprising.
+        if not (new_ip.get("peer") or new_ip.get("ike-group")
+                or new_ip.get("esp-group")
+                or (new_ip.get("remote-access") or {}).get("enabled")):
+            return []
         notes = []
         try:
             # write ipsec.conf
@@ -1923,7 +1997,8 @@ class ConfigStore:
                 for tnum, tun in (peer.get("tunnel") or {}).items():
                     conf.append(f"  leftsubnet={tun.get('local-prefix','0.0.0.0/0')}")
                     conf.append(f"  rightsubnet={tun.get('remote-prefix','0.0.0.0/0')}")
-            open("/etc/ipsec.conf", "w").write("\n".join(conf) + "\n")
+            with open("/etc/ipsec.conf", "w", encoding="utf-8") as f:
+                f.write("\n".join(conf) + "\n")
             # write ipsec.secrets (the remote-access PSK belongs here)
             secrets = []
             if ra.get("enabled") and ra.get("secret"):
@@ -1933,7 +2008,8 @@ class ConfigStore:
                 sec = peer.get("secret")
                 if sec:
                     secrets.append(f"{peer.get('local-address','')} {peer.get('remote-address',peer_ip)} : PSK \"{sec}\"")
-            open("/etc/ipsec.secrets", "w").write("\n".join(secrets) + "\n")
+            with open("/etc/ipsec.secrets", "w", encoding="utf-8") as f:
+                f.write("\n".join(secrets) + "\n")
             subprocess.run(["/etc/init.d/ipsec", "restart"],
                            capture_output=True, text=True, timeout=15)
             notes.append(f"ipsec: {len(new_ip.get('peer') or {})} peers")
@@ -1981,7 +2057,8 @@ class ConfigStore:
             cf.append("    trusted localhost;")
             cf.append("    allowed localhost;")
             cf.append("}")
-            open("/etc/conserver/conserver.cf", "w").write("\n".join(cf) + "\n")
+            with open("/etc/conserver/conserver.cf", "w", encoding="utf-8") as f:
+                f.write("\n".join(cf) + "\n")
             subprocess.run(["/etc/init.d/conserver", "restart"],
                            capture_output=True, text=True, timeout=10)
             # start dropbear per-device
@@ -2191,6 +2268,22 @@ class ConfigStore:
             pid = self.arm_rollback_timer(confirmed_minutes * 60, snapshot)
             out += (f" Auto-rollback armed for {confirmed_minutes} min "
                     f"(pid {pid}). Run 'commit confirm' to keep these changes.")
+        for n in notes:
+            out += f"\n  - {n}"
+        return out
+
+    def sync(self) -> str:
+        """Re-apply running.json to the backend, ignoring the JSON diff.
+
+        Drift repair path: ``show system drift`` lists what was changed behind
+        vyoscli's back, ``sync`` writes the desired state again.
+        """
+        if not self._have_uci():
+            return "sync: no uci on this host"
+        self._touched = set()
+        notes = self._apply_all({}, copy.deepcopy(self.running))
+        self._record_applied()
+        out = "Sync complete."
         for n in notes:
             out += f"\n  - {n}"
         return out

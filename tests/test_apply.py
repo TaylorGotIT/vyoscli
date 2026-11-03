@@ -184,16 +184,43 @@ class CommitBackendTest(unittest.TestCase):
         self.assertEqual(server_calls,
                          [["uci", "add_list", "system.ntp.server=223.5.5.5"]])
 
-    def test_refuses_to_duplicate_a_device_used_by_lan_or_wan(self):
-        # eth1 is already bound to network.wan (proto dhcp). Applying a VyOS
-        # address must not create a second interface on the same device.
-        self.fake.uci_show = "network.wan.device='eth1'\n"
+    def test_refuses_to_replace_a_dynamic_proto(self):
+        # eth1 is the DHCP WAN: applying a VyOS static address must not
+        # silently replace the DHCP setup, nor create a duplicate interface.
+        self.fake.uci_show = ("network.wan=interface\n"
+                              "network.wan.device='eth1'\n"
+                              "network.wan.proto='dhcp'\n")
         cfg(self.cli, "set interfaces ethernet eth1 address 192.168.1.2/24")
         out = self.commit()
-        self.assertIn("already used by network.wan", out)
+        self.assertIn("refusing to replace it", out)
         calls = self.fake.uci_calls()
         self.assertNotIn(["uci", "set", "network.vyos_eth1=interface"], calls)
-        self.assertNotIn(["uci", "set", "network.wan.ipaddr=192.168.1.2/24"], calls)
+        self.assertNotIn(["uci", "set", "network.wan.proto=static"], calls)
+
+    def test_takes_over_a_static_interface_on_the_same_device(self):
+        self.fake.uci_show = ("network.wan=interface\n"
+                              "network.wan.device='eth1'\n"
+                              "network.wan.proto='static'\n")
+        cfg(self.cli, "set interfaces ethernet eth1 address 192.0.2.5/24")
+        out = self.commit()
+        self.assertIn("applied to existing network.wan", out)
+        calls = self.fake.uci_calls()
+        self.assertIn(["uci", "add_list", "network.wan.ipaddr=192.0.2.5/24"], calls)
+        self.assertNotIn(["uci", "set", "network.vyos_eth1=interface"], calls)
+
+    def test_refuses_bridge_ports(self):
+        self.fake.uci_show = ("network.lan=interface\n"
+                              "network.lan.device='br-lan'\n"
+                              "network.lan.proto='static'\n"
+                              "network.@device[0]=device\n"
+                              "network.@device[0].type='bridge'\n"
+                              "network.@device[0].name='br-lan'\n"
+                              "network.@device[0].ports='eth0'\n")
+        cfg(self.cli, "set interfaces ethernet eth0 address 192.0.2.6/24")
+        out = self.commit()
+        self.assertIn("is a port of network.lan", out)
+        self.assertNotIn(["uci", "set", "network.vyos_eth0=interface"],
+                         self.fake.uci_calls())
 
     def test_dnat_uses_rule_level_ids_and_fw4_options(self):
         cfg(self.cli,
@@ -269,6 +296,17 @@ class CommitBackendTest(unittest.TestCase):
         self.fake.uci_show = "system.@system[0].hostname='changed-by-hand'"
         changed = dict(self.cli.store.drift())
         self.assertEqual(changed.get("system.@system[0]"), "changed")
+
+    def test_sync_reapplies_even_without_json_diff(self):
+        cfg(self.cli, "set system host-name sync-test")
+        self.commit()
+        before = len(self.fake.calls)
+        out = self.cli.store.sync()
+        self.assertIn("hostname -> sync-test", out)
+        new_calls = self.fake.calls[before:]
+        self.assertIn(["uci", "set", "system.@system[0].hostname=sync-test"],
+                      new_calls)
+        self.assertIn(["/etc/init.d/system", "reload"], new_calls)
 
     def test_no_manifest_means_no_drift_claim(self):
         self.assertIsNone(self.cli.store.drift())

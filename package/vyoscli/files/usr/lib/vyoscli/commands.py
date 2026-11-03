@@ -1131,6 +1131,7 @@ def build_tree(store: Any) -> CommandTree:
     # config-mode top-level verbs
     for verb, help_text in (
         ("commit", "Commit candidate (add 'confirmed [min]' for auto-rollback; 'commit confirm' to cancel)"),
+        ("sync", "Re-apply running config to the backend (drift repair)"),
         ("discard", "Discard uncommitted changes"),
         ("save", "Save running config to boot"),
         ("rollback", "Roll back to a prior snapshot (optional: <timestamp>)"),

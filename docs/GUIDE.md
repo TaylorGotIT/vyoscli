@@ -310,6 +310,7 @@ root@OpenWrt:~$ commit confirm
 | 命令 | 说明 |
 |---|---|
 | discard | 撤销未提交的改动，回到 running 状态 |
+| sync | 忽略 JSON 差异，把 running 配置重新下发一遍（修 UCI 漂移） |
 | rollback 1 | 回滚到上一个 commit 快照 |
 | commit confirmed 5 | 5 分钟内没确认自动回滚（远程改配置防踢下线） |
 

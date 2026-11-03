@@ -42,7 +42,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 变更 | 说明 |
 |---|---|
 | `GUIDE.md` → `docs/GUIDE.md`，`REQUIRED_PACKAGES.md` → `docs/DEPENDENCIES.md` | 文档集中到 `docs/` |
-| 新增 `tests/`（4 个文件、52 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
+| 新增 `tests/`（4 个文件、55 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
 | 新增 `.gitignore` | 忽略 `__pycache__`、`*.ipk`、`.audit/` 等 |
 | `git rm --cached package/vyoscli.zip` | 陈旧构建产物，已从仓库移除 |
 | `Makefile` 安装改用 `$(wildcard .../*.py)` | 以后加模块不用再改 Makefile |
@@ -79,6 +79,8 @@ import vyoscli.cli          ≈ 0.07 s
 | 25 | 给已被 `lan/wan` 占用的设备再建 `vyos_<if>` | 真机 eth1（WAN）被追加了 LAN 地址 `192.168.1.1/24`。现在检测到 device 已被其它 section 占用就跳过并提示，不再制造重复接口 | `config.py:_apply_interfaces` |
 | 26 | JSON 与 UCI 之间没有任何漂移可见性 | 新增 `applied.json`（记录每次 commit 写过的 section 指纹）与 `show system drift`；手工改 UCI / 恢复备份 / 升级后能看出哪些 section 被改过 | `config.py:_record_applied` / `drift` |
 | 27 | 改 hostname 只写 UCI，`uci apply` 在 23.05 上不存在 | 真机验证内核主机名一直没变；改为 `uci apply`（24.10+）+ `/etc/init.d/system reload`，实测 `/proc/sys/kernel/hostname` 同步 | `config.py:_apply_hostname` |
+| 28 | 漂移只能看见、不能修复 | 新增 configure 模式 `sync`：忽略 JSON diff，按 running.json 重新下发全部段落；真机把被手工改掉的 hostname 拉回并清空漂移 | `config.py:sync` |
+| 29 | `interfaces ethernet <if> address` 对已有 lan/wan 设备只能"跳过" | 引入 `_network_map()`：直连设备且 proto 为 static/none 时接管现有 section；DHCP/PPPoE 与桥端口明确拒绝并提示；同时统一了 `interfaces lan device` 与 `interfaces.role` 两种写法 | `config.py:_network_map` / `_apply_interfaces` / `_apply_interface_roles` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示
@@ -126,6 +128,7 @@ DOC_DRIFT 里显式承认不支持**，不允许悄悄失效。
 - **bridge 实测**：`set interfaces bridge br9 address ...` 生成 `network.br9_dev=device` + `network.vyos_br_br9.device=br9`，`ip link show br9` 存在（补一个 member 后 netifd 才创建）；删除 bridge 后 UCI 段与内核设备都被清理；现场遗留的 `vyos_br_br100` 段导致 netifd 每次 reload 报 `longer than max size 15`，已清理；
 - **firewall / NAT 实测**：`firewall rule 900 dest-port 65000 DROP` 生成 nft 规则且 SSH 不受影响，删除后规则清空；DNAT 修正 schema 后生成 `dnat ip to 192.0.2.9:65001`，SNAT 生成 `masquerade comment "!fw4: vyos_src_100"`，删除后 UCI 与 nft 均清理；
 - **漂移检测实测**：commit 后 `show system drift` 无输出；手工 `uci set system.@system[0].hostname` 后报告 `changed system.@system[0]`，恢复后回到无漂移；`applied.json` 为 0600；
+- **sync 实测**：手工改 UCI 的 hostname 后 `show system drift` 报 `changed`，`sync` 输出 `hostname -> OpenWrt` 并把内核/UCI 主机名都拉回，随后 drift 为空；
 - 包格式：OpenWrt 的 `.ipk` 是 **gzip(tar)**（`./debian-binary` + `control.tar.gz` +
   `data.tar.gz`），不是 Debian ar；`scripts/make-ipk.py` 按此格式生成，`opkg install` 通过。
 
@@ -150,10 +153,10 @@ DOC_DRIFT 里显式承认不支持**，不允许悄悄失效。
    手工改 UCI、恢复备份、包升级后，`running.json` 会与设备真实配置漂移，
    而 `show configuration` 只读 JSON。建议加 `vyoscli-sync` 开机服务（幂等 apply）
    和 `show system drift`。
-2. **接口模型**：现在给每个网口新建 `network.vyos_<if>`，而不是复用 `lan`/`wan`。
-   真机上 `vyos_eth1` 与 `lan` 同时存在，且可能抢同一个地址；`interfaces lan device eth0`
-   写入的 `interfaces.lan.device` 与下发代码读的 `interfaces.role` **schema 不一致**。
-   需要二选一：接管现有 section，或明确"vyoscli 只管理自己的 vyos_* section"。
+2. **接口模型**（已部分解决，见 #25/#29）：`_network_map()` 解析 UCI 归属后，
+   直连设备且 proto 为 `static/none` 时接管现有 section；DHCP/PPPoE 与桥端口明确拒绝并提示；
+   `interfaces lan device` 与 `interfaces.role` 两种写法已统一。仍未做的是"被接管 section
+   的原配置备份/还原"，以及删除地址时如何安全回收 section。
 3. **声明的叶子大量未下发**（见 §5 对照表）：`description/mtu/mac/speed/duplex/vrf/disable/vif`
    都只是存进 JSON。用户会以为配好了。
 4. **未在设备验证的下发**：BGP（frr UCI/`frr.conf` 标记块）、IPsec（strongswan 配置格式）、
