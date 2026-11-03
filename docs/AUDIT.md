@@ -42,7 +42,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 变更 | 说明 |
 |---|---|
 | `GUIDE.md` → `docs/GUIDE.md`，`REQUIRED_PACKAGES.md` → `docs/DEPENDENCIES.md` | 文档集中到 `docs/` |
-| 新增 `tests/`（5 个文件、73 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
+| 新增 `tests/`（5 个文件、75 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
 | 新增 `.gitignore` | 忽略 `__pycache__`、`*.ipk`、`.audit/` 等 |
 | `git rm --cached package/vyoscli.zip` | 陈旧构建产物，已从仓库移除 |
 | `Makefile` 安装改用 `$(wildcard .../*.py)` | 以后加模块不用再改 Makefile |
@@ -94,6 +94,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 40 | `sync` 全量路径会 `podman rm -f` 重建所有容器 | 全量 sync 跳过 `containers` 并在输出中说明；定向 sync 不受影响 | `config.py:sync` / `_apply_all` |
 | 41 | 接管现有静态接口是"就地改"，原 proto/地址不可恢复 | 首次接管前把 `proto/ipaddr/device/ifname` 备份到 `/etc/vyoscli/backup/network.<section>.json`（0600）；地址清空或设备从配置移除时自动还原并删除备份；自建的 `vyos_*` 接口则整段删除。真机验证：`192.0.2.1/24` 被接管为 `192.0.2.5/24`，删除后恢复原值 | `config.py:_backup_section` / `_restore_section` / `_release_iface` |
 | 42 | 命令树、类型、help 在 `commands.py` 里手写三遍，与默认值/下发易漂移 | 引入 `schema.py`：`Spec(path, type, help, repeatable)` 一行定义一条路径；`system` 与 `interfaces ethernet` 两棵子树已改为 schema 生成（其余逐步迁移），新增 `tests/test_schema.py` 保证每条 spec 都能 set 且类型/默认值一致 | `schema.py` / `commands.py` |
+| 43 | `service` 下的简单叶子（ssh/adguard/dnsmasq/smartdns 标量/tcp-accelerate/sqm）同样是手写三份 | 迁移到 `schema.SERVICE`（26 条），删掉对应手写块；动态子节点（smartdns server/domain-set、crontab、kcp、console-server、dhcp-server）保持手写，真机验证 `set service ?` 与动态路径仍正常 | `schema.py` / `commands.py` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示

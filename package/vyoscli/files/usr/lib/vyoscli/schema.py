@@ -52,9 +52,41 @@ ETHERNET: Tuple[Spec, ...] = (
     Spec("disable", "bool", "Administratively disable"),
 )
 
+SERVICE: Tuple[Spec, ...] = (
+    Spec("ssh port", "port", "Listen port (default 22)"),
+    Spec("ssh listen-address", "ipv4", "Bind address (default 0.0.0.0)"),
+    Spec("ssh password-auth", "bool", "Allow password login (true/false)"),
+    Spec("ssh root-login", "bool", "Allow root SSH login (true/false)"),
+    Spec("ssh disable", "bool", "Disable SSH server"),
+    Spec("adguard enabled", "bool", "Enable AdGuardHome"),
+    Spec("adguard port", "port", "DNS listen port (default 53)"),
+    Spec("adguard web-port", "port", "Web UI port (default 3000)"),
+    Spec("adguard listen-address", "ipv4", "Bind IP (default 0.0.0.0)"),
+    Spec("adguard disable", "bool", "Disable AdGuardHome"),
+    Spec("adguard upstream", "str",
+         "Upstream DNS (repeatable, configured in web UI)", repeatable=True),
+    Spec("dnsmasq port", "port", "DNS listen port (default 53)"),
+    Spec("dnsmasq listen-address", "ipv4", "Bind IP (default 0.0.0.0)"),
+    Spec("dnsmasq disable", "bool", "Disable dnsmasq"),
+    Spec("smartdns enabled", "bool", "Enable SmartDNS"),
+    Spec("smartdns port", "port", "Listen port (default 5333)"),
+    Spec("smartdns speed-check-mode", "str",
+         "Probe mode, e.g. 'ping,tcp:80'"),
+    Spec("smartdns forbid-aaaa", "bool", "Suppress IPv6 (AAAA) answers"),
+    Spec("smartdns listen-address", "ipv4", "Bind IP (default 0.0.0.0)"),
+    Spec("smartdns disable", "bool", "Disable smartdns"),
+    Spec("tcp-accelerate congestion-control", "str", "bbr/cubic/hybla"),
+    Spec("tcp-accelerate fq-codel", "bool", "Enable fq_codel qdisc"),
+    Spec("sqm interface", "str", "WAN interface"),
+    Spec("sqm download", "int", "Download bandwidth kbps"),
+    Spec("sqm upload", "int", "Upload bandwidth kbps"),
+    Spec("sqm qdisc", "str", "cake / fq_codel"),
+)
+
 GROUPS = {
     "system": SYSTEM,
     "ethernet": ETHERNET,
+    "service": SERVICE,
 }
 
 

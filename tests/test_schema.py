@@ -61,6 +61,30 @@ class SchemaTest(unittest.TestCase):
                 else:
                     self.assertEqual(stored, expected)
 
+    def test_every_service_spec_resolves(self):
+        for spec in schema.SERVICE:
+            with self.subTest(path=spec.path):
+                raw = SAMPLE[spec.type]
+                expected = coerce_value(spec.type, raw)
+                errs = cfg_errors(self.cli, f"set service {spec.path} {raw}")
+                self.assertEqual(errs, [], spec.path)
+                stored = self.cli.store.get(["service"] + spec.path.split())
+                if isinstance(stored, list):
+                    self.assertIn(expected, stored)
+                else:
+                    self.assertEqual(stored, expected)
+
+    def test_service_repeatable_specs_match_default_lists(self):
+        from vyoscli.config import DEFAULT_RUNNING
+        for spec in schema.SERVICE:
+            if not spec.repeatable:
+                continue
+            cur = DEFAULT_RUNNING
+            for part in ["service"] + spec.path.split():
+                cur = cur[part]
+            with self.subTest(path=spec.path):
+                self.assertIsInstance(cur, list)
+
     def test_repeatable_specs_match_default_lists(self):
         from vyoscli.config import DEFAULT_RUNNING
         for spec in schema.SYSTEM:

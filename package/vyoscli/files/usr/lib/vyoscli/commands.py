@@ -645,22 +645,19 @@ def build_tree(store: Any) -> CommandTree:
         # service smartdns ...
         svc = Node(name="service", help="System services")
         root.add(svc)
-        sdns = Node(name="smartdns", help="SmartDNS forwarding resolver")
-        svc.add(sdns)
-        sdns.add(Node(name="enabled", help="Enable SmartDNS",
-                      value_type="boolean", action=_cfg_noop))
-        sdns.add(Node(name="port", help="Listen port (default 5333)",
-                      value_type="port", action=_cfg_noop))
-        sdns.add(Node(name="speed-check-mode",
-                      help="Probe mode: e.g. 'ping,tcp:80'",
-                      value_type="str", action=_cfg_noop))
-        sdns.add(Node(name="forbid-aaaa",
-                      help="Suppress IPv6 (AAAA) answers",
-                      value_type="boolean", action=_cfg_noop))
-        sdns.add(Node(name="listen-address", help="Bind IP (default 0.0.0.0)",
-                      value_type="ipv4", action=_cfg_noop))
-        sdns.add(Node(name="disable", help="Disable smartdns",
-                      value_type="bool", action=_cfg_noop))
+        # Declarative definition: see schema.py (SERVICE).
+        schema.attach(svc, schema.SERVICE, action=_cfg_noop)
+        for section, text in (
+            ("ssh", "SSH access (dropbear)"),
+            ("adguard", "AdGuardHome DNS-adblock (containerized)"),
+            ("dnsmasq", "dnsmasq resolver"),
+            ("smartdns", "SmartDNS forwarding resolver"),
+            ("tcp-accelerate", "TCP congestion control"),
+            ("sqm", "SQM smart queue management"),
+        ):
+            if section in svc.children:
+                svc.children[section].help = text
+        sdns = svc.children["smartdns"]
 
         server = Node(name="server", help="Upstream DNS server")
         sdns.add(server)
@@ -738,14 +735,6 @@ def build_tree(store: Any) -> CommandTree:
         sh_dyn.add(Node(name="bandwidth", help="Total bandwidth (e.g. 100mbit)", value_type="str", action=_cfg_noop))
         sh_dyn.add(Node(name="per-ip", help="Per-IP bandwidth limit (e.g. 10mbit)", value_type="str", action=_cfg_noop))
 
-        # service sqm ...
-        sqm = Node(name="sqm", help="SQM smart queue management")
-        svc.add(sqm)
-        sqm.add(Node(name="interface", help="WAN interface", value_type="str", action=_cfg_noop))
-        sqm.add(Node(name="download", help="Download bandwidth kbps", value_type="int", action=_cfg_noop))
-        sqm.add(Node(name="upload", help="Upload bandwidth kbps", value_type="int", action=_cfg_noop))
-        sqm.add(Node(name="qdisc", help="cake / fq_codel", value_type="str", action=_cfg_noop))
-
         # service kcp ...
         acc = Node(name="kcp", help="KCP tunnel (kcptun)")
         svc.add(acc)
@@ -758,14 +747,6 @@ def build_tree(store: Any) -> CommandTree:
         acc_tpl.add(Node(name="remote-port", help="Remote port", value_type="port", action=_cfg_noop))
         acc.dynamic = lambda: []
         acc._dyn_template = acc_tpl
-
-        # service tcp-accelerate ...
-        tcp_acc = Node(name="tcp-accelerate", help="TCP congestion control")
-        svc.add(tcp_acc)
-        tcp_acc.add(Node(name="congestion-control", help="bbr/cubic/hybla",
-                         value_type="str", action=_cfg_noop))
-        tcp_acc.add(Node(name="fq-codel", help="Enable fq_codel qdisc",
-                         value_type="bool", action=_cfg_noop))
 
         # system login user ...
         login = Node(name="login", help="Login user management")
@@ -962,45 +943,10 @@ def build_tree(store: Any) -> CommandTree:
         static_tpl.add(Node(name="mac-address", help="MAC address",
                             value_type="str", action=_cfg_noop))
 
-        # service ssh ... (dropbear)
-        ssh = Node(name="ssh", help="SSH access (dropbear)")
-        svc.add(ssh)
-        ssh.add(Node(name="port", help="Listen port (default 22)",
-                     value_type="port", action=_cfg_noop))
-        ssh.add(Node(name="listen-address", help="Bind address (default 0.0.0.0)",
-                     value_type="ipv4", action=_cfg_noop))
-        ssh.add(Node(name="password-auth", help="Allow password login (true/false)",
-                     value_type="bool", action=_cfg_noop))
-        ssh.add(Node(name="root-login", help="Allow root SSH login (true/false)",
-                     value_type="bool", action=_cfg_noop))
-        ssh.add(Node(name="disable", help="Disable SSH server",
-                     value_type="bool", action=_cfg_noop))
-
-        # service adguard ...
-        ag = Node(name="adguard", help="AdGuardHome DNS-adblock (containerized)")
-        svc.add(ag)
-        ag.add(Node(name="enabled", help="Enable AdGuardHome",
-                    value_type="bool", action=_cfg_noop))
-        ag.add(Node(name="port", help="DNS listen port (default 53)",
-                    value_type="port", action=_cfg_noop))
-        ag.add(Node(name="web-port", help="Web UI port (default 3000)",
-                    value_type="port", action=_cfg_noop))
-        ag.add(Node(name="listen-address", help="Bind IP (default 0.0.0.0)",
-                    value_type="ipv4", action=_cfg_noop))
-        ag.add(Node(name="disable", help="Disable AdGuardHome",
-                    value_type="bool", action=_cfg_noop))
-
-        # service dnsmasq ...
-        dm = Node(name="dnsmasq", help="dnsmasq resolver")
-        svc.add(dm)
-        dm.add(Node(name="port", help="DNS listen port (default 53)",
-                    value_type="port", action=_cfg_noop))
-        dm.add(Node(name="listen-address", help="Bind IP (default 0.0.0.0)",
-                    value_type="ipv4", action=_cfg_noop))
-        dm.add(Node(name="disable", help="Disable dnsmasq",
-                    value_type="bool", action=_cfg_noop))
-        ag.add(Node(name="upstream", help="Upstream DNS (repeatable, configured in web UI)",
-                    value_type="str", action=_cfg_noop))
+        svc.children["adguard"].add(
+            Node(name="upstream",
+                 help="Upstream DNS (repeatable, configured in web UI)",
+                 value_type="str", action=_cfg_noop))
 
         # firewall zone / forwarding / rule
         fw = Node(name="firewall", help="Firewall policy")
