@@ -342,6 +342,11 @@
 | `service lldp snmp` | Enable the SNMP subagent | `service lldp snmp true` |
 | `service ntp listen-address` | Bind address (unsupported by sysntpd) | `service ntp listen-address 192.0.2.1` |
 | `service ntp server` | NTP server hostname or address | `service ntp server ntp.aliyun.com` |
+| `service router-advert interface <name> default-lifetime` | Default lifetime (seconds) | `service router-advert interface <name> default-lifetime 100` |
+| `service router-advert interface <name> managed-flag` | Set the managed address flag | `service router-advert interface <name> managed-flag true` |
+| `service router-advert interface <name> no-send-advert` | Do not send advertisements | `service router-advert interface <name> no-send-advert true` |
+| `service router-advert interface <name> other-config-flag` | Set the other-config flag | `service router-advert interface <name> other-config-flag true` |
+| `service router-advert interface <name> prefix` | Prefix to advertise | `service router-advert interface <name> prefix <value>` |
 | `service smartdns address <domain> ip` | Answer IP | `service smartdns address <domain> ip 192.0.2.1` |
 | `service smartdns disable` | Disable smartdns | `service smartdns disable true` |
 | `service smartdns domain-rule <name> domain-set` | Which domain-set to match | `service smartdns domain-rule <name> domain-set text` |

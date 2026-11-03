@@ -126,7 +126,7 @@ passive/default-information）、`rip`（version/network/default-information）�
 | `service snmp` | ✅ | community → UCI com2sec/group/access，已真机验证监听 1610 |
 | `service lldp` | ✅ | UCI lldpd interface/description，已真机验证 |
 | `service dhcp-relay` | ❌ | |
-| `service router-advert` | ❌ | odhcpd/radvd 可用 |
+| `service router-advert` | ✅ | interface → UCI dhcp ra/dhcpv6/ra_management/ra_lifetime，带备份/还原 |
 | `service console-server` | ✅ | 已验证 per-device dropbear |
 | `service task-scheduler` | 🟡 | 我们用 `service crontab` |
 | `service monitoring` | ❌ | zabbix/telegraf/prometheus |

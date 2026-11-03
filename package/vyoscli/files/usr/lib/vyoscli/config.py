@@ -628,6 +628,7 @@ class ConfigStore:
             ("system-extra", self._apply_system_extra),
             ("ntp", self._apply_ntp),
             ("snmp", self._apply_snmp),
+            ("router-advert", self._apply_router_advert),
             ("lldp", self._apply_lldp),
             ("name-servers", self._apply_name_servers),
             ("system-dns", self._apply_system_dns),
@@ -1246,6 +1247,86 @@ class ConfigStore:
                          f"on UDP:{port}")
         except Exception as e:  # noqa: BLE001
             notes.append(f"snmp apply failed: {e}")
+        return notes
+
+    def _ra_backup_path(self, ifname: str) -> str:
+        return os.path.join(self.base_dir, "backup", f"dhcp.{ifname}.json")
+
+    def _backup_ra(self, ifname: str) -> None:
+        path = self._ra_backup_path(ifname)
+        if os.path.exists(path):
+            return
+        data = {}
+        for key in ("ra", "dhcpv6", "ra_management", "ra_lifetime"):
+            value = self._uci_get(f"dhcp.{ifname}.{key}")
+            if value is not None:
+                data[key] = value
+        if data:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            self._dump(path, data)
+
+    def _restore_ra(self, ifname: str, notes: List[str]) -> None:
+        path = self._ra_backup_path(ifname)
+        data = {}
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            data = {}
+        for key in ("ra", "dhcpv6", "ra_management", "ra_lifetime"):
+            if data.get(key) is not None:
+                self._uci("set", f"dhcp.{ifname}.{key}={data[key]}")
+            else:
+                try:
+                    self._uci("delete", f"dhcp.{ifname}.{key}")
+                except subprocess.CalledProcessError:
+                    pass
+        self._uci("commit", "dhcp")
+        subprocess.run(["/etc/init.d/odhcpd", "restart"],
+                       capture_output=True, text=True, timeout=15)
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        notes.append(f"ra: restored dhcp.{ifname}")
+
+    def _apply_router_advert(self, old, new):
+        old_ra = (old.get("service") or {}).get("router-advert") or {}
+        new_ra = (new.get("service") or {}).get("router-advert") or {}
+        if old_ra == new_ra:
+            return []
+        notes: List[str] = []
+        try:
+            for gone in set(old_ra.get("interface") or {}) - set(
+                    new_ra.get("interface") or {}):
+                self._restore_ra(gone, notes)
+            for ifname, cfg in (new_ra.get("interface") or {}).items():
+                if not isinstance(cfg, dict):
+                    continue
+                self._backup_ra(ifname)
+                self._uci("set", f"dhcp.{ifname}=dhcp")
+                self._uci("set", f"dhcp.{ifname}.interface={ifname}")
+                if cfg.get("no-send-advert"):
+                    self._uci("set", f"dhcp.{ifname}.ra=disabled")
+                else:
+                    self._uci("set", f"dhcp.{ifname}.ra=server")
+                    self._uci("set", f"dhcp.{ifname}.dhcpv6=server")
+                if cfg.get("managed-flag"):
+                    self._uci("set", f"dhcp.{ifname}.ra_management=1")
+                if cfg.get("default-lifetime"):
+                    self._uci("set", f"dhcp.{ifname}.ra_lifetime="
+                              f"{cfg['default-lifetime']}")
+                if cfg.get("prefix"):
+                    notes.append(f"ra: {ifname} advertises prefixes from its "
+                                 "interface addresses (explicit prefix stored "
+                                 "but not programmed)")
+            self._uci("commit", "dhcp")
+            subprocess.run(["/etc/init.d/odhcpd", "restart"],
+                           capture_output=True, text=True, timeout=15)
+            notes.append(f"ra: {len(new_ra.get('interface') or {})} "
+                         "interface(s)")
+        except Exception as e:  # noqa: BLE001
+            notes.append(f"router-advert apply failed: {e}")
         return notes
 
     def _apply_ntp(self, old, new):

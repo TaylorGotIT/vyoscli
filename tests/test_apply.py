@@ -410,6 +410,31 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn("match ip address prefix-list PL", text)
         self.assertIn("set local-preference 200", text)
 
+    def test_router_advert_maps_to_odhcpd(self):
+        cfg(self.cli,
+            "set service router-advert interface lan managed-flag true",
+            "set service router-advert interface lan default-lifetime 1800")
+        self.commit()
+        calls = self.fake.uci_calls()
+        self.assertIn(["uci", "set", "dhcp.lan=dhcp"], calls)
+        self.assertIn(["uci", "set", "dhcp.lan.ra=server"], calls)
+        self.assertIn(["uci", "set", "dhcp.lan.dhcpv6=server"], calls)
+        self.assertIn(["uci", "set", "dhcp.lan.ra_management=1"], calls)
+        self.assertIn(["uci", "set", "dhcp.lan.ra_lifetime=1800"], calls)
+        self.assertIn(["uci", "commit", "dhcp"], calls)
+        self.assertIn(["/etc/init.d/odhcpd", "restart"], self.fake.calls)
+
+    def test_router_advert_removal_restores_backup(self):
+        cfg(self.cli,
+            "set service router-advert interface lan managed-flag true")
+        self.commit()
+        cfg(self.cli, "delete service router-advert interface lan")
+        self.commit()
+        calls = self.fake.uci_calls()
+        self.assertIn(["uci", "delete", "dhcp.lan.ra_management"], calls)
+        self.assertIn(["uci", "commit", "dhcp"], calls)
+        self.assertIn(["/etc/init.d/odhcpd", "restart"], self.fake.calls)
+
     def test_snmp_generates_uci_access(self):
         cfg(self.cli,
             "set service snmp community public authorization ro",
