@@ -42,7 +42,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 变更 | 说明 |
 |---|---|
 | `GUIDE.md` → `docs/GUIDE.md`，`REQUIRED_PACKAGES.md` → `docs/DEPENDENCIES.md` | 文档集中到 `docs/` |
-| 新增 `tests/`（4 个文件、50 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
+| 新增 `tests/`（4 个文件、52 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
 | 新增 `.gitignore` | 忽略 `__pycache__`、`*.ipk`、`.audit/` 等 |
 | `git rm --cached package/vyoscli.zip` | 陈旧构建产物，已从仓库移除 |
 | `Makefile` 安装改用 `$(wildcard .../*.py)` | 以后加模块不用再改 Makefile |
@@ -77,6 +77,8 @@ import vyoscli.cli          ≈ 0.07 s
 | 23 | 删除 bridge 只删 UCI 段，内核设备残留；无成员的 bridge netifd 不创建（NO_DEVICE）；dummy 需要 `kmod-dummy` | 真机验证：br9 需手工 `ip link del`；空端口 bridge 起不来；dummy 设备缺失。已加 `ip link del` 清理与"无成员"提示，dummy 依赖写入文档 | `config.py` / `DEPENDENCIES.md` |
 | 24 | `_apply_nat` 直接在 `nat.destination` 下按 id 遍历，而命令树写的是 `nat.destination.rule.<id>` | section 变成 `vyos_nat_dst_rule`（id 丢失）；DNAT 又用了 `dst_dport/to_dest` 这类非 fw4 选项 → 端口转发静默失效。修复后真机生成 `dnat ip to 192.0.2.9:65001` | `config.py:_apply_nat` |
 | 25 | 给已被 `lan/wan` 占用的设备再建 `vyos_<if>` | 真机 eth1（WAN）被追加了 LAN 地址 `192.168.1.1/24`。现在检测到 device 已被其它 section 占用就跳过并提示，不再制造重复接口 | `config.py:_apply_interfaces` |
+| 26 | JSON 与 UCI 之间没有任何漂移可见性 | 新增 `applied.json`（记录每次 commit 写过的 section 指纹）与 `show system drift`；手工改 UCI / 恢复备份 / 升级后能看出哪些 section 被改过 | `config.py:_record_applied` / `drift` |
+| 27 | 改 hostname 只写 UCI，`uci apply` 在 23.05 上不存在 | 真机验证内核主机名一直没变；改为 `uci apply`（24.10+）+ `/etc/init.d/system reload`，实测 `/proc/sys/kernel/hostname` 同步 | `config.py:_apply_hostname` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示
@@ -123,6 +125,7 @@ DOC_DRIFT 里显式承认不支持**，不允许悄悄失效。
   发现旧 tunnel 键名不兼容（问题 #21），加别名后回放无报错；
 - **bridge 实测**：`set interfaces bridge br9 address ...` 生成 `network.br9_dev=device` + `network.vyos_br_br9.device=br9`，`ip link show br9` 存在（补一个 member 后 netifd 才创建）；删除 bridge 后 UCI 段与内核设备都被清理；现场遗留的 `vyos_br_br100` 段导致 netifd 每次 reload 报 `longer than max size 15`，已清理；
 - **firewall / NAT 实测**：`firewall rule 900 dest-port 65000 DROP` 生成 nft 规则且 SSH 不受影响，删除后规则清空；DNAT 修正 schema 后生成 `dnat ip to 192.0.2.9:65001`，SNAT 生成 `masquerade comment "!fw4: vyos_src_100"`，删除后 UCI 与 nft 均清理；
+- **漂移检测实测**：commit 后 `show system drift` 无输出；手工 `uci set system.@system[0].hostname` 后报告 `changed system.@system[0]`，恢复后回到无漂移；`applied.json` 为 0600；
 - 包格式：OpenWrt 的 `.ipk` 是 **gzip(tar)**（`./debian-binary` + `control.tar.gz` +
   `data.tar.gz`），不是 Debian ar；`scripts/make-ipk.py` 按此格式生成，`opkg install` 通过。
 

@@ -177,6 +177,17 @@ def _list_ethernet_ifaces() -> list:
         return []
 
 
+def _op_show_drift(ctx: Any, value: Any) -> str:
+    changed = ctx.store.drift()
+    if changed is None:
+        return "No applied manifest yet (commit once to start tracking)."
+    if not changed:
+        return "No drift: committed UCI sections still match the running config."
+    lines = [f"  {state:<8} {section}" for section, state in changed]
+    return ("UCI sections changed since the last commit "
+            "(edit by hand, restore, or upgrade):\n" + "\n".join(lines))
+
+
 def _cfg_noop(ctx: Any, value: Any) -> str:
     return ""
 
@@ -234,6 +245,9 @@ def build_tree(store: Any) -> CommandTree:
                       action=_op_show_system_kmsg))
     show_sys.add(Node(name="login", help="Show local user accounts",
                       action=_op_show_system_login))
+    show_sys.add(Node(name="drift",
+                      help="UCI sections changed since the last commit",
+                      action=_op_show_drift))
     tree.op_root.children["show"].add(show_sys)
 
     tree.op("ping", help="Ping a host", value_type="host", action=_op_ping)

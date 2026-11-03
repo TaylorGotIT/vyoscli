@@ -92,6 +92,7 @@ class CommitBackendTest(unittest.TestCase):
         cfg(self.cli, "set system host-name edge-1")
         out = self.commit()
         self.assertIn("Commit complete", out)
+        self.assertIn(["/etc/init.d/system", "reload"], self.fake.calls)
         self.assertIn(["uci", "set", "system.@system[0].hostname=edge-1"],
                       self.fake.uci_calls())
         self.assertIn(["uci", "commit", "system"], self.fake.uci_calls())
@@ -258,6 +259,19 @@ class CommitBackendTest(unittest.TestCase):
         calls = self.fake.uci_calls()
         self.assertIn(["uci", "delete", "network.dum9"], calls)
         self.assertIn(["uci", "delete", "network.dum9_dev"], calls)
+
+    def test_drift_is_recorded_and_detected(self):
+        cfg(self.cli, "set system host-name drift-test")
+        self.commit()
+        self.assertTrue(os.path.exists(self.cli.store.applied_path))
+        self.assertEqual(self.cli.store.drift(), [])
+        # Simulate someone editing UCI behind vyoscli's back.
+        self.fake.uci_show = "system.@system[0].hostname='changed-by-hand'"
+        changed = dict(self.cli.store.drift())
+        self.assertEqual(changed.get("system.@system[0]"), "changed")
+
+    def test_no_manifest_means_no_drift_claim(self):
+        self.assertIsNone(self.cli.store.drift())
 
     def test_no_backend_when_uci_missing(self):
         with mock.patch.object(config_mod.shutil, "which", lambda name: None):

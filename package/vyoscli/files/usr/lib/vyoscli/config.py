@@ -18,6 +18,7 @@ Layout on disk:
 
 from __future__ import annotations
 
+import hashlib
 import ipaddress
 import json
 import os
@@ -178,10 +179,13 @@ class ConfigStore:
         self.base_dir = base_dir
         self.running_path = os.path.join(base_dir, "running.json")
         self.candidate_path = os.path.join(base_dir, "candidate.json")
+        self.applied_path = os.path.join(base_dir, "applied.json")
         self.history_dir = os.path.join(base_dir, "history")
         self.rollback_conf = os.path.join(base_dir, "rollback.conf")
         self.running: Dict[str, Any] = {}
         self.candidate: Dict[str, Any] = {}
+        # UCI sections written by the current apply pass (for drift tracking).
+        self._touched: set = set()
         self.load()
 
     # ---------- persistence ----------
@@ -301,10 +305,63 @@ class ConfigStore:
     def _have_uci() -> bool:
         return shutil.which("uci") is not None
 
-    @staticmethod
-    def _uci(*args: str) -> subprocess.CompletedProcess:
+    def _uci(self, *args: str) -> subprocess.CompletedProcess:
+        if args and args[0] in ("set", "add_list", "delete", "del_list"):
+            target = args[1].split("=", 1)[0]
+            parts = target.split(".")
+            if len(parts) >= 2:
+                self._touched.add(f"{parts[0]}.{parts[1]}")
         return subprocess.run(["uci", *args], check=True,
                               capture_output=True, text=True)
+
+    @staticmethod
+    def _section_digest(section: str) -> str:
+        """Fingerprint one UCI section, or 'absent' when it does not exist."""
+        try:
+            r = subprocess.run(["uci", "show", section], capture_output=True,
+                               text=True, timeout=5)
+        except OSError:
+            return "unavailable"
+        if r.returncode != 0:
+            return "absent"
+        return hashlib.sha256(r.stdout.encode()).hexdigest()
+
+    def _record_applied(self) -> None:
+        """Remember what commit actually wrote, so later drift is detectable.
+
+        The manifest accumulates across commits: a section written once stays
+        tracked until a later commit rewrites it (or records it as absent).
+        """
+        manifest: Dict[str, str] = {}
+        if os.path.exists(self.applied_path):
+            try:
+                with open(self.applied_path, encoding="utf-8") as f:
+                    manifest = json.load(f)
+            except (OSError, ValueError):
+                manifest = {}
+        for section in sorted(self._touched):
+            manifest[section] = self._section_digest(section)
+        self._dump(self.applied_path, manifest)
+
+    def drift(self) -> Optional[List[Tuple[str, str]]]:
+        """Sections whose UCI content changed since the last commit.
+
+        Returns None when no manifest exists yet, else [(section, state)] where
+        state is "changed" or "missing".
+        """
+        if not os.path.exists(self.applied_path):
+            return None
+        try:
+            with open(self.applied_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+        except (OSError, ValueError):
+            return None
+        changed: List[Tuple[str, str]] = []
+        for section, expected in sorted(manifest.items()):
+            now = self._section_digest(section)
+            if now != expected:
+                changed.append((section, "missing" if now == "absent" else "changed"))
+        return changed
 
     def _find_uci_section(self, config: str, option: str, value: str) -> Optional[str]:
         try:
@@ -563,7 +620,11 @@ class ConfigStore:
         try:
             self._uci("set", "system.@system[0].hostname=" + str(new_h))
             self._uci("commit", "system")
+            # `uci apply` only exists on newer releases (24.10+); on 23.05 the
+            # system init script is what actually sets the kernel hostname.
             subprocess.run(["uci", "apply"], capture_output=True, timeout=10)
+            subprocess.run(["/etc/init.d/system", "reload"],
+                           capture_output=True, text=True, timeout=10)
             return [f"hostname -> {new_h}"]
         except Exception as e:  # noqa: BLE001
             return [f"hostname apply failed: {e}"]
@@ -2118,10 +2179,12 @@ class ConfigStore:
         snapshot = self._snapshot_current_running()
         old_running = copy.deepcopy(self.running)
         self.running = copy.deepcopy(self.candidate)
+        self._touched = set()
         notes = self._apply_all(old_running, self.running)
         # Persist only after the backend has been driven, so a crashed apply
         # cannot leave running.json claiming a state the device is not in.
         self._dump(self.running_path, self.running)
+        self._record_applied()
 
         out = "Commit complete."
         if confirmed_minutes > 0:
@@ -2158,7 +2221,9 @@ class ConfigStore:
         self.candidate = copy.deepcopy(self.running)
         self._dump(self.running_path, self.running)
         self._dump(self.candidate_path, self.candidate)
+        self._touched = set()
         notes = self._apply_all(old_running, self.running)
+        self._record_applied()
         self.disarm_rollback_timer()
         out = f"Rolled back to {ts}."
         for n in notes:

@@ -60,6 +60,7 @@
 | `show configuration commands` | running 配置为 `set ...` 脚本 |
 | `show configuration json` | running 配置为 JSON |
 | `show system` | uptime/cpu/memory/storage/processes/kernel-messages/login |
+| show system drift | 列出上次 commit 后被人改动/删除的 UCI section |
 | `show ip route` / `static` / `connected` / `summary` | 路由表 |
 | `show container` | podman 容器列表 |
 | `show container image` | podman 镜像列表 |
