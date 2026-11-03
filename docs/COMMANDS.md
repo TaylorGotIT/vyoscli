@@ -217,6 +217,21 @@
 | `interfaces wireless <wlan-name> security` | wpa2 \| wpa3 \| none | `interfaces wireless <wlan-name> security wpa2` |
 | `interfaces wireless <wlan-name> ssid` | SSID broadcast name | `interfaces wireless <wlan-name> ssid text` |
 
+## set load-balancing
+
+| 命令 | 说明 | 示例 |
+|---|---|---|
+| `load-balancing haproxy backend <name> balance` | roundrobin \| leastconn \| source | `load-balancing haproxy backend <name> balance text` |
+| `load-balancing haproxy backend <name> server <name> address` | Server address | `load-balancing haproxy backend <name> server <name> address 192.0.2.1` |
+| `load-balancing haproxy backend <name> server <name> check` | Enable health checks | `load-balancing haproxy backend <name> server <name> check true` |
+| `load-balancing haproxy backend <name> server <name> port` | Server port | `load-balancing haproxy backend <name> server <name> port 8080` |
+| `load-balancing haproxy backend <name> server <name> weight` | Server weight | `load-balancing haproxy backend <name> server <name> weight 100` |
+| `load-balancing haproxy global-parameters max-connections` | Maximum connections | `load-balancing haproxy global-parameters max-connections 100` |
+| `load-balancing haproxy service <name> backend` | Backend name | `load-balancing haproxy service <name> backend text` |
+| `load-balancing haproxy service <name> listen-address` | Bind address | `load-balancing haproxy service <name> listen-address 192.0.2.1` |
+| `load-balancing haproxy service <name> mode` | tcp \| http | `load-balancing haproxy service <name> mode text` |
+| `load-balancing haproxy service <name> port` | Bind port | `load-balancing haproxy service <name> port 8080` |
+
 ## set nat
 
 | 命令 | 说明 | 示例 |

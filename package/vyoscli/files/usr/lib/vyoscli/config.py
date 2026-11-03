@@ -438,6 +438,49 @@ def render_qos_commands(qos: Dict[str, Any]) -> List[List[str]]:
     return commands
 
 
+def render_haproxy_cfg(lb: Dict[str, Any]) -> str:
+    services = lb.get("service") or {}
+    backends = lb.get("backend") or {}
+    maxconn = (lb.get("global-parameters") or {}).get("max-connections")
+    lines = ["global"]
+    if maxconn:
+        lines.append(f"    maxconn {maxconn}")
+    lines += ["", "defaults", "    mode tcp", "    timeout connect 5s",
+              "    timeout client 30s", "    timeout server 30s", ""]
+    backend_mode: Dict[str, str] = {}
+    for name, svc in services.items():
+        if not isinstance(svc, dict):
+            continue
+        mode = str(svc.get("mode") or "tcp")
+        addr = svc.get("listen-address") or "0.0.0.0"
+        port = svc.get("port") or 80
+        lines.append(f"frontend {name}")
+        lines.append(f"    bind {addr}:{port}")
+        lines.append(f"    mode {mode}")
+        if svc.get("backend"):
+            lines.append(f"    default_backend {svc['backend']}")
+            backend_mode.setdefault(str(svc["backend"]), mode)
+        lines.append("")
+    for name, be in backends.items():
+        if not isinstance(be, dict):
+            continue
+        mode = backend_mode.get(str(name), "tcp")
+        lines.append(f"backend {name}")
+        lines.append(f"    mode {mode}")
+        lines.append(f"    balance {be.get('balance') or 'roundrobin'}")
+        for sname, srv in (be.get("server") or {}).items():
+            if not isinstance(srv, dict) or not srv.get("address"):
+                continue
+            entry = f"    server {sname} {srv['address']}:{srv.get('port') or 80}"
+            if srv.get("weight"):
+                entry += f" weight {srv['weight']}"
+            if srv.get("check"):
+                entry += " check"
+            lines.append(entry)
+        lines.append("")
+    return "\n".join(lines) + "\n"
+
+
 class ConfigStore:
     def __init__(self, base_dir: str = "/etc/vyoscli") -> None:
         self.base_dir = base_dir
@@ -741,6 +784,7 @@ class ConfigStore:
             ("vrrp", self._apply_vrrp),
             ("pki", self._apply_pki),
             ("qos", self._apply_qos),
+            ("haproxy", self._apply_haproxy),
             ("wireless", self._apply_wireless),
             ("interface-roles", self._apply_interface_roles),
             ("vrf", self._apply_vrf),
@@ -910,6 +954,44 @@ class ConfigStore:
             except subprocess.CalledProcessError:
                 pass
             notes.append(f"{ifname}: removed network.{ours}")
+
+    def _apply_haproxy(self, old, new):
+        old_lb = (old.get("load-balancing") or {}).get("haproxy") or {}
+        new_lb = (new.get("load-balancing") or {}).get("haproxy") or {}
+        if old_lb == new_lb:
+            return []
+        cfg_path = ("/etc/haproxy.cfg" if os.path.isdir("/etc")
+                    else os.path.join(self.base_dir, "haproxy.cfg"))
+        backup = os.path.join(self.base_dir, "backup", "haproxy.cfg.orig")
+        os.makedirs(os.path.dirname(backup), exist_ok=True)
+        if os.path.exists(cfg_path) and not os.path.exists(backup):
+            shutil.copy2(cfg_path, backup)
+        services = new_lb.get("service") or {}
+        if not services:
+            try:
+                subprocess.run(["/etc/init.d/haproxy", "stop"],
+                               capture_output=True, text=True, timeout=15)
+            except (OSError, subprocess.SubprocessError):
+                pass
+            if os.path.exists(backup):
+                shutil.copy2(backup, cfg_path)
+            return ["haproxy: stopped"]
+        text = render_haproxy_cfg(new_lb)
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.chmod(cfg_path, 0o600)
+        try:
+            check = subprocess.run(["haproxy", "-c", "-q", "-f", cfg_path],
+                                   capture_output=True, text=True, timeout=15)
+        except (OSError, subprocess.SubprocessError) as e:
+            return [f"haproxy: validation unavailable ({e})"]
+        if check.returncode != 0:
+            if os.path.exists(backup):
+                shutil.copy2(backup, cfg_path)
+            return [f"haproxy: invalid config: {(check.stderr or '').strip()[:200]}"]
+        subprocess.run(["/etc/init.d/haproxy", "restart"],
+                       capture_output=True, text=True, timeout=20)
+        return [f"haproxy: {len(services)} service(s)"]
 
     def _apply_qos(self, old, new):
         old_q = old.get("qos") or {}

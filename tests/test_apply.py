@@ -410,6 +410,41 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn("match ip address prefix-list PL", text)
         self.assertIn("set local-preference 200", text)
 
+    def test_haproxy_renders_and_applies(self):
+        from vyoscli.config import render_haproxy_cfg
+        text = render_haproxy_cfg({
+            "global-parameters": {"max-connections": 4096},
+            "service": {"web": {"mode": "tcp",
+                                "listen-address": "127.0.0.1",
+                                "port": 18080, "backend": "b1"}},
+            "backend": {"b1": {"balance": "roundrobin", "server": {
+                "s1": {"address": "127.0.0.1", "port": 9, "check": True}}}}})
+        self.assertIn("frontend web", text)
+        self.assertIn("bind 127.0.0.1:18080", text)
+        self.assertIn("server s1 127.0.0.1:9 check", text)
+
+        real_isdir = os.path.isdir
+        with mock.patch.object(
+                config_mod.os.path, "isdir",
+                side_effect=lambda path: False if path == "/etc"
+                else real_isdir(path)):
+            cfg(self.cli,
+                "set load-balancing haproxy service web mode tcp",
+                "set load-balancing haproxy service web listen-address 127.0.0.1",
+                "set load-balancing haproxy service web port 18080",
+                "set load-balancing haproxy service web backend b1",
+                "set load-balancing haproxy backend b1 balance roundrobin",
+                "set load-balancing haproxy backend b1 server s1 address 127.0.0.1",
+                "set load-balancing haproxy backend b1 server s1 port 9")
+            self.commit()
+        path = os.path.join(self.cli.store.base_dir, "haproxy.cfg")
+        self.assertTrue(os.path.exists(path))
+        self.assertIn(["haproxy", "-c", "-q", "-f", path], self.fake.calls)
+        self.assertIn(["/etc/init.d/haproxy", "restart"], self.fake.calls)
+        cfg(self.cli, "delete load-balancing haproxy service web")
+        self.commit()
+        self.assertIn(["/etc/init.d/haproxy", "stop"], self.fake.calls)
+
     def test_nat66_renders_and_applies(self):
         from vyoscli.config import render_nat_nft
         text = render_nat_nft({

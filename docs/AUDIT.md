@@ -42,7 +42,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 变更 | 说明 |
 |---|---|
 | `GUIDE.md` → `docs/GUIDE.md`，`REQUIRED_PACKAGES.md` → `docs/DEPENDENCIES.md` | 文档集中到 `docs/` |
-| 新增 `tests/`（5 个文件、98 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
+| 新增 `tests/`（5 个文件、99 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
 | 新增 `.gitignore` | 忽略 `__pycache__`、`*.ipk`、`.audit/` 等 |
 | `git rm --cached package/vyoscli.zip` | 陈旧构建产物，已从仓库移除 |
 | `Makefile` 安装改用 `$(wildcard .../*.py)` | 以后加模块不用再改 Makefile |
@@ -117,6 +117,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 63 | 没有证书/私钥存储，TLS/VPN 无凭据可用 | 新增 `pki`（ca/certificate/key-pair/dh），证书/私钥写入 JSON 并落盘到 `/etc/vyoscli/pki/<kind>/<name>.{crt,key,pub,pem}`，私钥 0600，删除配置时清理文件；真机验证文件生成/权限/删除。ACME 与 `generate pki` 未做，API 的 TLS 待有证书生成能力后再接 | `config_tree.py` / `config.py:_apply_pki` |
 | 64 | QoS 只有自研的 traffic-policy shaper，结构不对 | 新增 VyOS 风格 `qos policy shaper/limiter/fq-codel/cake` + `qos interface ingress|egress`，渲染为 tc（htb/fq_codel/cake/ingress police）；真机验证 br-lan 上 fq_codel 生效、删除后恢复 noqueue。L2TP/SSTP/OpenConnect 服务器端缺证书生成/配套包，本轮未做 | `config_tree.py` / `config.py:render_qos_commands` / `_apply_qos` |
 | 65 | 没有 IPv6 NAT | 新增 `nat66 source|destination rule`，复用 nat44 渲染器（family=ipv6，`ip6 saddr/daddr`、IPv6 目标加方括号），写入 `inet vyos_nat66`；真机验证 DNAT [2001:db8::10]:80 规则与删除清理。nat64/cgnat 需 Jool/SIIT，OpenWrt 无对应模块，记录为不可行 | `config_tree.py` / `config.py:render_nat_nft` / `_apply_nat66` |
+| 66 | 没有负载均衡 | 新增 `load-balancing haproxy`（global-parameters max-connections、service frontend、backend server），生成 `/etc/haproxy.cfg` 并先 `haproxy -c` 校验，失败回滚；首次改写前备份原配置，清空后还原。真机验证监听 127.0.0.1:18080、删除后端口关闭、原 cfg md5 恢复 | `config_tree.py` / `config.py:render_haproxy_cfg` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示
