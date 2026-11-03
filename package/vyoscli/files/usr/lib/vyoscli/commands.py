@@ -361,32 +361,7 @@ def build_tree(store: Any) -> CommandTree:
         # interface bridge br0 port ethX
         br = Node(name="bridge", help="Bridge device")
         if_root.add(br)
-        br_tpl = Node(name="*", help="Per-bridge")
-        br_tpl.add(Node(name="address", help="IP address/prefix",
-                        value_type="ipv4net", action=_cfg_noop))
-        br_tpl.add(Node(name="description", help="Description", value_type="str", action=_cfg_noop))
-        br_tpl.add(Node(name="member", help="Bridge member interfaces",
-                        value_type="str", action=_cfg_noop))
-        br_tpl.add(Node(name="mac", help="MAC address", value_type="str", action=_cfg_noop))
-        br_tpl.add(Node(name="mtu", help="MTU (default 1500)", value_type="int", action=_cfg_noop))
-        br_tpl.add(Node(name="disable", help="Administratively disable", value_type="bool", action=_cfg_noop))
-        br_tpl.add(Node(name="vrf", help="VRF instance name", value_type="str", action=_cfg_noop))
-        br_tpl.add(Node(name="enable-vlan", help="Enable VLAN aware bridge",
-                        value_type="bool", action=_cfg_noop))
-        br_tpl.add(Node(name="stp", help="Enable spanning tree protocol",
-                        value_type="bool", action=_cfg_noop))
-        br_tpl.add(Node(name="priority", help="Bridge priority (default 32768)",
-                        value_type="int", action=_cfg_noop))
-        br_tpl.add(Node(name="forwarding-delay", help="Forwarding delay (default 14)",
-                        value_type="int", action=_cfg_noop))
-        br_tpl.add(Node(name="hello-time", help="Hello time (default 2)",
-                        value_type="int", action=_cfg_noop))
-        br_tpl.add(Node(name="max-age", help="Max age (default 20)",
-                        value_type="int", action=_cfg_noop))
-        br_tpl.add(Node(name="aging", help="MAC aging interval (default 300)",
-                        value_type="int", action=_cfg_noop))
-        br_tpl.add(Node(name="mac-rebinding", help="Enable transparent bridge (bump-in-the-wire)",
-                        value_type="bool", action=_cfg_noop))
+        br_tpl = schema.template(schema.BRIDGE, "Per-bridge", _cfg_noop)
         # vlan sub-tree
         vlan = Node(name="vlan", help="VLAN membership", action=_cfg_noop)
         br_tpl.add(vlan)
@@ -457,23 +432,7 @@ def build_tree(store: Any) -> CommandTree:
         # interfaces tunnel tun0 ...
         tn = Node(name="tunnel", help="Tunnel interfaces (GRE/IPIP/SIT/IP6IP6)")
         if_root.add(tn)
-        tn_tpl = Node(name="*", help="Per-tunnel")
-        tn_tpl.add(Node(name="encapsulation", help="gre | ipip | sit | ip6ip6", value_type="str", action=_cfg_noop))
-        tn_tpl.add(Node(name="source-address", help="Source outer IP", value_type="ipv4", action=_cfg_noop))
-        tn_tpl.add(Node(name="source-interface", help="Source interface", value_type="str", action=_cfg_noop))
-        tn_tpl.add(Node(name="remote", help="Tunnel remote address", value_type="ipv4", action=_cfg_noop))
-        # Legacy aliases: configs written by 0.1.0 use local-ip/remote-ip, and
-        # `show configuration commands` must stay replayable.
-        tn_tpl.add(Node(name="local-ip", help="Source outer IP (legacy alias)",
-                        value_type="ipv4", action=_cfg_noop))
-        tn_tpl.add(Node(name="remote-ip", help="Tunnel remote address (legacy alias)",
-                        value_type="ipv4", action=_cfg_noop))
-        tn_tpl.add(Node(name="address", help="Inner tunnel IPv4/prefix",
-                        value_type="ipv4net", action=_cfg_noop))
-        tn_tpl.add(Node(name="description", help="Description", value_type="str", action=_cfg_noop))
-        tn_tpl.add(Node(name="mtu", help="MTU (default 1476)", value_type="int", action=_cfg_noop))
-        tn_tpl.add(Node(name="disable", help="Administratively disable", value_type="bool", action=_cfg_noop))
-        tn_tpl.add(Node(name="vrf", help="VRF instance name", value_type="str", action=_cfg_noop))
+        tn_tpl = schema.template(schema.TUNNEL, "Per-tunnel", _cfg_noop)
         def _existing_tn(store=store):
             try:
                 return list((store.candidate.get("interfaces", {}).get("tunnel", {}) or {}).keys())
@@ -485,24 +444,14 @@ def build_tree(store: Any) -> CommandTree:
         # interfaces loopback lo ...
         lb = Node(name="loopback", help="Loopback interface")
         if_root.add(lb)
-        lb_tpl = Node(name="*", help="Per-loopback")
-        lb_tpl.add(Node(name="address", help="IP address/prefix",
-                        value_type="ipv4net", action=_cfg_noop))
-        lb_tpl.add(Node(name="description", help="Description", value_type="str", action=_cfg_noop))
+        lb_tpl = schema.template(schema.LOOPBACK, "Per-loopback", _cfg_noop)
         lb.dynamic = lambda: ["lo"]
         lb._dyn_template = lb_tpl
 
         # interfaces dummy dum0 ...
         dm = Node(name="dummy", help="Dummy interface")
         if_root.add(dm)
-        dm_tpl = Node(name="*", help="Per-dummy")
-        dm_tpl.add(Node(name="address", help="IP address/prefix",
-                        value_type="ipv4net", action=_cfg_noop))
-        dm_tpl.add(Node(name="description", help="Description", value_type="str", action=_cfg_noop))
-        dm_tpl.add(Node(name="mtu", help="MTU (default 1500)", value_type="int", action=_cfg_noop))
-        dm_tpl.add(Node(name="mac", help="MAC address", value_type="str", action=_cfg_noop))
-        dm_tpl.add(Node(name="disable", help="Administratively disable", value_type="bool", action=_cfg_noop))
-        dm_tpl.add(Node(name="vrf", help="VRF instance name", value_type="str", action=_cfg_noop))
+        dm_tpl = schema.template(schema.DUMMY, "Per-dummy", _cfg_noop)
         def _existing_dm(store=store):
             try:
                 return list((store.candidate.get("interfaces", {}).get("dummy", {}) or {}).keys())
@@ -514,13 +463,7 @@ def build_tree(store: Any) -> CommandTree:
         # interfaces vxlan vxlan0 ...
         vx = Node(name="vxlan", help="VXLAN tunnel")
         if_root.add(vx)
-        vx_tpl = Node(name="*", help="Per-vxlan")
-        vx_tpl.add(Node(name="vni", help="VXLAN Network Identifier (1-16777215)",
-                        value_type="str", action=_cfg_noop))
-        vx_tpl.add(Node(name="local-ip", help="Local outer IPv4", value_type="ipv4", action=_cfg_noop))
-        vx_tpl.add(Node(name="remote-ip", help="Remote outer IPv4", value_type="ipv4", action=_cfg_noop))
-        vx_tpl.add(Node(name="address", help="Inner tunnel IPv4/prefix",
-                        value_type="ipv4net", action=_cfg_noop))
+        vx_tpl = schema.template(schema.VXLAN, "Per-vxlan", _cfg_noop)
         def _existing_vx(store=store):
             try:
                 return list((store.candidate.get("interfaces", {}).get("vxlan", {}) or {}).keys())

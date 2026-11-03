@@ -85,6 +85,30 @@ class SchemaTest(unittest.TestCase):
             with self.subTest(path=spec.path):
                 self.assertIsInstance(cur, list)
 
+    TEMPLATE_CMD = {
+        "bridge": "interfaces bridge br9",
+        "tunnel": "interfaces tunnel tun9",
+        "loopback": "interfaces loopback lo",
+        "dummy": "interfaces dummy dum9",
+        "vxlan": "interfaces vxlan vx9",
+    }
+
+    def test_every_template_spec_resolves(self):
+        for group, specs in schema.TEMPLATES.items():
+            prefix = self.TEMPLATE_CMD[group]
+            for spec in specs:
+                with self.subTest(group=group, path=spec.path):
+                    raw = SAMPLE[spec.type]
+                    expected = coerce_value(spec.type, raw)
+                    errs = cfg_errors(self.cli, f"set {prefix} {spec.path} {raw}")
+                    self.assertEqual(errs, [], f"{prefix} {spec.path}")
+                    path = prefix.split() + spec.path.split()
+                    stored = self.cli.store.get(path)
+                    if isinstance(stored, list):
+                        self.assertIn(expected, stored)
+                    else:
+                        self.assertEqual(stored, expected)
+
     def test_repeatable_specs_match_default_lists(self):
         from vyoscli.config import DEFAULT_RUNNING
         for spec in schema.SYSTEM:

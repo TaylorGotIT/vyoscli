@@ -83,6 +83,68 @@ SERVICE: Tuple[Spec, ...] = (
     Spec("sqm qdisc", "str", "cake / fq_codel"),
 )
 
+BRIDGE: Tuple[Spec, ...] = (
+    Spec("address", "ipv4net", "IP address/prefix", repeatable=True),
+    Spec("description", "str", "Description"),
+    Spec("member", "str", "Bridge member interfaces", repeatable=True),
+    Spec("mac", "str", "MAC address"),
+    Spec("mtu", "int", "MTU (default 1500)"),
+    Spec("disable", "bool", "Administratively disable"),
+    Spec("vrf", "str", "VRF instance name"),
+    Spec("enable-vlan", "bool", "Enable VLAN aware bridge"),
+    Spec("stp", "bool", "Enable spanning tree protocol"),
+    Spec("priority", "int", "Bridge priority (default 32768)"),
+    Spec("forwarding-delay", "int", "Forwarding delay (default 14)"),
+    Spec("hello-time", "int", "Hello time (default 2)"),
+    Spec("max-age", "int", "Max age (default 20)"),
+    Spec("aging", "int", "MAC aging interval (default 300)"),
+    Spec("mac-rebinding", "bool",
+         "Enable transparent bridge (bump-in-the-wire)"),
+)
+
+TUNNEL: Tuple[Spec, ...] = (
+    Spec("encapsulation", "str", "gre | ipip | sit | ip6ip6"),
+    Spec("source-address", "ipv4", "Source outer IP"),
+    Spec("source-interface", "str", "Source interface"),
+    Spec("remote", "ipv4", "Tunnel remote address"),
+    Spec("local-ip", "ipv4", "Source outer IP (legacy alias)"),
+    Spec("remote-ip", "ipv4", "Tunnel remote address (legacy alias)"),
+    Spec("address", "ipv4net", "Inner tunnel IPv4/prefix", repeatable=True),
+    Spec("description", "str", "Description"),
+    Spec("mtu", "int", "MTU (default 1476)"),
+    Spec("disable", "bool", "Administratively disable"),
+    Spec("vrf", "str", "VRF instance name"),
+)
+
+LOOPBACK: Tuple[Spec, ...] = (
+    Spec("address", "ipv4net", "IP address/prefix", repeatable=True),
+    Spec("description", "str", "Description"),
+)
+
+DUMMY: Tuple[Spec, ...] = (
+    Spec("address", "ipv4net", "IP address/prefix", repeatable=True),
+    Spec("description", "str", "Description"),
+    Spec("mtu", "int", "MTU (default 1500)"),
+    Spec("mac", "str", "MAC address"),
+    Spec("disable", "bool", "Administratively disable"),
+    Spec("vrf", "str", "VRF instance name"),
+)
+
+VXLAN: Tuple[Spec, ...] = (
+    Spec("vni", "str", "VXLAN Network Identifier (1-16777215)"),
+    Spec("local-ip", "ipv4", "Local outer IPv4"),
+    Spec("remote-ip", "ipv4", "Remote outer IPv4"),
+    Spec("address", "ipv4net", "Inner tunnel IPv4/prefix"),
+)
+
+TEMPLATES = {
+    "bridge": BRIDGE,
+    "tunnel": TUNNEL,
+    "loopback": LOOPBACK,
+    "dummy": DUMMY,
+    "vxlan": VXLAN,
+}
+
 GROUPS = {
     "system": SYSTEM,
     "ethernet": ETHERNET,

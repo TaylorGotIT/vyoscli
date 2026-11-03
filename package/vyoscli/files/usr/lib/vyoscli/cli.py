@@ -139,13 +139,18 @@ class Cli:
         if node.dynamic is not None and callable(node.dynamic):
             tpl = getattr(node, "_dyn_template", None)
             tpl_help = (tpl.help if tpl is not None else "") or "(dynamic)"
-            for dyn in node.dynamic():
+            candidates = node.dynamic()
+            for dyn in candidates:
                 out.append((dyn, tpl_help))
+            if not candidates:
+                # e.g. `set interfaces bridge ?` before any bridge exists
+                out.append(("<name>", tpl_help))
         if node.value_type and not node.children:
             hint = VALUE_TYPES.get(node.value_type, "<value>")
             out.append((hint, "value"))
         # If current node is already a runnable leaf, suggest <Enter>.
-        if node.action is not None and not node.children:
+        if (node.action is not None and not node.children
+                and node.dynamic is None):
             out.append(("<Enter>", "Execute the current command"))
         return out
 
