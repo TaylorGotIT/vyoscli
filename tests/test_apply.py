@@ -370,6 +370,20 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn("drop", text)
         self.assertIn(["nft", "-f", path], self.fake.calls)
 
+    def test_firewall_global_options_apply_sysctls_and_state(self):
+        cfg(self.cli,
+            "set firewall global-options syn-cookies true",
+            "set firewall global-options state-policy established ACCEPT",
+            "set firewall global-options state-policy invalid DROP",
+            "set firewall ipv4 input filter rule 10 action drop")
+        self.commit()
+        text = open(os.path.join(self.cli.store.base_dir, "firewall.nft"),
+                    encoding="utf-8").read()
+        self.assertIn("ct state established,related accept", text)
+        self.assertIn("ct state invalid drop", text)
+        self.assertIn(["sysctl", "-w", "net.ipv4.tcp_syncookies=1"],
+                      self.fake.calls)
+
     def test_removing_vyos_firewall_deletes_table(self):
         cfg(self.cli, "set firewall ipv4 input filter rule 10 action drop")
         self.commit()

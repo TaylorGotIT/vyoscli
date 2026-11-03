@@ -246,9 +246,17 @@ def render_firewall_nft(fw: Dict[str, Any]) -> str:
                                            "accept"))
                 chains[direction].append("    " + " ".join(parts))
 
+    state = (fw.get("global-options") or {}).get("state-policy") or {}
+    state_rules: List[str] = []
+    if str(state.get("established", "")).upper() == "ACCEPT":
+        state_rules.append("    ct state established,related accept")
+    if str(state.get("invalid", "")).upper() == "DROP":
+        state_rules.append("    ct state invalid drop")
+
     for direction, body in chains.items():
         lines.append(f"  chain {direction} {{ type filter hook {direction} "
                      "priority -10; policy accept;")
+        lines.extend(state_rules)
         lines.extend(body)
         lines.append("  }")
     lines.append("}")
@@ -1188,7 +1196,29 @@ class ConfigStore:
         if proc.returncode != 0:
             return [f"firewall apply failed: {(proc.stderr or '').strip()[:200]}"]
         count = text.count("meta nfproto")
-        return [f"firewall: applied {count} VyOS-style rule(s) via nft"]
+        opts = new_fw.get("global-options") or {}
+        sysctls = (
+            ("all-ping", "net.ipv4.icmp_echo_ignore_all",
+             lambda v: "0" if v else "1"),
+            ("broadcast-ping", "net.ipv4.icmp_echo_ignore_broadcasts",
+             lambda v: "0" if v else "1"),
+            ("syn-cookies", "net.ipv4.tcp_syncookies",
+             lambda v: "1" if v else "0"),
+            ("log-martians", "net.ipv4.conf.all.log_martians",
+             lambda v: "1" if v else "0"),
+        )
+        applied = 0
+        for key, name, conv in sysctls:
+            if key not in opts:
+                continue
+            try:
+                subprocess.run(["sysctl", "-w", f"{name}={conv(bool(opts[key]))}"],
+                               capture_output=True, text=True, timeout=5)
+                applied += 1
+            except (OSError, subprocess.SubprocessError):
+                pass
+        extra = f", {applied} sysctl(s)" if applied else ""
+        return [f"firewall: applied {count} VyOS-style rule(s) via nft{extra}"]
 
     def _apply_nat(self, old, new):
         """VyOS-style NAT (source/destination) -> nft table inet vyos_nat."""
