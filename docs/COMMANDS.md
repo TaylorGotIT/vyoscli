@@ -192,11 +192,27 @@
 
 | 命令 | 说明 | 示例 |
 |---|---|---|
-| `nat destination rule <id> in-interface` | Incoming interface (e.g. wan) | `nat destination rule <id> in-interface text` |
-| `nat destination rule <id> port` | External port | `nat destination rule <id> port 8080` |
-| `nat destination rule <id> to` | Internal IP to forward to | `nat destination rule <id> to 192.0.2.1` |
-| `nat source rule <id> out-interface` | Outgoing interface (e.g. wan) | `nat source rule <id> out-interface text` |
-| `nat source rule <id> translation` | Translation type (masquerade) | `nat source rule <id> translation text` |
+| `nat destination rule <id> destination address` | Destination prefix | `nat destination rule <id> destination address 192.0.2.1/24` |
+| `nat destination rule <id> destination port` | Destination port | `nat destination rule <id> destination port 8080` |
+| `nat destination rule <id> disable` | Disable this rule | `nat destination rule <id> disable true` |
+| `nat destination rule <id> hairpin` | Also match traffic from internal clients | `nat destination rule <id> hairpin true` |
+| `nat destination rule <id> inbound-interface` | Incoming interface (e.g. eth0) | `nat destination rule <id> inbound-interface text` |
+| `nat destination rule <id> log` | Log matching packets | `nat destination rule <id> log true` |
+| `nat destination rule <id> protocol` | tcp \| udp \| any | `nat destination rule <id> protocol text` |
+| `nat destination rule <id> source address` | Source prefix | `nat destination rule <id> source address 192.0.2.1/24` |
+| `nat destination rule <id> source port` | Source port | `nat destination rule <id> source port 8080` |
+| `nat destination rule <id> translation address` | Internal address to forward to | `nat destination rule <id> translation address 192.0.2.1` |
+| `nat destination rule <id> translation port` | Translated destination port | `nat destination rule <id> translation port 8080` |
+| `nat source rule <id> destination address` | Destination prefix | `nat source rule <id> destination address 192.0.2.1/24` |
+| `nat source rule <id> destination port` | Destination port | `nat source rule <id> destination port 8080` |
+| `nat source rule <id> disable` | Disable this rule | `nat source rule <id> disable true` |
+| `nat source rule <id> log` | Log matching packets | `nat source rule <id> log true` |
+| `nat source rule <id> out-interface` | Outgoing interface (e.g. eth1) | `nat source rule <id> out-interface text` |
+| `nat source rule <id> protocol` | tcp \| udp \| any | `nat source rule <id> protocol text` |
+| `nat source rule <id> source address` | Source prefix | `nat source rule <id> source address 192.0.2.1/24` |
+| `nat source rule <id> source port` | Source port | `nat source rule <id> source port 8080` |
+| `nat source rule <id> translation address` | masquerade or an IPv4 address | `nat source rule <id> translation address text` |
+| `nat source rule <id> translation port` | Translated source port | `nat source rule <id> translation port 8080` |
 
 ## set policy
 

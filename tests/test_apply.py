@@ -300,32 +300,41 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn(["uci", "delete", "network.wg9"], self.fake.calls)
         self.assertIn(["ip", "link", "del", "wg9"], self.fake.calls)
 
-    def test_dnat_uses_rule_level_ids_and_fw4_options(self):
+    def test_dnat_renders_to_nft(self):
         cfg(self.cli,
-            "set nat destination rule 10 port 65001",
-            "set nat destination rule 10 to 192.0.2.9")
+            "set nat destination rule 10 protocol tcp",
+            "set nat destination rule 10 destination port 8080",
+            "set nat destination rule 10 translation address 192.168.1.10",
+            "set nat destination rule 10 translation port 80",
+            "set nat destination rule 10 hairpin true")
         self.commit()
-        calls = self.fake.uci_calls()
-        self.assertIn(["uci", "set", "firewall.vyos_nat_dst_10=redirect"], calls)
-        self.assertIn(["uci", "set", "firewall.vyos_nat_dst_10.src_dport=65001"], calls)
-        self.assertIn(["uci", "set", "firewall.vyos_nat_dst_10.dest_ip=192.0.2.9"], calls)
-        self.assertNotIn(["uci", "set", "firewall.vyos_nat_dst_rule=redirect"], calls)
+        path = os.path.join(self.cli.store.base_dir, "nat.nft")
+        text = open(path, encoding="utf-8").read()
+        self.assertIn("table inet vyos_nat", text)
+        self.assertIn("tcp dport 8080", text)
+        self.assertIn("dnat to 192.168.1.10:80", text)
+        self.assertEqual(text.count("dnat to"), 2)   # + hairpin copy
+        self.assertIn(["nft", "-f", path], self.fake.calls)
 
-    def test_snat_maps_rule_id(self):
-        cfg(self.cli, "set nat source rule 100 out-interface wan")
+    def test_snat_masquerade_renders_to_nft(self):
+        cfg(self.cli,
+            "set nat source rule 100 out-interface eth1",
+            "set nat source rule 100 source address 192.168.0.0/16",
+            "set nat source rule 100 translation address masquerade")
         self.commit()
-        calls = self.fake.uci_calls()
-        self.assertIn(["uci", "set", "firewall.vyos_nat_src_100=nat"], calls)
-        self.assertIn(["uci", "set", "firewall.vyos_nat_src_100.dest=wan"], calls)
-        self.assertNotIn(["uci", "set", "firewall.vyos_nat_src_rule=nat"], calls)
+        text = open(os.path.join(self.cli.store.base_dir, "nat.nft"),
+                    encoding="utf-8").read()
+        self.assertIn("oifname \"eth1\"", text)
+        self.assertIn("192.168.0.0/16", text)
+        self.assertIn("masquerade", text)
 
-    def test_empty_nat_rule_dict_creates_no_section(self):
-        cfg(self.cli, "set nat destination rule 10 port 65001")
+    def test_removing_nat_deletes_table(self):
+        cfg(self.cli, "set nat source rule 100 translation address masquerade")
         self.commit()
-        cfg(self.cli, "delete nat destination rule 10")
-        self.commit()          # JSON keeps nat.destination.rule = {}
-        self.assertNotIn(["uci", "set", "firewall.vyos_nat_dst_rule=redirect"],
-                         self.fake.uci_calls())
+        cfg(self.cli, "delete nat source rule 100")
+        self.commit()
+        self.assertIn(["nft", "delete", "table", "inet", "vyos_nat"],
+                      self.fake.calls)
 
     def test_removing_wireless_interface_deletes_its_section(self):
         real_exists = os.path.exists

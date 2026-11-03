@@ -16,7 +16,7 @@
 |---|---|---|---|
 | `interfaces` | 19 种接口 | 11 种（ethernet/bridge/wireguard/openvpn/tunnel/loopback/dummy/vxlan/wireless/lan/wan） | 🟡 缺 bonding、pppoe、macsec、geneve、vti、wwan 等 |
 | `firewall` | ipv4/ipv6/bridge/zone/group/global-options/flowtable | ipv4/ipv6 input/forward/output filter rule + group（nft 表 `vyos_fw`）；zone/forwarding/rule 保留 | 🟡 方向规则与 group 已可用，缺 named rule-set/flowtable/bridge，global-options 仅存 JSON |
-| `nat` | nat44 全量、nat64、nat66、cgnat | source/destination 各一条极简规则 | 🟡 只够做 masquerade 和简单端口转发 |
+| `nat` | nat44 全量、nat64、nat66、cgnat | nat44 匹配/转换、静态 1:1、hairpin（nft `vyos_nat`） | 🟡 nat44 已完整，nat66/nat64/cgnat 未做 |
 | `policy` | access-list/prefix-list/route/route-map/as-path/community/… | community-list、route-redirect | ❌ 缺大部分 |
 | `protocols` | 静态、BGP、OSPF、ISIS、RIP、BFD、MPLS、SR、PIM… | static、bgp 子集、route-map 子集 | 🟡 能跑简单 BGP/静态路由 |
 | `service` | 22 类服务 | 10 类（含 OpenWrt 特有：sqm/adguard/smartdns/kcp） | 🟡 缺 NTP/DNS/HTTPS API/SNMP/LLDP/DHCP-relay 等 |
@@ -82,9 +82,10 @@ set nat destination rule 10 translation port 80
 set nat destination rule 10 protocol tcp
 ```
 
-我们只有 `source rule <n> out-interface/translation` 和
-`destination rule <n> in-interface/port/to`，缺少地址/端口/协议匹配、
-translation port、log、exclude、静态 1:1、nat66/nat64/cgnat。
+已完成：source/destination 的地址、端口、协议匹配，`translation address`/`port`、
+`log`、`disable`、`hairpin`、静态 1:1（不带 port 的 dnat），渲染到
+`inet vyos_nat`（priority dstnat-10 / srcnat-10，先于 fw4 的 NAT）。
+仍未做：exclude、nat66/nat64/cgnat。
 
 ### 3. policy：路由策略几乎空白
 

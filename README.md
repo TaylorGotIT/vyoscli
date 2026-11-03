@@ -255,6 +255,7 @@ python3 scripts/make-ipk.py --minimal-deps
 - IPsec 的 remote-access/证书模式、wireless（需射频硬件）未做端到端验证；
 - commit 不是原子操作：某一段下发失败时其余段仍会执行，并返回成功；
 - VyOS 风格防火墙（`firewall ipv4/ipv6 ...`）渲染到 `inet vyos_fw`（priority -10）：它可以提前 drop/reject，`accept` 仍会继续走 OpenWrt fw4 的 zone 策略；
+- VyOS 风格 NAT（`nat source/destination rule`）渲染到 `inet vyos_nat`（dstnat-10/srcnat-10），会先于 fw4 的 zone masquerade 生效；
 - 动态节点在嵌套层级（如 `wireguard … peer`）只给 `<name>` 提示，不列现有实例。
 
 后续规划见 [docs/AUDIT.md](docs/AUDIT.md) 的“建议的演进方案”。

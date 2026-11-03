@@ -94,8 +94,6 @@ class SchemaTest(unittest.TestCase):
         "firewall-zone": "firewall zone z9",
         "firewall-forwarding": "firewall forwarding f9",
         "firewall-rule": "firewall rule 900",
-        "nat-source": "nat source rule 90",
-        "nat-destination": "nat destination rule 90",
     }
 
     def test_every_template_spec_resolves(self):

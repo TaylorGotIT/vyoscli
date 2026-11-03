@@ -176,8 +176,6 @@ TEMPLATES = {
     "firewall-zone": FIREWALL_ZONE,
     "firewall-forwarding": FIREWALL_FORWARDING,
     "firewall-rule": FIREWALL_RULE,
-    "nat-source": NAT_SOURCE_RULE,
-    "nat-destination": NAT_DEST_RULE,
 }
 
 GROUPS = {

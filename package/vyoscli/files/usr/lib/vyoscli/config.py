@@ -256,6 +256,94 @@ def render_firewall_nft(fw: Dict[str, Any]) -> str:
 
 
 
+def render_nat_nft(nat: Dict[str, Any]) -> str:
+    """Render nat.source/destination rules into an inet vyos_nat table.
+
+    The table sits at priority dstnat-10 / srcnat-10, i.e. before fw4's own
+    NAT, so matched traffic uses these rules instead of the zone masquerade.
+    """
+    lines = ["table inet vyos_nat {"]
+    prerouting: List[str] = []
+    postrouting: List[str] = []
+
+    def match_parts(rule: Dict[str, Any]) -> List[str]:
+        parts = ["meta nfproto ipv4"]
+        src = rule.get("source") or {}
+        dst = rule.get("destination") or {}
+        if src.get("address"):
+            parts.append(f"ip saddr {src['address']}")
+        if dst.get("address"):
+            parts.append(f"ip daddr {dst['address']}")
+        proto = str(rule.get("protocol") or "").lower()
+        l4 = proto if proto in ("tcp", "udp") else "tcp"
+        if src.get("port"):
+            parts.append(f"{l4} sport {src['port']}")
+        if dst.get("port"):
+            parts.append(f"{l4} dport {dst['port']}")
+        if rule.get("inbound-interface"):
+            parts.append(f'iifname "{rule["inbound-interface"]}"')
+        if rule.get("out-interface"):
+            parts.append(f'oifname "{rule["out-interface"]}"')
+        return parts
+
+    def rules_of(holder: Dict[str, Any]) -> Dict[str, Any]:
+        rules = (holder or {}).get("rule")
+        return rules if isinstance(rules, dict) else (holder or {})
+
+    for rid, rule in sorted(rules_of(nat.get("source") or {}).items()):
+        if not isinstance(rule, dict) or rule.get("disable"):
+            continue
+        translation = rule.get("translation")
+        if isinstance(translation, dict):
+            address = translation.get("address")
+            port = translation.get("port")
+        else:
+            address, port = translation, None
+        parts = match_parts(rule)
+        if rule.get("log"):
+            parts.append(f'log prefix "vyos-nat-src-{rid} "')
+        if not address or str(address).lower() == "masquerade":
+            parts.append("masquerade")
+        else:
+            target = str(address) + (f":{port}" if port else "")
+            parts.append(f"snat to {target}")
+        postrouting.append("    " + " ".join(parts))
+
+    for rid, rule in sorted(rules_of(nat.get("destination") or {}).items()):
+        if not isinstance(rule, dict) or rule.get("disable"):
+            continue
+        translation = rule.get("translation")
+        if isinstance(translation, dict):
+            address = translation.get("address")
+            port = translation.get("port")
+        else:
+            address = translation or rule.get("to")
+            port = rule.get("port")
+        if not address:
+            continue
+        base = match_parts(rule)
+        if rule.get("log"):
+            base.append(f'log prefix "vyos-nat-dst-{rid} "')
+        target = str(address) + (f":{port}" if port else "")
+        dnat = base + [f"dnat to {target}"]
+        prerouting.append("    " + " ".join(dnat))
+        if rule.get("hairpin"):
+            hairpin_parts = [p for p in base if not p.startswith("iifname")]
+            prerouting.append("    " + " ".join(
+                hairpin_parts + [f"dnat to {target}"]))
+
+    lines.append("  chain prerouting { type nat hook prerouting "
+                 "priority dstnat - 10; policy accept;")
+    lines.extend(prerouting)
+    lines.append("  }")
+    lines.append("  chain postrouting { type nat hook postrouting "
+                 "priority srcnat - 10; policy accept;")
+    lines.extend(postrouting)
+    lines.append("  }")
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
 class ConfigStore:
     def __init__(self, base_dir: str = "/etc/vyoscli") -> None:
         self.base_dir = base_dir
@@ -1103,66 +1191,42 @@ class ConfigStore:
         return [f"firewall: applied {count} VyOS-style rule(s) via nft"]
 
     def _apply_nat(self, old, new):
+        """VyOS-style NAT (source/destination) -> nft table inet vyos_nat."""
         old_n = old.get("nat") or {}
         new_n = new.get("nat") or {}
         if old_n == new_n:
             return []
-        notes = []
+        path = os.path.join(self.base_dir, "nat.nft")
+
+        def has_rules(holder):
+            rules = (holder or {}).get("rule")
+            return bool(rules) if isinstance(rules, dict) else bool(holder)
+
+        if not (has_rules(new_n.get("source"))
+                or has_rules(new_n.get("destination"))):
+            try:
+                subprocess.run(["nft", "delete", "table", "inet", "vyos_nat"],
+                               capture_output=True, text=True, timeout=10)
+            except (OSError, subprocess.SubprocessError):
+                pass
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            return ["nat: rules removed"]
+        text = render_nat_nft(new_n)
+        os.makedirs(self.base_dir, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
         try:
-            # wipe old vyos nat sections
-            out = self._uci("show", "firewall").stdout
-            for line in out.splitlines():
-                if line.startswith("firewall.vyos_nat_"):
-                    sec = line.split(".")[1].split("=")[0]
-                    try:
-                        self._uci("delete", f"firewall.{sec}")
-                    except subprocess.CalledProcessError:
-                        pass
-            # Rule ids live one level down: nat.source.rule.<id> /
-            # nat.destination.rule.<id> (the shape the command tree writes).
-            # NOTE: no `or` fallback here — an empty {"rule": {}} must stay
-            # empty, otherwise "rule" itself is treated as a rule id.
-            src_holder = new_n.get("source") or {}
-            dst_holder = new_n.get("destination") or {}
-            source_rules = (src_holder["rule"]
-                            if isinstance(src_holder.get("rule"), dict)
-                            else src_holder)
-            dest_rules = (dst_holder["rule"]
-                          if isinstance(dst_holder.get("rule"), dict)
-                          else dst_holder)
-            # source NAT
-            for rid, rule in source_rules.items():
-                if not isinstance(rule, dict):
-                    continue
-                s = f"vyos_nat_src_{rid}"
-                self._uci("set", f"firewall.{s}=nat")
-                self._uci("set", f"firewall.{s}.name=vyos_src_{rid}")
-                self._uci("set", f"firewall.{s}.target=MASQUERADE")
-                self._uci("set", f"firewall.{s}.src=lan")
-                if rule.get("out-interface"):
-                    # fw4 matches zones, not devices; "wan" is the usual zone.
-                    self._uci("set", f"firewall.{s}.dest={rule['out-interface']}")
-            # destination NAT (port forward)
-            for rid, rule in dest_rules.items():
-                if not isinstance(rule, dict):
-                    continue
-                s = f"vyos_nat_dst_{rid}"
-                self._uci("set", f"firewall.{s}=redirect")
-                self._uci("set", f"firewall.{s}.name=vyos_dst_{rid}")
-                self._uci("set", f"firewall.{s}.target=DNAT")
-                self._uci("set", f"firewall.{s}.src=wan")
-                if rule.get("port"):
-                    self._uci("set", f"firewall.{s}.src_dport={rule['port']}")
-                if rule.get("to"):
-                    self._uci("set", f"firewall.{s}.dest_ip={rule['to']}")
-            self._uci("commit", "firewall")
-            subprocess.run(["/etc/init.d/firewall", "reload"],
-                           capture_output=True, text=True, timeout=15)
-            notes.append(f"nat: {len(source_rules)} source, "
-                         f"{len(dest_rules)} dst rules")
-        except Exception as e:
-            notes.append(f"nat apply failed: {e}")
-        return notes
+            proc = subprocess.run(["nft", "-f", path], capture_output=True,
+                                  text=True, timeout=15)
+        except (OSError, subprocess.SubprocessError) as e:
+            return [f"nat: nft unavailable ({e}); rules kept in {path}"]
+        if proc.returncode != 0:
+            return [f"nat apply failed: {(proc.stderr or '').strip()[:200]}"]
+        return [f"nat: applied {text.count('masquerade') + text.count('dnat to')}"
+                " VyOS-style rule(s) via nft"]
 
     def _sections_of_type(self, config: str, sec_type: str) -> List[str]:
         """Section names of a given UCI type, e.g. wireguard_wg0 peers."""
