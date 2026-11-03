@@ -31,8 +31,13 @@ def _rollback_wait(seconds: int, snapshot: str) -> None:
 
 if __name__ == "__main__":
     args = sys.argv[1:]
+    etc = os.environ.get("VYOSCLI_ETC", "/etc/vyoscli")
     if "--rollback-wait" in args:
         i = args.index("--rollback-wait")
         _rollback_wait(int(args[i + 1]), args[i + 2])
+    elif "--sync" in args:
+        # Boot-time reconcile: no-op when the last commit's UCI sections still
+        # match, otherwise re-apply just the drifted ones.
+        print(ConfigStore(etc).sync())
     else:
         main()

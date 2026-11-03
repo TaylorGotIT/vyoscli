@@ -2,13 +2,17 @@
 # Copyright (C) 2026 vyoscli
 #
 # vyoscli has no long-running daemon: it is an interactive CLI plus a config
-# store. This init script therefore only guarantees the config directory
-# exists at boot; `commit` is what drives UCI/netifd.
+# store. At boot we (a) make sure the config directory exists and (b) run a
+# reconcile pass in the background: it is a no-op when the last commit's UCI
+# sections still match, and re-applies the drifted ones after a config restore.
 START=99
 STOP=10
 
 boot() {
 	[ -d /etc/vyoscli ] || mkdir -p /etc/vyoscli
+	if [ -x /usr/bin/vyoscli ]; then
+		( /usr/bin/vyoscli --sync >/tmp/vyoscli-boot.log 2>&1 & )
+	fi
 }
 
 start() {

@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from harness import cfg, cfg_errors, completions, load_json, new_cli, op  # noqa: E402
+from harness import (LIB, cfg, cfg_errors, completions, load_json, new_cli,  # noqa: E402
+                     new_store_dir, op)
 
 
 class DefaultsTest(unittest.TestCase):
@@ -198,6 +200,15 @@ class CompletionTest(unittest.TestCase):
         self.cli.ctx.cfg_path = []
         pairs = dict(completions(self.cli, "set interfaces ethernet eth0 address "))
         self.assertEqual(pairs.get("a.b.c.d/prefix"), "value")
+
+
+class EntrypointTest(unittest.TestCase):
+    def test_sync_entrypoint_reports_without_uci(self):
+        env = dict(os.environ, PYTHONPATH=LIB, VYOSCLI_ETC=new_store_dir())
+        proc = subprocess.run([sys.executable, "-m", "vyoscli", "--sync"],
+                              capture_output=True, text=True, env=env,
+                              timeout=60)
+        self.assertIn("sync: no uci", proc.stdout)
 
 
 class OpModeTest(unittest.TestCase):

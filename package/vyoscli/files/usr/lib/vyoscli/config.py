@@ -781,6 +781,11 @@ class ConfigStore:
             old_ntp = _as_list(old_s.get("ntp"))
             new_ntp = _as_list(new_s.get("ntp"))
             if old_ntp != new_ntp:
+                try:
+                    self._uci("get", "system.ntp")
+                except subprocess.CalledProcessError:
+                    # the whole section may have been removed by hand
+                    self._uci("set", "system.ntp=timeserver")
                 self._uci("set", "system.ntp.enabled=1")
                 self._uci("set", "system.ntp.enable_server=0")
                 try:
@@ -2404,7 +2409,8 @@ class ConfigStore:
         self._touched = {}
         notes = self._apply_all({}, copy.deepcopy(self.running), only=owners)
         self._record_applied()
-        if owners is not None:
+        failed = any("failed" in note for note in notes)
+        if owners is not None and not failed:
             # A "missing" section that the owning step did not recreate is no
             # longer part of the desired config (e.g. the interface was removed
             # from JSON by hand): stop reporting it as drift.

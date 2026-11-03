@@ -42,7 +42,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 变更 | 说明 |
 |---|---|
 | `GUIDE.md` → `docs/GUIDE.md`，`REQUIRED_PACKAGES.md` → `docs/DEPENDENCIES.md` | 文档集中到 `docs/` |
-| 新增 `tests/`（4 个文件、61 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
+| 新增 `tests/`（4 个文件、62 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
 | 新增 `.gitignore` | 忽略 `__pycache__`、`*.ipk`、`.audit/` 等 |
 | `git rm --cached package/vyoscli.zip` | 陈旧构建产物，已从仓库移除 |
 | `Makefile` 安装改用 `$(wildcard .../*.py)` | 以后加模块不用再改 Makefile |
@@ -85,6 +85,8 @@ import vyoscli.cli          ≈ 0.07 s
 | 31 | BGP 通过 UCI `frr.*` 下发，但该固件的 frr 包**没有 /etc/config/frr** | 配置永不生效。改为生成 `/etc/frr/frr.conf` + 打开 `daemons` 的 zebra/bgpd，真机 `vtysh -d bgpd -c "show bgp summary"` 验证 AS65001/邻居/network；community-list 需 `expanded` 语法 | `config.py:render_frr_conf` |
 | 32 | IPsec peer 存在 `vpn.ipsec.site-to-site.peer` 下却没读；`ike=`/`esp=` 写成 group 名；`config setup:` 多冒号；没有 teardown | 真机 `ipsec statusall` 看不到连接。改为按 group 展开算法串、去掉 group 伪 conn、删除时清空 secrets，验证到 `peer-203.0.113.5 ... child: 10.1.0.0/24 === 10.2.0.0/24` | `config.py:_apply_ipsec` |
 | 33 | console-server / wireless 的真实链路 | conserver 真机验证：生成 `conserver.cf` 并启动；本机**无无线硬件**，`wireless` 仍未验证 | `config.py:_apply_console_server` |
+| 34 | 开机时 JSON 与 UCI 没有对账入口 | `init.d` 的 `boot()` 后台执行 `vyoscli --sync`：无漂移时一行日志即结束，有漂移只重放相关 step；真机 `boot` 验证日志 `Sync: no drift`，init 已 enable（S99/K10） | `init.d/vyoscli` / `__main__.py:--sync` |
+| 35 | 整段删除 `system.ntp` 后重建失败；apply 失败时 drift 记录会被误剪 | `uci set system.ntp.enabled` 在 section 不存在时报错，改为先 `uci set system.ntp=timeserver`；`sync` 在有 `failed` note 时不再剪 manifest | `config.py:_apply_system_meta` / `sync` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示
@@ -134,6 +136,7 @@ DOC_DRIFT 里显式承认不支持**，不允许悄悄失效。
 - **漂移检测实测**：commit 后 `show system drift` 无输出；手工 `uci set system.@system[0].hostname` 后报告 `changed system.@system[0]`，恢复后回到无漂移；`applied.json` 为 0600；
 - **sync 实测**：手工改 UCI 的 hostname 后 `show system drift` 报 `changed`，`sync` 输出 `hostname -> OpenWrt` 并把内核/UCI 主机名都拉回，随后 drift 为空；
 - **WireGuard / BGP / IPsec / conserver 实测**：wg 接口+peer（endpoint 拆分）生效；frr 用 frr.conf + daemons 启动，`vtysh` 显示 AS/邻居/network/community-list；strongSwan 生成 peer conn（PSK、隧道子网）并出现在 `ipsec statusall`；conserver 生成配置并启动；设备无无线硬件，wireless 未验证；
+- **开机对账实测**：`/etc/init.d/vyoscli boot` 后台执行 `vyoscli --sync`，无漂移时日志仅一行 `Sync: no drift, nothing to do.`；整段删除 `system.ntp` 后 `show system drift` 报 missing，`sync` 重建 section 并恢复服务器，drift 归零；
 - 包格式：OpenWrt 的 `.ipk` 是 **gzip(tar)**（`./debian-binary` + `control.tar.gz` +
   `data.tar.gz`），不是 Debian ar；`scripts/make-ipk.py` 按此格式生成，`opkg install` 通过。
 

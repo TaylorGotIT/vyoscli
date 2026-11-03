@@ -111,6 +111,8 @@ root@edge-router# commit confirm     # 一切正常，取消定时器
 | `/etc/vyoscli/candidate.json` | 未提交的修改（每条 set/delete 即时落盘） |
 | `/etc/vyoscli/history/<ts>.json` | 每次 commit 前的快照，保留 20 个 |
 | `/etc/vyoscli/applied.json` | 每次 commit 写过的 UCI section 指纹，用于 `show system drift` |
+
+开机时 init.d/vyoscli 会在后台执行一次 yoscli --sync：配置与 UCI 一致时是空操作，配置被恢复/手工改过时只重放漂移的段落。
 | `/etc/vyoscli/rollback.conf` | 存在即表示有挂起的 confirmed-commit 定时器 |
 
 配置文件为 `0600`（内含 WireGuard 私钥、PSK、密码等）。
