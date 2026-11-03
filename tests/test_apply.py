@@ -293,6 +293,33 @@ class CommitBackendTest(unittest.TestCase):
         self.assertNotIn(["uci", "set", "firewall.vyos_nat_dst_rule=redirect"],
                          self.fake.uci_calls())
 
+    def test_removing_wireless_interface_deletes_its_section(self):
+        real_exists = os.path.exists
+        with mock.patch.object(
+                config_mod.os.path, "exists",
+                side_effect=lambda path: path == "/etc/config/wireless"
+                or real_exists(path)):
+            cfg(self.cli,
+                "set interfaces wireless wlan0 ssid home",
+                "set interfaces wireless wlan0 security wpa2",
+                "set interfaces wireless wlan0 passphrase secret123")
+            self.commit()
+            cfg(self.cli, "delete interfaces wireless wlan0")
+            self.commit()
+        self.assertIn(["uci", "delete", "wireless.vyos_wlan0"],
+                      self.fake.uci_calls())
+
+    def test_full_sync_skips_containers(self):
+        cfg(self.cli, "set system host-name sync-test")
+        self.commit()
+        os.remove(self.cli.store.applied_path)
+        called = []
+        with mock.patch.object(self.cli.store, "_apply_containers",
+                               side_effect=lambda old, new: called.append(1) or []):
+            out = self.cli.store.sync()
+        self.assertEqual(called, [])
+        self.assertIn("containers untouched", out)
+
     def test_bridge_uses_device_section(self):
         # `type bridge` on an *interface* makes netifd create "br-<name>",
         # which overflows IFNAMSIZ (br-vyos_br_br100 = 18 chars).

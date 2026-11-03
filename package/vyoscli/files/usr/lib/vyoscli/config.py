@@ -18,6 +18,7 @@ Layout on disk:
 
 from __future__ import annotations
 
+import glob
 import hashlib
 import ipaddress
 import json
@@ -479,7 +480,8 @@ class ConfigStore:
         ]
 
     def _apply_all(self, old: Dict[str, Any], new: Dict[str, Any],
-                   only: Optional[set] = None) -> List[str]:
+                   only: Optional[set] = None,
+                   skip: Optional[set] = None) -> List[str]:
         """按依赖优先级下发配置：system -> interfaces -> protocols -> vpn -> service
 
         ``only`` restricts the pass to the given owner names (used by a targeted
@@ -489,8 +491,11 @@ class ConfigStore:
         if not self._have_uci():
             notes.append("(no uci on this host, changes kept in vyoscli JSON only)")
             return notes
+        skip = skip or set()
         for owner, step in self._apply_steps():
             if only is not None and owner not in only:
+                continue
+            if owner in skip:
                 continue
             self._current_owner = owner
             notes.extend(step(old, new))
@@ -1380,8 +1385,16 @@ class ConfigStore:
         new_wl = (new.get("interfaces") or {}).get("wireless") or {}
         if old_wl == new_wl:
             return []
-        notes = []
+        notes: List[str] = []
+        if not os.path.exists("/etc/config/wireless"):
+            # No radio => no wireless config on this box; do not create one.
+            return ["wireless: /etc/config/wireless missing (no radio?), skipped"]
         try:
+            for gone in set(old_wl) - set(new_wl):
+                try:
+                    self._uci("delete", f"wireless.vyos_{gone}")
+                except subprocess.CalledProcessError:
+                    pass
             SEC_MAP = {"wpa2": "psk2", "wpa3": "sae", "none": "none", "open": "none"}
             for ifname, cfg in new_wl.items():
                 if not isinstance(cfg, dict):
@@ -2170,30 +2183,38 @@ class ConfigStore:
                 f.write("\n".join(cf) + "\n")
             subprocess.run(["/etc/init.d/conserver", "restart"],
                            capture_output=True, text=True, timeout=10)
-            # start dropbear per-device
-            # kill old per-device dropbear pids
-            try:
-                import glob
-                for pidfile in glob.glob("/var/run/vyoscli-console-*.pid"):
-                    subprocess.run(["kill", "$(cat " + pidfile + ")"],
-                                   shell=True, capture_output=True, timeout=5)
-                    import os
+            # stop per-device dropbear instances from a previous commit
+            for pidfile in glob.glob("/var/run/vyoscli-console-*.pid"):
+                try:
+                    with open(pidfile, encoding="utf-8") as f:
+                        pid = int(f.read().strip())
+                    os.kill(pid, 15)
+                except (OSError, ValueError):
+                    pass
+                try:
                     os.remove(pidfile)
-            except Exception:
-                pass
+                except OSError:
+                    pass
+            dropbear = shutil.which("dropbear") or "/usr/sbin/dropbear"
+            console_cmd = shutil.which("console") or "console"
+            key = "/etc/dropbear/dropbear_rsa_host_key"
             for dev, cfg in new_cs.items():
                 port = cfg.get("ssh-port")
                 if not port:
                     continue
+                if not os.path.exists(dropbear):
+                    notes.append(f"console {dev}: dropbear not installed")
+                    continue
                 pidfile = f"/var/run/vyoscli-console-{dev}.pid"
-                subprocess.Popen([
-                    "/usr/sbin/dropbear", "-j", "-k",
-                    "-r", "/etc/dropbear/dropbear_rsa_host_key",
-                    "-c", f"console {dev}",
-                    "-P", pidfile,
-                    "-p", str(port)
-                ])
-                notes.append(f"console {dev}: port {port} baud {cfg.get('speed',9600)}")
+                argv = [dropbear, "-j", "-k",
+                        "-c", f"{console_cmd} {dev}",
+                        "-P", pidfile, "-p", str(port)]
+                if os.path.exists(key):
+                    argv[1:1] = ["-r", key]
+                subprocess.Popen(argv, stdin=subprocess.DEVNULL,
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL)
+                notes.append(f"console {dev}: port {port} baud {cfg.get('speed', 9600)}")
         except Exception as e:
             notes.append(f"console-server apply failed: {e}")
         return notes
@@ -2407,7 +2428,12 @@ class ConfigStore:
                     break
                 owners.add(owner)
         self._touched = {}
-        notes = self._apply_all({}, copy.deepcopy(self.running), only=owners)
+        # A full sync must not recreate every container (rm -f + run).
+        skip = {"containers"} if owners is None else None
+        notes = self._apply_all({}, copy.deepcopy(self.running), only=owners,
+                                skip=skip)
+        if skip:
+            notes.append("containers untouched during full sync")
         self._record_applied()
         failed = any("failed" in note for note in notes)
         if owners is not None and not failed:
