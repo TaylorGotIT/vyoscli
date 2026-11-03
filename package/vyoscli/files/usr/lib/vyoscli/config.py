@@ -627,6 +627,7 @@ class ConfigStore:
             ("system-meta", self._apply_system_meta),
             ("system-extra", self._apply_system_extra),
             ("ntp", self._apply_ntp),
+            ("snmp", self._apply_snmp),
             ("lldp", self._apply_lldp),
             ("name-servers", self._apply_name_servers),
             ("system-dns", self._apply_system_dns),
@@ -1175,6 +1176,76 @@ class ConfigStore:
             notes.append("netifd reloaded")
         except Exception as e:  # noqa: BLE001
             notes.append(f"static route apply failed: {e}")
+        return notes
+
+    def _apply_snmp(self, old, new):
+        old_s = (old.get("service") or {}).get("snmp") or {}
+        new_s = (new.get("service") or {}).get("snmp") or {}
+        if old_s == new_s:
+            return []
+        notes: List[str] = []
+        try:
+            out = self._uci("show", "snmpd").stdout
+            for line in out.splitlines():
+                if line.startswith("snmpd.vyos_snmp_"):
+                    sec = line.split(".")[1].split("=")[0]
+                    try:
+                        self._uci("delete", f"snmpd.{sec}")
+                    except subprocess.CalledProcessError:
+                        pass
+            self._uci("set", "snmpd.general=snmpd")
+            self._uci("set", "snmpd.general.enabled=1")
+            if new_s.get("contact") or new_s.get("location"):
+                self._uci("set", "snmpd.system=system")
+                if new_s.get("contact"):
+                    self._uci("set", f"snmpd.system.sysContact={new_s['contact']}")
+                if new_s.get("location"):
+                    self._uci("set", f"snmpd.system.sysLocation={new_s['location']}")
+            port = new_s.get("port") or 161
+            addr = new_s.get("listen-address")
+            self._uci("set", "snmpd.agent=agent")
+            if addr and addr != "0.0.0.0":
+                self._uci("set", f"snmpd.agent.agentaddress=UDP:{addr}:{port}")
+            else:
+                self._uci("set", f"snmpd.agent.agentaddress=UDP:{port}")
+            communities = new_s.get("community") or {}
+            for name, cfg in communities.items():
+                if not isinstance(cfg, dict):
+                    continue
+                access = str(cfg.get("authorization") or "ro").lower()
+                sec = f"vyos_snmp_{re.sub(r'[^A-Za-z0-9_]', '_', str(name))}"
+                self._uci("set", f"snmpd.{sec}_com=com2sec")
+                self._uci("set", f"snmpd.{sec}_com.secname={access}")
+                self._uci("set", f"snmpd.{sec}_com.source=default")
+                self._uci("set", f"snmpd.{sec}_com.community={name}")
+                self._uci("set", f"snmpd.{sec}_com6=com2sec6")
+                self._uci("set", f"snmpd.{sec}_com6.secname={access}")
+                self._uci("set", f"snmpd.{sec}_com6.source=default")
+                self._uci("set", f"snmpd.{sec}_com6.community={name}")
+                for version in ("v1", "v2c", "usm"):
+                    gsec = f"{sec}_{version}"
+                    self._uci("set", f"snmpd.{gsec}=group")
+                    self._uci("set", f"snmpd.{gsec}.group={name}")
+                    self._uci("set", f"snmpd.{gsec}.version={version}")
+                    self._uci("set", f"snmpd.{gsec}.secname={access}")
+                asec = f"{sec}_access"
+                self._uci("set", f"snmpd.{asec}=access")
+                self._uci("set", f"snmpd.{asec}.group={name}")
+                self._uci("set", f"snmpd.{asec}.context=none")
+                self._uci("set", f"snmpd.{asec}.version=any")
+                self._uci("set", f"snmpd.{asec}.level=noauth")
+                self._uci("set", f"snmpd.{asec}.prefix=exact")
+                self._uci("set", f"snmpd.{asec}.read=all")
+                self._uci("set", f"snmpd.{asec}.write="
+                          + ("all" if access == "rw" else "none"))
+                self._uci("set", f"snmpd.{asec}.notify=none")
+            self._uci("commit", "snmpd")
+            subprocess.run(["/etc/init.d/snmpd", "restart"],
+                           capture_output=True, text=True, timeout=15)
+            notes.append(f"snmp: {len(communities)} community(ies) "
+                         f"on UDP:{port}")
+        except Exception as e:  # noqa: BLE001
+            notes.append(f"snmp apply failed: {e}")
         return notes
 
     def _apply_ntp(self, old, new):

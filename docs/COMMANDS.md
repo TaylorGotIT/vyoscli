@@ -356,6 +356,11 @@
 | `service smartdns server <name> port` | Server port | `service smartdns server <name> port 8080` |
 | `service smartdns server <name> type` | udp\|tcp\|tls\|https | `service smartdns server <name> type udp` |
 | `service smartdns speed-check-mode` | Probe mode, e.g. 'ping,tcp:80' | `service smartdns speed-check-mode text` |
+| `service snmp community <name> authorization` | ro \| rw | `service snmp community <name> authorization text` |
+| `service snmp contact` | Administrator contact (sysContact) | `service snmp contact text` |
+| `service snmp listen-address` | Bind address (default 0.0.0.0) | `service snmp listen-address 192.0.2.1` |
+| `service snmp location` | System location (sysLocation) | `service snmp location text` |
+| `service snmp port` | Listen port (default 161) | `service snmp port 8080` |
 | `service sqm download` | Download bandwidth kbps | `service sqm download 100` |
 | `service sqm interface` | WAN interface | `service sqm interface text` |
 | `service sqm qdisc` | cake / fq_codel | `service sqm qdisc cake` |

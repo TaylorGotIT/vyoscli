@@ -123,7 +123,7 @@ passive/default-information）、`rip`（version/network/default-information）�
 | `service dns`（forwarding） | 🟡 | 用 dnsmasq/smartdns 代替，未按 VyOS 结构 |
 | `service ntp` | ✅ | 写入 `system.ntp.server` 并重启 sysntpd |
 | `service https`（API） | ❌ | 无 REST/GraphQL API |
-| `service snmp` | ❌ | snmpd 可用 |
+| `service snmp` | ✅ | community → UCI com2sec/group/access，已真机验证监听 1610 |
 | `service lldp` | ✅ | UCI lldpd interface/description，已真机验证 |
 | `service dhcp-relay` | ❌ | |
 | `service router-advert` | ❌ | odhcpd/radvd 可用 |

@@ -410,6 +410,27 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn("match ip address prefix-list PL", text)
         self.assertIn("set local-preference 200", text)
 
+    def test_snmp_generates_uci_access(self):
+        cfg(self.cli,
+            "set service snmp community public authorization ro",
+            "set service snmp contact admin@example.com",
+            "set service snmp location lab",
+            "set service snmp port 1610")
+        self.commit()
+        calls = self.fake.uci_calls()
+        self.assertIn(["uci", "set", "snmpd.vyos_snmp_public_com=com2sec"],
+                      calls)
+        self.assertIn(["uci", "set", "snmpd.vyos_snmp_public_com.secname=ro"],
+                      calls)
+        self.assertIn(["uci", "set",
+                       "snmpd.vyos_snmp_public_com.community=public"], calls)
+        self.assertIn(["uci", "set",
+                       "snmpd.vyos_snmp_public_access.write=none"], calls)
+        self.assertIn(["uci", "set", "snmpd.agent.agentaddress=UDP:1610"],
+                      calls)
+        self.assertIn(["uci", "commit", "snmpd"], calls)
+        self.assertIn(["/etc/init.d/snmpd", "restart"], self.fake.calls)
+
     def test_service_ntp_and_lldp(self):
         cfg(self.cli,
             "set service ntp server pool.ntp.org",

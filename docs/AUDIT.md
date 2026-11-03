@@ -42,7 +42,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 变更 | 说明 |
 |---|---|
 | `GUIDE.md` → `docs/GUIDE.md`，`REQUIRED_PACKAGES.md` → `docs/DEPENDENCIES.md` | 文档集中到 `docs/` |
-| 新增 `tests/`（5 个文件、89 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
+| 新增 `tests/`（5 个文件、90 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
 | 新增 `.gitignore` | 忽略 `__pycache__`、`*.ipk`、`.audit/` 等 |
 | `git rm --cached package/vyoscli.zip` | 陈旧构建产物，已从仓库移除 |
 | `Makefile` 安装改用 `$(wildcard .../*.py)` | 以后加模块不用再改 Makefile |
@@ -110,6 +110,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 56 | policy 只有 community-list，route-map match/set 很少 | 新增 `policy access-list/prefix-list/as-path-list`（动态列表+规则）并扩展 route-map 的 match（prefix-list/as-path/metric/tag）与 set（metric/tag/weight/next-hop/origin）；`render_frr_conf` 输出 prefix-list/as-path/access-list 与 `match ip address prefix-list`；frr 重启超时 20s→60s。单元测试覆盖渲染；**真机验证被操作策略拒绝，待补** | `config_tree.py` / `config.py:render_frr_conf` / `_apply_bgp` |
 | 57 | protocols 只有 static/bgp，没有 OSPF/RIP/BFD | 新增 `protocols ospf`（router-id/log-adjacency-changes/default-information/area network/interface cost+priority+passive）、`protocols rip`、`protocols bfd`；`render_frr_conf` 输出 router ospf/rip/bfd，`_set_frr_daemons` 控制 ospfd/ripd/bfdd。frr 重启会挂起，改为 `/etc/init.d/frr start` + `vtysh -b`；真机验证 ospf/rip 配置进入 running-config、daemons 开关与删除清理 | `config_tree.py` / `config.py:render_frr_conf` / `_apply_bgp` |
 | 58 | service 缺 NTP/LLDP 等基础服务 | 新增 `service ntp`（server 列表→`system.ntp.server`，重启 sysntpd）与 `service lldp`（interface 列表/description→UCI lldpd）；真机验证 ntp server 写入、lldpd 运行与描述、删除后清理，并从 JSON 全量 sync 恢复原 NTP | `config_tree.py` / `config.py:_apply_ntp` / `_apply_lldp` |
+| 59 | 缺 SNMP 管理面 | 新增 `service snmp`：community→com2sec/com2sec6/group(v1/v2c/usm)/access，contact/location→system，listen-address/port→agentaddress；真机验证 snmpd 监听 1610、UCI 生成与删除清理 | `config_tree.py` / `config.py:_apply_snmp` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示
