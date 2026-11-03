@@ -442,6 +442,7 @@
 | `service dnsmasq listen-address` | Bind IP (default 0.0.0.0) | `service dnsmasq listen-address 192.0.2.1` |
 | `service dnsmasq port` | DNS listen port (default 53) | `service dnsmasq port 8080` |
 | `service https api-key` | Bearer token required by the API | `service https api-key text` |
+| `service https certificate` | pki certificate name used for TLS (enables HTTPS) | `service https certificate text` |
 | `service https listen-address` | Bind address (default 127.0.0.1) | `service https listen-address 192.0.2.1` |
 | `service https port` | API port (default 8443) | `service https port 8080` |
 | `service kcp <tunnel> kcp-mode` | fast2/fast3/normal | `service kcp <tunnel> kcp-mode fast3` |

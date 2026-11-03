@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import ssl
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -92,9 +93,15 @@ def main(argv=None) -> int:
     parser.add_argument("--port", type=int, default=8443)
     parser.add_argument("--key", required=True)
     parser.add_argument("--store", default="/etc/vyoscli/running.json")
+    parser.add_argument("--cert", help="TLS certificate (PEM)")
+    parser.add_argument("--tls-key", help="TLS private key (PEM)")
     args = parser.parse_args(argv)
     server = ThreadingHTTPServer((args.bind, args.port),
                                  make_handler(args.store, args.key))
+    if args.cert and args.tls_key:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(args.cert, args.tls_key)
+        server.socket = context.wrap_socket(server.socket, server_side=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

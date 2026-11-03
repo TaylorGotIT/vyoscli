@@ -179,6 +179,22 @@ def _as_list(value: Any) -> List[Any]:
     return [value]
 
 
+def _format_pem(text: str) -> str:
+    """Normalise a single-line PEM into the 64-column form OpenSSL expects."""
+    text = str(text).strip()
+    if "\n" in text:
+        return text if text.endswith("\n") else text + "\n"
+    match = re.match(r"^(-----BEGIN [A-Z0-9 ]+-----)(.*?)(-----END [A-Z0-9 ]+-----)$",
+                     text)
+    if not match:
+        return text + "\n"
+    body = re.sub(r"\s+", "", match.group(2))
+    lines = [match.group(1)]
+    lines += [body[i:i + 64] for i in range(0, len(body), 64)]
+    lines.append(match.group(3))
+    return "\n".join(lines) + "\n"
+
+
 def _fw_slug(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_]", "_", str(name))
 
@@ -774,7 +790,6 @@ class ConfigStore:
             ("ntp", self._apply_ntp),
             ("snmp", self._apply_snmp),
             ("router-advert", self._apply_router_advert),
-            ("https", self._apply_https),
             ("lldp", self._apply_lldp),
             ("name-servers", self._apply_name_servers),
             ("system-dns", self._apply_system_dns),
@@ -784,6 +799,7 @@ class ConfigStore:
             ("virtual-ifaces", self._apply_virtual_ifaces),
             ("vrrp", self._apply_vrrp),
             ("pki", self._apply_pki),
+            ("https", self._apply_https),
             ("flow-accounting", self._apply_flow_accounting),
             ("qos", self._apply_qos),
             ("haproxy", self._apply_haproxy),
@@ -1086,9 +1102,7 @@ class ConfigStore:
             nonlocal written
             if not content:
                 return
-            text = str(content)
-            if not text.endswith("\n"):
-                text += "\n"
+            text = _format_pem(content)
             with open(path, "w", encoding="utf-8") as f:
                 f.write(text)
             os.chmod(path, mode)
@@ -1842,10 +1856,22 @@ class ConfigStore:
         bind = new_h.get("listen-address") or "127.0.0.1"
         port = new_h["port"]
         store = os.path.join(self.base_dir, "running.json")
+        argv = [sys.executable, "-m", "vyoscli.api",
+                "--bind", str(bind), "--port", str(port),
+                "--key", str(key), "--store", store]
+        tls = ""
+        cert_name = new_h.get("certificate")
+        if cert_name:
+            cert_dir = os.path.join(self.base_dir, "pki", "certificate")
+            cert = os.path.join(cert_dir, f"{cert_name}.crt")
+            tls_key = os.path.join(cert_dir, f"{cert_name}.key")
+            if not (os.path.exists(cert) and os.path.exists(tls_key)):
+                return [f"https: pki certificate {cert_name} not found; "
+                        "server not started"]
+            argv += ["--cert", cert, "--tls-key", tls_key]
+            tls = " (TLS)"
         proc = subprocess.Popen(
-            [sys.executable, "-m", "vyoscli.api",
-             "--bind", str(bind), "--port", str(port),
-             "--key", str(key), "--store", store],
+            argv,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL, start_new_session=True)
         time.sleep(0.3)
@@ -1854,7 +1880,7 @@ class ConfigStore:
         with open(pidfile, "w", encoding="utf-8") as f:
             f.write(str(proc.pid))
         os.chmod(pidfile, 0o600)
-        return [f"https: read-only API on {bind}:{port}"]
+        return [f"https: read-only API on {bind}:{port}{tls}"]
 
     def _apply_ntp(self, old, new):
         old_ntp = (old.get("service") or {}).get("ntp") or {}

@@ -611,6 +611,28 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn("18443", argv)
         self.assertIn("secret", argv)
 
+    def test_https_uses_pki_certificate_for_tls(self):
+        cert_dir = os.path.join(self.cli.store.base_dir, "pki", "certificate")
+        os.makedirs(cert_dir, exist_ok=True)
+        with open(os.path.join(cert_dir, "web.crt"), "w", encoding="utf-8") as f:
+            f.write("cert\n")
+        with open(os.path.join(cert_dir, "web.key"), "w", encoding="utf-8") as f:
+            f.write("key\n")
+        fake = mock.Mock()
+        fake.pid = 4243
+        fake.poll.return_value = None
+        with mock.patch.object(config_mod.subprocess, "Popen",
+                               return_value=fake) as popen:
+            cfg(self.cli,
+                "set service https port 18444",
+                "set service https api-key testkey",
+                "set service https certificate web")
+            self.commit()
+        argv = popen.call_args[0][0]
+        self.assertIn("--cert", argv)
+        self.assertIn("--tls-key", argv)
+        self.assertIn(os.path.join(cert_dir, "web.crt"), argv)
+
     def test_https_requires_api_key(self):
         with mock.patch.object(config_mod.subprocess, "Popen") as popen:
             cfg(self.cli, "set service https port 18443")

@@ -2676,6 +2676,11 @@ TREE = json.loads(r'''[
 "name": "api-key",
 "help": "Bearer token required by the API",
 "type": "str"
+},
+{
+"name": "certificate",
+"help": "pki certificate name used for TLS (enables HTTPS)",
+"type": "str"
 }
 ]
 }
