@@ -18,6 +18,7 @@ package/vyoscli/
 │   │   ├── cli.py                # REPL、双模式、补全、命令分发
 │   │   ├── tree.py               # 命令树、动态节点、路径解析、值校验
 │   │   ├── commands.py           # 命令树定义
+│   │   ├── schema.py             # 声明式路径定义（逐步替代手写节点）
 │   │   ├── config.py             # 配置库、事务、UCI/原生下发
 │   │   ├── op_show.py            # show * 实现
 │   │   └── __main__.py           # 入口 + 回滚定时器子进程

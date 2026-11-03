@@ -26,6 +26,7 @@ def _run(cmd: List[str]) -> str:
 
 
 
+from . import schema
 from .op_show import (
     _op_show_dependencies,
     _op_show_log,
@@ -300,51 +301,16 @@ def build_tree(store: Any) -> CommandTree:
 
         sys_named = Node(name="system", help="System parameters")
         root.add(sys_named)
-        sys_named.add(Node(name="host-name", help="System hostname",
-                           value_type="host", action=_cfg_noop))
-        sys_named.add(Node(name="name-server", help="Upstream DNS for dnsmasq (client queries)",
-                           value_type="ipv4", action=_cfg_noop))
-        sys_named.add(Node(name="dns", help="System resolver for router itself (/etc/resolv.conf)",
-                           value_type="ipv4", action=_cfg_noop))
-        sys_named.add(Node(name="timezone", help="IANA timezone (e.g. Asia/Shanghai)",
-                           value_type="str", action=_cfg_noop))
-        sys_named.add(Node(name="domain-search", help="Domain search suffix (repeatable)",
-                     value_type="str", action=_cfg_noop))
-        sys_named.add(Node(name="ntp", help="NTP server hostname (repeatable)",
-                           value_type="str", action=_cfg_noop))
-        sys_named.add(Node(name="language", help="System locale (e.g. zh_cn, en)",
-                           value_type="str", action=_cfg_noop))
-        hw = Node(name="hardware", help="Manual hardware inventory")
-        sys_named.add(hw)
-        hw.add(Node(name="vendor", help="Hardware vendor name",
-                    value_type="str", action=_cfg_noop))
-        hw.add(Node(name="model", help="Hardware model",
-                    value_type="str", action=_cfg_noop))
-        hw.add(Node(name="serial", help="Hardware serial number (S/N)",
-                    value_type="str", action=_cfg_noop))
+        # Declarative definition: see schema.py (SYSTEM).
+        schema.attach(sys_named, schema.SYSTEM, action=_cfg_noop)
 
         if_root = Node(name="interfaces", help="Interface parameters")
         root.add(if_root)
         eth = Node(name="ethernet", help="Ethernet interfaces")
         if_root.add(eth)
 
-        template = Node(name="*", help="Per-interface config")
-        template.add(Node(name="address", help="IPv4 address/prefix",
-                          value_type="ipv4net", action=_cfg_noop))
-        template.add(Node(name="description", help="Interface description",
-                          value_type="str", action=_cfg_noop))
-        template.add(Node(name="mtu", help="MTU (default 1500)",
-                          value_type="int", action=_cfg_noop))
-        template.add(Node(name="mac", help="MAC address",
-                          value_type="str", action=_cfg_noop))
-        template.add(Node(name="duplex", help="Duplex mode: auto|half|full",
-                          value_type="str", action=_cfg_noop))
-        template.add(Node(name="speed", help="Speed: auto|10|100|1000|2500|10000",
-                          value_type="str", action=_cfg_noop))
-        template.add(Node(name="vrf", help="VRF instance name",
-                          value_type="str", action=_cfg_noop))
-        template.add(Node(name="disable", help="Administratively disable",
-                          value_type="bool", action=_cfg_noop))
+        # Declarative definition: see schema.py (ETHERNET).
+        template = schema.template(schema.ETHERNET, action=_cfg_noop)
         # vif (802.1Q)
         vif_node = Node(name="vif", help="Virtual Local Area Network (VLAN) ID")
         vif_tpl = Node(name="*", help="VLAN ID")
