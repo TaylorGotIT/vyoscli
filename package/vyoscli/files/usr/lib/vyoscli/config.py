@@ -784,6 +784,7 @@ class ConfigStore:
             ("virtual-ifaces", self._apply_virtual_ifaces),
             ("vrrp", self._apply_vrrp),
             ("pki", self._apply_pki),
+            ("flow-accounting", self._apply_flow_accounting),
             ("qos", self._apply_qos),
             ("haproxy", self._apply_haproxy),
             ("wireless", self._apply_wireless),
@@ -1020,6 +1021,55 @@ class ConfigStore:
                 failed += 1
         count = len(render_qos_commands(new_q))
         notes.append(f"qos: applied {count - failed}/{count} tc command(s)")
+        return notes
+
+    def _apply_flow_accounting(self, old, new):
+        old_fa = (old.get("system") or {}).get("flow-accounting") or {}
+        new_fa = (new.get("system") or {}).get("flow-accounting") or {}
+        if old_fa == new_fa:
+            return []
+        notes: List[str] = []
+        try:
+            out = self._uci("show", "softflowd").stdout
+            for line in out.splitlines():
+                if line.startswith("softflowd.vyos_fa_"):
+                    sec = line.split(".")[1].split("=")[0]
+                    try:
+                        self._uci("delete", f"softflowd.{sec}")
+                    except subprocess.CalledProcessError:
+                        pass
+            interfaces = _as_list(new_fa.get("interface"))
+            servers = (new_fa.get("netflow") or {}).get("server") or {}
+            host_port = None
+            version = 9
+            if servers:
+                ip = sorted(servers)[0]
+                cfg = servers[ip] or {}
+                host_port = f"{ip}:{cfg.get('port') or 2055}"
+                version = cfg.get("version") or 9
+            if (new_fa.get("sflow") or {}).get("server"):
+                notes.append("flow-accounting: sFlow is not supported by "
+                             "softflowd, use netflow")
+            if interfaces and host_port:
+                for i, ifname in enumerate(interfaces):
+                    sec = f"vyos_fa_{i}"
+                    self._uci("set", f"softflowd.{sec}=softflowd")
+                    self._uci("set", f"softflowd.{sec}.enabled=1")
+                    self._uci("set", f"softflowd.{sec}.interface={ifname}")
+                    self._uci("set", f"softflowd.{sec}.host_port={host_port}")
+                    self._uci("set", f"softflowd.{sec}.export_version={version}")
+                    self._uci("set", f"softflowd.{sec}.pid_file="
+                              f"/var/run/vyoscli-softflowd-{i}.pid")
+                notes.append(f"flow-accounting: {len(interfaces)} interface(s) "
+                             f"-> {host_port}")
+            else:
+                notes.append("flow-accounting: need interface and netflow "
+                             "server, nothing started")
+            self._uci("commit", "softflowd")
+            subprocess.run(["/etc/init.d/softflowd", "restart"],
+                           capture_output=True, text=True, timeout=15)
+        except Exception as e:  # noqa: BLE001
+            notes.append(f"flow-accounting apply failed: {e}")
         return notes
 
     def _apply_pki(self, old, new):

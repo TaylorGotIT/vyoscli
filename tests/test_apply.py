@@ -410,6 +410,24 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn("match ip address prefix-list PL", text)
         self.assertIn("set local-preference 200", text)
 
+    def test_flow_accounting_starts_softflowd(self):
+        cfg(self.cli,
+            "set system flow-accounting interface br-lan",
+            "set system flow-accounting netflow server 127.0.0.1 port 2055")
+        self.commit()
+        calls = self.fake.uci_calls()
+        self.assertIn(["uci", "set", "softflowd.vyos_fa_0=softflowd"], calls)
+        self.assertIn(["uci", "set", "softflowd.vyos_fa_0.interface=br-lan"],
+                      calls)
+        self.assertIn(["uci", "set",
+                       "softflowd.vyos_fa_0.host_port=127.0.0.1:2055"], calls)
+        self.assertIn(["/etc/init.d/softflowd", "restart"], self.fake.calls)
+        self.fake.uci_show = "softflowd.vyos_fa_0=softflowd\n"
+        cfg(self.cli, "delete system flow-accounting")
+        self.commit()
+        self.assertIn(["uci", "delete", "softflowd.vyos_fa_0"],
+                      self.fake.uci_calls())
+
     def test_vti_and_geneve_create_links(self):
         cfg(self.cli,
             "set interfaces vti vti0 local-ip 192.0.2.1",

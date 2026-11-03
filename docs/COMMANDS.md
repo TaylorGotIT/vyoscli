@@ -510,6 +510,10 @@
 | `system conntrack timeout udp stream` | Stream timeout | `system conntrack timeout udp stream 100` |
 | `system dns` | System resolver for router itself (/etc/resolv.conf) | `system dns 192.0.2.1` |
 | `system domain-search` | Domain search suffix (repeatable) | `system domain-search text` |
+| `system flow-accounting interface` | Interface to monitor | `system flow-accounting interface text` |
+| `system flow-accounting netflow server <name> port` | Collector port (default 2055) | `system flow-accounting netflow server <name> port 8080` |
+| `system flow-accounting netflow server <name> version` | Export version (5 or 9) | `system flow-accounting netflow server <name> version 100` |
+| `system flow-accounting sflow server <name> port` | Collector port (default 6343) | `system flow-accounting sflow server <name> port 8080` |
 | `system hardware model` | Hardware model | `system hardware model text` |
 | `system hardware serial` | Hardware serial number (S/N) | `system hardware serial text` |
 | `system hardware vendor` | Hardware vendor name | `system hardware vendor text` |

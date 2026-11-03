@@ -42,7 +42,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 变更 | 说明 |
 |---|---|
 | `GUIDE.md` → `docs/GUIDE.md`，`REQUIRED_PACKAGES.md` → `docs/DEPENDENCIES.md` | 文档集中到 `docs/` |
-| 新增 `tests/`（5 个文件、100 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
+| 新增 `tests/`（5 个文件、101 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
 | 新增 `.gitignore` | 忽略 `__pycache__`、`*.ipk`、`.audit/` 等 |
 | `git rm --cached package/vyoscli.zip` | 陈旧构建产物，已从仓库移除 |
 | `Makefile` 安装改用 `$(wildcard .../*.py)` | 以后加模块不用再改 Makefile |
@@ -119,6 +119,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 65 | 没有 IPv6 NAT | 新增 `nat66 source|destination rule`，复用 nat44 渲染器（family=ipv6，`ip6 saddr/daddr`、IPv6 目标加方括号），写入 `inet vyos_nat66`；真机验证 DNAT [2001:db8::10]:80 规则与删除清理。nat64/cgnat 需 Jool/SIIT，OpenWrt 无对应模块，记录为不可行 | `config_tree.py` / `config.py:render_nat_nft` / `_apply_nat66` |
 | 66 | 没有负载均衡 | 新增 `load-balancing haproxy`（global-parameters max-connections、service frontend、backend server），生成 `/etc/haproxy.cfg` 并先 `haproxy -c` 校验，失败回滚；首次改写前备份原配置，清空后还原。真机验证监听 127.0.0.1:18080、删除后端口关闭、原 cfg md5 恢复 | `config_tree.py` / `config.py:render_haproxy_cfg` |
 | 67 | 缺 VTI/Geneve 等虚拟接口 | 新增 `interfaces vti` / `interfaces geneve`，用 `ip link add ... type vti|geneve` + `ip addr replace` 下发，删除时 `ip link del`；创建失败会输出 `create failed: Unknown device type`。**测试镜像内核没有 vti/geneve 模块，无法真机跑通**；bonding/macsec/wwan 需要额外网卡/硬件，未做 | `config_tree.py` / `config.py:_apply_virtual_ifaces` |
+| 68 | 缺 NetFlow 流量统计 | 新增 `system flow-accounting`（interface 列表 + netflow server），每个接口生成一个 softflowd UCI 实例（host_port/export_version/pid_file），重启 softflowd；sFlow 提示 softflowd 不支持。真机验证 vyos_fa_0 生成、进程带 `-i br-lan -n 127.0.0.1:2055` 运行、删除后进程消失 | `config_tree.py` / `config.py:_apply_flow_accounting` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示
