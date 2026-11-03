@@ -23,10 +23,13 @@ package/vyoscli/
 │   │   ├── op_show.py            # show * 实现
 │   │   └── __main__.py           # 入口 + 回滚定时器 / boot sync
 │   └── etc/init.d/vyoscli        # 开机对账（vyoscli --sync）
+schema/
+└── config-tree.json              # authored 命令树（唯一手改源）
 scripts/
 ├── build-ipk.sh                  # SDK 内一键编译
 ├── make-ipk.py                   # 无 SDK 快速打包（设备测试）
-├── gen-command-reference.py      # 从 config_tree.py 生成 docs/COMMANDS.md
+├── build-config-tree.py          # schema/config-tree.json -> config_tree.py
+├── gen-command-reference.py      # config_tree.py -> docs/COMMANDS.md
 └── check-generated.sh            # 校验生成文档是否最新（CI 用）
 tests/                            # unittest（CLI / apply / schema，无第三方依赖）
 docs/
@@ -228,15 +231,21 @@ python3 -m unittest discover -s tests -v
 - `tests/test_apply.py`：mock `uci`/`init.d`，断言 commit 生成的确切命令
 - `tests/test_schema.py`：schema/template 的每条 spec 都可 set 且类型正确
 
-生成配置树/命令参考后记得跑一遍测试；`docs/COMMANDS.md` 可用
-`python3 scripts/gen-command-reference.py` 重新生成。
+命令树只改 `schema/config-tree.json`，然后：
+
+```bash
+python3 scripts/build-config-tree.py      # 生成 config_tree.py
+python3 scripts/gen-command-reference.py  # 生成 docs/COMMANDS.md
+```
+
+`tests/test_tree_source.py` 会校验生成物与源一致。
 
 ### CI
 
 `.github/workflows/ci.yml` 在每次 push / PR 上执行：
 
 1. 全量单测；
-2. `./scripts/check-generated.sh`——重新生成 `docs/COMMANDS.md`，若与仓库内容有差异则失败；
+2. `./scripts/check-generated.sh`——校验 `config_tree.py` 与 `docs/COMMANDS.md` 是否由源生成且无差异；
 3. `python3 scripts/make-ipk.py --minimal-deps` 做一次无 SDK 的打包冒烟。
 
 本地等价检查：

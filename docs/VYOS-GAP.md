@@ -230,15 +230,8 @@ network-emulator/cake 的完整参数与 class match 规则。
    `docs/COMMANDS.md`；
 5. **真机**：在测试路由器上 commit/回滚验证，记录到 `docs/AUDIT.md`。
 
-## 技术债提醒
+## 技术债（已解决）
 
-`config_tree.py` 目前是"从旧手写树一次性生成"的 JSON 数据，
-生成脚本依赖已删除的旧树（`dist/gen_config_tree.py` 读的是基线 dump）。
-也就是说，**它现在是事实上的手写源**，"不要手改"的注释已经名不副实。
-建议下一步二选一：
-
-- 把 `config_tree.py` 正式当源文件维护，删掉误导性注释；
-- 或引入真正的 authored schema（YAML/JSON），再由它生成 `config_tree.py`，
-  并把 `dist/gen_config_tree.py` 重写成"schema → tree"。
-
-在补功能前先定这件事，否则每加一个命令都要同时维护两套结构。
+树数据的唯一手改源是 `schema/config-tree.json`；`config_tree.py` 由
+`scripts/build-config-tree.py` 生成，`docs/COMMANDS.md` 由
+`scripts/gen-command-reference.py` 生成，CI 会校验两者与源一致。

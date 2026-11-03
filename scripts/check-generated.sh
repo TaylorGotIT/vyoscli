@@ -4,12 +4,15 @@ set -eu
 
 cd "$(dirname "$0")/.."
 
+python3 scripts/build-config-tree.py --check
 python3 scripts/gen-command-reference.py
 
-if ! git diff --quiet -- docs/COMMANDS.md; then
-	echo "docs/COMMANDS.md is stale; commit the regenerated file:" >&2
-	git diff -- docs/COMMANDS.md | head -40 >&2
+if ! git diff --quiet -- docs/COMMANDS.md \
+        package/vyoscli/files/usr/lib/vyoscli/config_tree.py; then
+	echo "generated artifacts are stale; commit the regenerated files:" >&2
+	git diff --stat -- docs/COMMANDS.md \
+		package/vyoscli/files/usr/lib/vyoscli/config_tree.py >&2
 	exit 1
 fi
 
-echo "generated docs are up to date"
+echo "generated artifacts are up to date"
