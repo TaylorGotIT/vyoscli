@@ -109,6 +109,22 @@
 | `firewall zone <zone> network` | UCI network name bound to zone | `firewall zone <zone> network text` |
 | `firewall zone <zone> output` | Default output policy: ACCEPT/DROP/REJECT | `firewall zone <zone> output ACCEPT` |
 
+## set high-availability
+
+| 命令 | 说明 | 示例 |
+|---|---|---|
+| `high-availability vrrp global-parameters startup-delay` | Delay before starting VRRP (s) | `high-availability vrrp global-parameters startup-delay 100` |
+| `high-availability vrrp group <name> address` | Virtual IP address | `high-availability vrrp group <name> address 192.0.2.1/24` |
+| `high-availability vrrp group <name> hello-source-address` | Unicast source address | `high-availability vrrp group <name> hello-source-address 192.0.2.1` |
+| `high-availability vrrp group <name> interface` | VRRP interface | `high-availability vrrp group <name> interface text` |
+| `high-availability vrrp group <name> no-preempt` | Disable preemption | `high-availability vrrp group <name> no-preempt true` |
+| `high-availability vrrp group <name> peer-address` | Unicast peer address | `high-availability vrrp group <name> peer-address 192.0.2.1` |
+| `high-availability vrrp group <name> preempt-delay` | Preemption delay (s) | `high-availability vrrp group <name> preempt-delay 100` |
+| `high-availability vrrp group <name> priority` | Priority (1-255) | `high-availability vrrp group <name> priority 100` |
+| `high-availability vrrp group <name> track interface` | Interface to track | `high-availability vrrp group <name> track interface text` |
+| `high-availability vrrp group <name> vrid` | Virtual router ID (1-255) | `high-availability vrrp group <name> vrid 100` |
+| `high-availability vrrp sync-group <name> member` | Member VRRP group | `high-availability vrrp sync-group <name> member text` |
+
 ## set interfaces
 
 | 命令 | 说明 | 示例 |

@@ -333,7 +333,11 @@ class Cli:
                 if err:
                     return (f"set: invalid value '{value}' for "
                             f"{' '.join(structural)}: {err}")
-                self.store.set_value(structural, coerce_value(node.value_type, value))
+                new_value = coerce_value(node.value_type, value)
+                if getattr(node, "_repeatable", False):
+                    self.store.append_value(structural, new_value)
+                else:
+                    self.store.set_value(structural, new_value)
                 return ""
             if node.children:
                 return ("set: incomplete path. expected one of: "

@@ -410,6 +410,36 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn("match ip address prefix-list PL", text)
         self.assertIn("set local-preference 200", text)
 
+    def test_vrrp_generates_keepalived_uci(self):
+        cfg(self.cli,
+            "set high-availability vrrp group G1 interface br-lan",
+            "set high-availability vrrp group G1 vrid 99",
+            "set high-availability vrrp group G1 address 192.0.2.250/24",
+            "set high-availability vrrp group G1 address 192.0.2.251/24",
+            "set high-availability vrrp group G1 priority 150",
+            "set high-availability vrrp group G1 no-preempt true",
+            "set high-availability vrrp sync-group SG member G1")
+        self.commit()
+        calls = self.fake.uci_calls()
+        self.assertIn(["uci", "set",
+                       "keepalived.vyos_ha_G1=vrrp_instance"], calls)
+        self.assertIn(["uci", "set",
+                       "keepalived.vyos_ha_G1.virtual_router_id=99"], calls)
+        self.assertIn(["uci", "set", "keepalived.vyos_ha_G1.nopreempt=1"],
+                      calls)
+        self.assertIn(["uci", "add_list",
+                       "keepalived.vyos_ha_G1.virtual_ipaddress="
+                       "vyos_ha_G1_vip_0"], calls)
+        self.assertIn(["uci", "add_list",
+                       "keepalived.vyos_ha_G1.virtual_ipaddress="
+                       "vyos_ha_G1_vip_1"], calls)
+        self.assertIn(["uci", "set",
+                       "keepalived.vyos_ha_sync_SG=vrrp_sync_group"], calls)
+        self.assertIn(["/etc/init.d/keepalived", "restart"], self.fake.calls)
+        addresses = self.cli.store.get(
+            ["high-availability", "vrrp", "group", "G1", "address"])
+        self.assertEqual(addresses, ["192.0.2.250/24", "192.0.2.251/24"])
+
     def test_https_api_starts_with_key(self):
         fake = mock.Mock()
         fake.pid = 4242

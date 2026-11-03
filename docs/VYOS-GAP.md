@@ -22,7 +22,7 @@
 | `service` | 22 类服务 | 10 类（含 OpenWrt 特有：sqm/adguard/smartdns/kcp） | 🟡 缺 NTP/DNS/HTTPS API/SNMP/LLDP/DHCP-relay 等 |
 | `system` | 21 类 | 13 类（+syslog/conntrack/sysctl/watchdog） | 🟡 syslog/conntrack/sysctl/watchdog 已落地；缺 task-scheduler/console/ip/ipv6/updates 等 |
 | `vpn` | IPsec、L2TP、SSTP、OpenConnect、PPTP、DMVPN | IPsec 子集 | 🟡 缺大部分 |
-| `high-availability` | VRRP、sync-group、virtual-server | 无 | ❌ 完全缺失 |
+| `high-availability` | VRRP、sync-group、virtual-server | VRRP group（interface/vrid/address/priority/preempt/unicast）+ sync-group | 🟡 VRRP 已可用，virtual-server 未做 |
 | `load-balancing` | WAN 负载均衡、HAProxy | 无 | ❌ 完全缺失 |
 | `pki` | CA/证书/DH/ACME、generate/import | 无 | ❌ 完全缺失 |
 | `traffic-policy` | 11 种 qdisc + 接口 ingress/egress | 只有 `traffic-policy shaper`（5 节点） | 🟡 名称和结构都与 VyOS 的 `qos` 不同 |
@@ -163,7 +163,7 @@ OpenWrt 上 strongSwan、xl2tpd、openconnect、pptp 都有包，可按需补。
 
 | 顶层 | VyOS 1.5 能力 | OpenWrt 可行性 |
 |---|---|---|
-| `high-availability` | VRRP group/sync-group、virtual-server | keepalived 可用，建议做 VRRP |
+| `high-availability` | VRRP group/sync-group、virtual-server | keepalived 已接入（group/sync-group），virtual-server 待做 |
 | `load-balancing` | WAN 多线负载/故障切换、HAProxy | haproxy 可用；WAN 负载可用 mwan3 或 nft |
 | `pki` | CA/证书/DH/ACME、generate/import | 可做证书存储（文件+JSON），ACME 可用 acme.sh |
 | `container` | 完整 podman 编排 | OpenWrt 默认无 podman，**不建议作为近期目标** |

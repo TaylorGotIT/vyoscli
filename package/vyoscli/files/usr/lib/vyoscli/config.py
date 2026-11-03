@@ -461,6 +461,24 @@ class ConfigStore:
             node[leaf] = value
         self._persist_candidate()
 
+    def append_value(self, path: List[str], value: Any) -> None:
+        """Append to a repeatable leaf without nesting the list into itself."""
+        if not path:
+            return
+        *parents, leaf = path
+        node = self._nav(self.candidate, parents, create=True)
+        if node is None:
+            return
+        current = node.get(leaf) if leaf in node else None
+        if current is None:
+            node[leaf] = [value]
+        elif isinstance(current, list):
+            if value not in current:
+                current.append(value)
+        elif current != value:
+            node[leaf] = [current, value]
+        self._persist_candidate()
+
     def create_node(self, path: List[str]) -> None:
         """Materialise a structural (valueless) node in the candidate."""
         if path:
@@ -637,6 +655,7 @@ class ConfigStore:
             ("login", self._apply_login),
             ("interfaces", self._apply_interfaces),
             ("pppoe", self._apply_pppoe),
+            ("vrrp", self._apply_vrrp),
             ("wireless", self._apply_wireless),
             ("interface-roles", self._apply_interface_roles),
             ("vrf", self._apply_vrf),
@@ -805,6 +824,89 @@ class ConfigStore:
             except subprocess.CalledProcessError:
                 pass
             notes.append(f"{ifname}: removed network.{ours}")
+
+    def _apply_vrrp(self, old, new):
+        old_ha = old.get("high-availability") or {}
+        new_ha = new.get("high-availability") or {}
+        if old_ha == new_ha:
+            return []
+        notes: List[str] = []
+        try:
+            out = self._uci("show", "keepalived").stdout
+            for line in out.splitlines():
+                if line.startswith("keepalived.vyos_ha_"):
+                    sec = line.split(".")[1].split("=")[0]
+                    try:
+                        self._uci("delete", f"keepalived.{sec}")
+                    except subprocess.CalledProcessError:
+                        pass
+            vrrp = new_ha.get("vrrp") or {}
+            startup = (vrrp.get("global-parameters") or {}).get("startup-delay")
+            if startup:
+                self._uci("set", "keepalived.globals=globals")
+                self._uci("set",
+                          f"keepalived.globals.vrrp_startup_delay={startup}")
+            groups = vrrp.get("group") or {}
+            for name, cfg in groups.items():
+                if not isinstance(cfg, dict):
+                    continue
+                sec = "vyos_ha_" + re.sub(r"[^A-Za-z0-9_]", "_", str(name))
+                self._uci("set", f"keepalived.{sec}=vrrp_instance")
+                self._uci("set", f"keepalived.{sec}.name={name}")
+                if cfg.get("interface"):
+                    self._uci("set", f"keepalived.{sec}.interface={cfg['interface']}")
+                if cfg.get("vrid"):
+                    self._uci("set",
+                              f"keepalived.{sec}.virtual_router_id={cfg['vrid']}")
+                if cfg.get("priority"):
+                    self._uci("set", f"keepalived.{sec}.priority={cfg['priority']}")
+                if cfg.get("no-preempt"):
+                    self._uci("set", f"keepalived.{sec}.nopreempt=1")
+                if cfg.get("preempt-delay"):
+                    self._uci("set",
+                              f"keepalived.{sec}.preempt_delay={cfg['preempt-delay']}")
+                if cfg.get("hello-source-address"):
+                    self._uci("set", f"keepalived.{sec}.unicast_src_ip="
+                              f"{cfg['hello-source-address']}")
+                for i, addr in enumerate(_as_list(cfg.get("address"))):
+                    vip = f"{sec}_vip_{i}"
+                    self._uci("set", f"keepalived.{vip}=ipaddress")
+                    self._uci("set", f"keepalived.{vip}.name={vip}")
+                    self._uci("set", f"keepalived.{vip}.address={addr}")
+                    if cfg.get("interface"):
+                        self._uci("set",
+                                  f"keepalived.{vip}.device={cfg['interface']}")
+                    self._uci("add_list",
+                              f"keepalived.{sec}.virtual_ipaddress={vip}")
+                for i, ifname in enumerate(_as_list(
+                        (cfg.get("track") or {}).get("interface"))):
+                    tsec = f"{sec}_track_{i}"
+                    self._uci("set", f"keepalived.{tsec}=track_interface")
+                    self._uci("set", f"keepalived.{tsec}.name={ifname}")
+                    self._uci("add_list",
+                              f"keepalived.{sec}.track_interface={ifname}")
+                for i, peer in enumerate(_as_list(cfg.get("peer-address"))):
+                    psec = f"{sec}_peer_{i}"
+                    self._uci("set", f"keepalived.{psec}=peer")
+                    self._uci("set", f"keepalived.{psec}.name={psec}")
+                    self._uci("set", f"keepalived.{psec}.address={peer}")
+                    self._uci("add_list",
+                              f"keepalived.{sec}.unicast_peer={psec}")
+            for name, cfg in (vrrp.get("sync-group") or {}).items():
+                if not isinstance(cfg, dict):
+                    continue
+                sec = "vyos_ha_sync_" + re.sub(r"[^A-Za-z0-9_]", "_", str(name))
+                self._uci("set", f"keepalived.{sec}=vrrp_sync_group")
+                self._uci("set", f"keepalived.{sec}.name={name}")
+                for member in _as_list(cfg.get("member")):
+                    self._uci("add_list", f"keepalived.{sec}.group={member}")
+            self._uci("commit", "keepalived")
+            subprocess.run(["/etc/init.d/keepalived", "restart"],
+                           capture_output=True, text=True, timeout=20)
+            notes.append(f"vrrp: {len(groups)} group(s)")
+        except Exception as e:  # noqa: BLE001
+            notes.append(f"vrrp apply failed: {e}")
+        return notes
 
     def _apply_pppoe(self, old, new):
         old_if = (old.get("interfaces") or {})
