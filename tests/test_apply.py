@@ -24,13 +24,20 @@ from vyoscli import config as config_mod  # noqa: E402
 class FakeSystem:
     """Records every subprocess call; fakes `uci show` output."""
 
-    def __init__(self, uci_show: str = ""):
+    def __init__(self, uci_show: str = "", get_values=None):
         self.calls: list[list[str]] = []
         self.uci_show = uci_show
+        self.get_values = get_values or {}
 
     def run(self, cmd, *args, **kwargs):
         cmd = [str(c) for c in cmd]
         self.calls.append(cmd)
+        if cmd[:3] == ["uci", "-q", "get"] and len(cmd) == 4:
+            key = cmd[3]
+            rc = 0 if key in self.get_values else 1
+            return subprocess.CompletedProcess(cmd, rc,
+                                               stdout=self.get_values.get(key, ""),
+                                               stderr="")
         out = self.uci_show if cmd[:2] == ["uci", "show"] else ""
         return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr="")
 
@@ -221,6 +228,33 @@ class CommitBackendTest(unittest.TestCase):
         calls = self.fake.uci_calls()
         self.assertNotIn(["uci", "set", "network.vyos_eth1=interface"], calls)
         self.assertNotIn(["uci", "set", "network.wan.proto=static"], calls)
+
+    def test_takeover_backs_up_and_restores_section(self):
+        self.fake.uci_show = ("network.wan=interface\n"
+                              "network.wan.device='eth5'\n"
+                              "network.wan.proto='static'\n")
+        self.fake.get_values = {"network.wan.proto": "static",
+                                "network.wan.device": "eth5",
+                                "network.wan.ipaddr": "192.0.2.1/24",
+                                "network.vyos_eth5": "interface"}
+        cfg(self.cli, "set interfaces ethernet eth5 address 192.0.2.5/24")
+        self.commit()
+        backup = os.path.join(self.cli.store.base_dir, "backup", "network.wan.json")
+        self.assertTrue(os.path.exists(backup))
+        cfg(self.cli, "delete interfaces ethernet eth5 address 192.0.2.5/24")
+        self.commit()
+        self.assertFalse(os.path.exists(backup))
+        calls = self.fake.uci_calls()
+        self.assertIn(["uci", "set", "network.wan.proto=static"], calls)
+        self.assertIn(["uci", "add_list", "network.wan.ipaddr=192.0.2.1/24"], calls)
+
+    def test_removing_address_drops_vyos_interface(self):
+        cfg(self.cli, "set interfaces ethernet eth5 address 192.0.2.6/24")
+        self.commit()
+        self.fake.get_values = {"network.vyos_eth5": "interface"}
+        cfg(self.cli, "delete interfaces ethernet eth5 address 192.0.2.6/24")
+        self.commit()
+        self.assertIn(["uci", "delete", "network.vyos_eth5"], self.fake.calls)
 
     def test_takes_over_a_static_interface_on_the_same_device(self):
         self.fake.uci_show = ("network.wan=interface\n"

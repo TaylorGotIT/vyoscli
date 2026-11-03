@@ -42,7 +42,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 变更 | 说明 |
 |---|---|
 | `GUIDE.md` → `docs/GUIDE.md`，`REQUIRED_PACKAGES.md` → `docs/DEPENDENCIES.md` | 文档集中到 `docs/` |
-| 新增 `tests/`（4 个文件、67 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
+| 新增 `tests/`（4 个文件、69 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
 | 新增 `.gitignore` | 忽略 `__pycache__`、`*.ipk`、`.audit/` 等 |
 | `git rm --cached package/vyoscli.zip` | 陈旧构建产物，已从仓库移除 |
 | `Makefile` 安装改用 `$(wildcard .../*.py)` | 以后加模块不用再改 Makefile |
@@ -92,6 +92,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 38 | console-server 的 per-device dropbear 用 `kill "$(cat ...)"` 的 shell 写法，pid 文件也没人读 | 改为读 pidfile + `os.kill`；真机验证 `ssh-port 2222` 后 dropbear 监听、删除后 pidfile 与端口都清理 | `config.py:_apply_console_server` |
 | 39 | 无 `/etc/config/wireless` 时 `uci set wireless...` 直接报错 | 无射频设备改为跳过并提示（不再创建残缺配置）；本机仍无法做无线端到端验证 | `config.py:_apply_wireless` |
 | 40 | `sync` 全量路径会 `podman rm -f` 重建所有容器 | 全量 sync 跳过 `containers` 并在输出中说明；定向 sync 不受影响 | `config.py:sync` / `_apply_all` |
+| 41 | 接管现有静态接口是"就地改"，原 proto/地址不可恢复 | 首次接管前把 `proto/ipaddr/device/ifname` 备份到 `/etc/vyoscli/backup/network.<section>.json`（0600）；地址清空或设备从配置移除时自动还原并删除备份；自建的 `vyos_*` 接口则整段删除。真机验证：`192.0.2.1/24` 被接管为 `192.0.2.5/24`，删除后恢复原值 | `config.py:_backup_section` / `_restore_section` / `_release_iface` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示
@@ -143,6 +144,7 @@ DOC_DRIFT 里显式承认不支持**，不允许悄悄失效。
 - **WireGuard / BGP / IPsec / conserver 实测**：wg 接口+peer（endpoint 拆分）生效；frr 用 frr.conf + daemons 启动，`vtysh` 显示 AS/邻居/network/community-list；strongSwan 生成 peer conn（PSK、隧道子网）并出现在 `ipsec statusall`；conserver 生成配置并启动；设备无无线硬件，wireless 未验证；
 - **开机对账实测**：`/etc/init.d/vyoscli boot` 后台执行 `vyoscli --sync`，无漂移时日志仅一行 `Sync: no drift, nothing to do.`；整段删除 `system.ntp` 后 `show system drift` 报 missing，`sync` 重建 section 并恢复服务器，drift 归零；
 - **conserver per-device ssh 实测**：`ssh-port 2222` 后 dropbear 监听、pidfile 生成；删除配置后进程/端口/文件均清理；**wireless** 因无 `/etc/config/wireless`（无射频）按设计跳过；
+- **接口接管备份/还原实测**：`erspan0` 上的静态接口被接管后写入 `192.0.2.5/24`，备份文件保存原 `192.0.2.1/24`；删除该地址后自动还原并删除备份；自建 `vyos_*` 接口在地址清空时整段删除；
 - 包格式：OpenWrt 的 `.ipk` 是 **gzip(tar)**（`./debian-binary` + `control.tar.gz` +
   `data.tar.gz`），不是 Debian ar；`scripts/make-ipk.py` 按此格式生成，`opkg install` 通过。
 

@@ -550,6 +550,75 @@ class ConfigStore:
                                           "direct": False})
         return mapping
 
+    # ---------- interface takeover backup ----------
+    def _backup_path(self, section: str) -> str:
+        return os.path.join(self.base_dir, "backup", f"network.{section}.json")
+
+    @staticmethod
+    def _uci_get(key: str) -> Optional[str]:
+        try:
+            proc = subprocess.run(["uci", "-q", "get", key],
+                                  capture_output=True, text=True, timeout=5)
+        except OSError:
+            return None
+        return proc.stdout.strip() if proc.returncode == 0 else None
+
+    def _section_exists(self, section: str) -> bool:
+        return self._uci_get(f"network.{section}") is not None
+
+    def _backup_section(self, section: str) -> None:
+        """Remember the options we are about to overwrite (first takeover)."""
+        path = self._backup_path(section)
+        if os.path.exists(path):
+            return
+        data = {}
+        for opt in ("proto", "ipaddr", "device", "ifname"):
+            value = self._uci_get(f"network.{section}.{opt}")
+            if value:
+                data[opt] = value
+        if data:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            self._dump(path, data)
+
+    def _restore_section(self, section: str, notes: List[str]) -> None:
+        path = self._backup_path(section)
+        data = {}
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            data = {}
+        for opt in ("proto", "device", "ifname"):
+            if data.get(opt):
+                self._uci("set", f"network.{section}.{opt}={data[opt]}")
+            else:
+                try:
+                    self._uci("delete", f"network.{section}.{opt}")
+                except subprocess.CalledProcessError:
+                    pass
+        try:
+            self._uci("delete", f"network.{section}.ipaddr")
+        except subprocess.CalledProcessError:
+            pass
+        for value in str(data.get("ipaddr", "")).split():
+            self._uci("add_list", f"network.{section}.ipaddr={value}")
+        self._remove_quietly(path)
+        notes.append(f"released network.{section} (restored original settings)")
+
+    def _release_iface(self, ifname: str, mapping: Dict[str, Dict[str, Any]],
+                       notes: List[str]) -> None:
+        section = (mapping.get(ifname) or {}).get("section")
+        if section and os.path.exists(self._backup_path(section)):
+            self._restore_section(section, notes)
+            return
+        ours = f"vyos_{ifname}"
+        if section == ours or self._section_exists(ours):
+            try:
+                self._uci("delete", f"network.{ours}")
+            except subprocess.CalledProcessError:
+                pass
+            notes.append(f"{ifname}: removed network.{ours}")
+
     def _apply_interfaces(self, old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
         old_if = old.get("interfaces") or {}
         new_if = new.get("interfaces") or {}
@@ -558,15 +627,18 @@ class ConfigStore:
         notes: List[str] = []
         mapping = self._network_map()
         eth = (new_if.get("ethernet") or {})
+        for gone in set(old_if.get("ethernet") or {}) - set(eth):
+            self._release_iface(gone, mapping, notes)
         for ifname, cfg in eth.items():
             if not isinstance(cfg, dict) or ifname == "lo":
                 continue
             addrs = _as_list(cfg.get("address"))
-            # An interface without addresses is not ours to program: creating
-            # a bare proto=static section for it would shadow the stock
-            # lan/wan interfaces and can cut the box off the network.
+            # No address means "stop managing this port": restore a taken-over
+            # section, or drop our own vyos_* interface.
             if not addrs:
+                self._release_iface(ifname, mapping, notes)
                 continue
+            taken_over = False
             section = self._find_uci_section("network", "ifname", ifname)
             if section is None:
                 owner = mapping.get(ifname)
@@ -584,13 +656,16 @@ class ConfigStore:
                     # Static interface on this device: take it over instead of
                     # creating a second logical interface on the same port.
                     section = owner["section"]
+                    self._backup_section(section)
+                    taken_over = True
                     notes.append(f"{ifname}: applied to existing "
                                  f"network.{section}")
                 else:
                     section = f"vyos_{ifname}"
                     self._uci("set", f"network.{section}=interface")
                     notes.append(f"uci: created network.{section} for {ifname}")
-            self._uci("set", f"network.{section}.ifname={ifname}")
+            if not taken_over:
+                self._uci("set", f"network.{section}.ifname={ifname}")
             self._uci("set", f"network.{section}.proto=static")
             try:
                 self._uci("delete", f"network.{section}.ipaddr")
