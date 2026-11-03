@@ -122,18 +122,17 @@ class Cli:
             return []
         if self.ctx.mode == "op":
             root = self.tree.op_root
+            head = tokens[:-1]
         else:
             root = self.tree.cfg_root
-            base = root
-            for p in self.ctx.cfg_path:
-                if p in base.children:
-                    base = base.children[p]
-                else:
-                    base = root
-                    break
-            root = base
+            head = tokens[:-1]
+            # Inside `edit`, the buffer has no node path: "set host-name x"
+            # must be resolved as "set <cfg_path> host-name x".
+            if (self.ctx.cfg_path and head
+                    and head[0] in ("set", "delete", "edit", "next")):
+                head = [head[0]] + self.ctx.cfg_path + head[1:]
 
-        node, _rem, _matched, _canon = root.walk(tokens[:-1])
+        node, _rem, _matched, _canon = root.walk(head)
         out: List[tuple] = []
         for child_name, child in node.children.items():
             out.append((child_name, child.help or ""))
@@ -272,10 +271,10 @@ class Cli:
             # Resolve to canonical node names so "edit syst" really lands on
             # "system" and later "set" sub-commands compose with it.
             node, remaining, _matched, canon = self.tree.cfg_root.walk(
-                self.ctx.cfg_path + rest)
+                ["set"] + self.ctx.cfg_path + rest)
             if remaining:
                 return f"edit: no such node: {' '.join(remaining)}"
-            self.ctx.cfg_path = canon
+            self.ctx.cfg_path = canon[1:]
             return ""
         if head == "show":
             rest2 = rest
@@ -346,6 +345,25 @@ class Cli:
             self.store.delete_path(structural)
         return ""
 
+    # ------------ inline help (`?`) ------------
+    def _help_text(self, prefix: str) -> str:
+        tokens = prefix.split()
+        if self.ctx.mode == "cfg" and self.ctx.cfg_path and not tokens:
+            # inside `edit`: list the current node's children
+            tokens, partial = ["set", ""], ""
+        elif prefix.endswith(" ") or not tokens:
+            partial = ""
+        else:
+            partial = tokens.pop()
+        pairs = self._matches_with_help(tokens + [""])
+        names = [(name, help_text) for name, help_text in pairs
+                 if name.startswith(partial)]
+        if not names:
+            return f"  (no completions for '{prefix.strip()}')"
+        width = max(len(name) for name, _ in names)
+        return "\n".join(f"  {name.ljust(width + 2)}{help_text}"
+                         for name, help_text in names)
+
     # ------------ main loop ------------
     def cmdloop(self) -> None:
         # set terminal title
@@ -358,6 +376,10 @@ class Cli:
                 print()
                 break
             if not line:
+                continue
+            if line.endswith("?"):
+                # VyOS-style inline help: "show ?", "set system ?", "?"
+                print(self._help_text(line[:-1]))
                 continue
             try:
                 tokens = shlex.split(line)

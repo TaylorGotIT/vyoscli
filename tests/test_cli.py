@@ -77,6 +77,18 @@ class SetDeleteTest(unittest.TestCase):
         self.assertIn("1.1.1.1", value)
         self.assertNotIn("2", value)
 
+    def test_edit_then_set_composes(self):
+        cfg(self.cli, "edit system")
+        self.assertEqual(self.cli.ctx.cfg_path, ["system"])
+        self.assertEqual(cfg_errors(self.cli, "set host-name edited"), [])
+        self.assertEqual(self.cli.store.get(["system", "host-name"]), "edited")
+        cfg(self.cli, "exit")
+        self.assertEqual(self.cli.ctx.cfg_path, [])
+
+    def test_edit_abbreviation_resolves_canonical(self):
+        cfg(self.cli, "edit syst")
+        self.assertEqual(self.cli.ctx.cfg_path, ["system"])
+
     def test_candidate_survives_restart(self):
         cfg(self.cli, "set system host-name persisted")
         # A brand-new CLI on the same directory must see the edit.
@@ -195,6 +207,16 @@ class CompletionTest(unittest.TestCase):
         names = [name for name, _ in completions(self.cli, "set system ")]
         self.assertIn("host-name", names)
         self.assertIn("name-server", names)
+
+    def test_question_mark_help(self):
+        self.cli.ctx.mode = "op"
+        self.assertIn("version", self.cli._help_text("show "))
+        self.assertIn("system", self.cli._help_text("show sys"))
+        self.cli.ctx.mode = "cfg"
+        self.assertIn("commit", self.cli._help_text(""))
+        self.assertIn("configuration", self.cli._help_text("show "))
+        self.cli.ctx.cfg_path = ["system"]
+        self.assertIn("host-name", self.cli._help_text(""))
 
     def test_leaf_completion_has_value_hint(self):
         self.cli.ctx.cfg_path = []

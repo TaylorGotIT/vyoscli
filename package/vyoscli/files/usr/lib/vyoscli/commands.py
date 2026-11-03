@@ -1142,4 +1142,13 @@ def build_tree(store: Any) -> CommandTree:
     ):
         tree.cfg_root.add(Node(name=verb, help=help_text))
 
+    # Help/completion only: these are dispatched by cli._run_cfg, but the tree
+    # needs the children so `show ?` and Tab can list them.
+    show_node = tree.cfg_root.children.get("show")
+    if show_node is not None:
+        show_node.add(Node(name="configuration",
+                           help="Show candidate (or running) configuration"))
+        show_node.add(Node(name="system", help="Show the running configuration"))
+        show_node.add(Node(name="history", help="List commit snapshots"))
+
     return tree
