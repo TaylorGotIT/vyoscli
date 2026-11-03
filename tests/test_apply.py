@@ -410,6 +410,31 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn("match ip address prefix-list PL", text)
         self.assertIn("set local-preference 200", text)
 
+    def test_qos_renders_and_applies_tc(self):
+        from vyoscli.config import render_qos_commands
+        cmds = render_qos_commands({
+            "policy": {"fq-codel": {"fq1": {"queue-limit": 1000}},
+                       "cake": {"c1": {"bandwidth": "50mbit"}}},
+            "interface": {"br-lan": {"egress": "fq1"},
+                          "eth0": {"egress": "c1", "ingress": "fq1"}}})
+        self.assertIn(["tc", "qdisc", "replace", "dev", "br-lan", "root",
+                       "fq_codel", "limit", "1000"], cmds)
+        self.assertIn(["tc", "qdisc", "replace", "dev", "eth0", "root",
+                       "cake", "bandwidth", "50mbit"], cmds)
+        self.assertTrue(any(cmd[:3] == ["tc", "filter", "replace"]
+                            for cmd in cmds))
+
+        cfg(self.cli,
+            "set qos policy fq-codel fq1 queue-limit 1000",
+            "set qos interface br-lan egress fq1")
+        self.commit()
+        self.assertIn(["tc", "qdisc", "replace", "dev", "br-lan", "root",
+                       "fq_codel", "limit", "1000"], self.fake.calls)
+        cfg(self.cli, "delete qos interface br-lan")
+        self.commit()
+        self.assertIn(["tc", "qdisc", "del", "dev", "br-lan", "root"],
+                      self.fake.calls)
+
     def test_pki_writes_and_removes_files(self):
         cert = ("-----BEGIN CERTIFICATE-----"
                 "MIIBdemo-----END CERTIFICATE-----")

@@ -355,6 +355,82 @@ def render_nat_nft(nat: Dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_qos_commands(qos: Dict[str, Any]) -> List[List[str]]:
+    """Translate qos policy/interface into tc commands."""
+    policies = qos.get("policy") or {}
+    commands: List[List[str]] = []
+
+    def find(name: str):
+        for kind, group in policies.items():
+            if isinstance(group, dict) and isinstance(group.get(name), dict):
+                return kind, group[name]
+        return None, None
+
+    for ifname, cfg in (qos.get("interface") or {}).items():
+        if not isinstance(cfg, dict):
+            continue
+        egress = cfg.get("egress")
+        if egress:
+            kind, policy = find(str(egress))
+            policy = policy or {}
+            if kind == "fq-codel":
+                cmd = ["tc", "qdisc", "replace", "dev", str(ifname), "root",
+                       "fq_codel"]
+                if policy.get("queue-limit"):
+                    cmd += ["limit", str(policy["queue-limit"])]
+                if policy.get("flows"):
+                    cmd += ["flows", str(policy["flows"])]
+                if policy.get("quantum"):
+                    cmd += ["quantum", str(policy["quantum"])]
+                if policy.get("target"):
+                    cmd += ["target", f"{policy['target']}ms"]
+                if policy.get("interval"):
+                    cmd += ["interval", f"{policy['interval']}ms"]
+                commands.append(cmd)
+            elif kind == "cake":
+                cmd = ["tc", "qdisc", "replace", "dev", str(ifname), "root",
+                       "cake"]
+                if policy.get("bandwidth"):
+                    cmd += ["bandwidth", str(policy["bandwidth"])]
+                if policy.get("flow-isolation"):
+                    cmd += ["flow-isolation", str(policy["flow-isolation"])]
+                if policy.get("rtt"):
+                    cmd += ["rtt", f"{policy['rtt']}ms"]
+                commands.append(cmd)
+            elif kind == "shaper":
+                default = policy.get("default") or {}
+                rate = default.get("bandwidth") or policy.get("bandwidth")
+                if rate:
+                    commands.append(["tc", "qdisc", "replace", "dev", str(ifname),
+                                     "root", "handle", "1:", "htb",
+                                     "default", "10"])
+                    commands.append(["tc", "class", "replace", "dev", str(ifname),
+                                     "parent", "1:", "classid", "1:10",
+                                     "htb", "rate", str(rate)])
+                for cid, cls in (policy.get("class") or {}).items():
+                    if not isinstance(cls, dict) or not cls.get("bandwidth"):
+                        continue
+                    cmd = ["tc", "class", "replace", "dev", str(ifname),
+                           "parent", "1:", "classid", f"1:{cid}", "htb",
+                           "rate", str(cls["bandwidth"])]
+                    if cls.get("ceiling"):
+                        cmd += ["ceil", str(cls["ceiling"])]
+                    commands.append(cmd)
+        ingress = cfg.get("ingress")
+        if ingress:
+            kind, policy = find(str(ingress))
+            policy = policy or {}
+            rate = ((policy.get("default") or {}).get("bandwidth")
+                    or policy.get("bandwidth") or "1mbit")
+            commands.append(["tc", "qdisc", "replace", "dev", str(ifname),
+                             "handle", "ffff:", "ingress"])
+            commands.append(["tc", "filter", "replace", "dev", str(ifname),
+                             "parent", "ffff:", "protocol", "all", "u32",
+                             "match", "u32", "0", "0", "police", "rate",
+                             str(rate), "burst", "15k", "drop", "flowid", ":1"])
+    return commands
+
+
 class ConfigStore:
     def __init__(self, base_dir: str = "/etc/vyoscli") -> None:
         self.base_dir = base_dir
@@ -657,6 +733,7 @@ class ConfigStore:
             ("pppoe", self._apply_pppoe),
             ("vrrp", self._apply_vrrp),
             ("pki", self._apply_pki),
+            ("qos", self._apply_qos),
             ("wireless", self._apply_wireless),
             ("interface-roles", self._apply_interface_roles),
             ("vrf", self._apply_vrf),
@@ -825,6 +902,34 @@ class ConfigStore:
             except subprocess.CalledProcessError:
                 pass
             notes.append(f"{ifname}: removed network.{ours}")
+
+    def _apply_qos(self, old, new):
+        old_q = old.get("qos") or {}
+        new_q = new.get("qos") or {}
+        if old_q == new_q:
+            return []
+        notes: List[str] = []
+        for gone in set((old_q.get("interface") or {})) - set(
+                (new_q.get("interface") or {})):
+            for args in (["qdisc", "del", "dev", str(gone), "root"],
+                         ["qdisc", "del", "dev", str(gone), "ingress"]):
+                try:
+                    subprocess.run(["tc"] + args, capture_output=True,
+                                   text=True, timeout=10)
+                except (OSError, subprocess.SubprocessError):
+                    pass
+        failed = 0
+        for cmd in render_qos_commands(new_q):
+            try:
+                proc = subprocess.run(cmd, capture_output=True, text=True,
+                                      timeout=15)
+                if proc.returncode != 0:
+                    failed += 1
+            except (OSError, subprocess.SubprocessError):
+                failed += 1
+        count = len(render_qos_commands(new_q))
+        notes.append(f"qos: applied {count - failed}/{count} tc command(s)")
+        return notes
 
     def _apply_pki(self, old, new):
         old_p = old.get("pki") or {}

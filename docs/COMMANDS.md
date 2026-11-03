@@ -328,6 +328,32 @@
 | `protocols static route <prefix> next-hop` | Next-hop gateway IPv4 | `protocols static route <prefix> next-hop 192.0.2.1` |
 | `protocols static route <prefix> reject` | Send ICMP unreachable | `protocols static route <prefix> reject true` |
 
+## set qos
+
+| 命令 | 说明 | 示例 |
+|---|---|---|
+| `qos interface <name> egress` | Egress policy name | `qos interface <name> egress text` |
+| `qos interface <name> ingress` | Ingress policy name | `qos interface <name> ingress text` |
+| `qos policy cake <name> bandwidth` | Shaping bandwidth | `qos policy cake <name> bandwidth text` |
+| `qos policy cake <name> flow-isolation` | Flow isolation mode | `qos policy cake <name> flow-isolation text` |
+| `qos policy cake <name> rtt` | RTT (ms) | `qos policy cake <name> rtt 100` |
+| `qos policy fq-codel <name> flows` | Number of flows | `qos policy fq-codel <name> flows 100` |
+| `qos policy fq-codel <name> interval` | CoDel interval (ms) | `qos policy fq-codel <name> interval 100` |
+| `qos policy fq-codel <name> quantum` | Deficit quantum (bytes) | `qos policy fq-codel <name> quantum 100` |
+| `qos policy fq-codel <name> queue-limit` | Queue limit (packets) | `qos policy fq-codel <name> queue-limit 100` |
+| `qos policy fq-codel <name> target` | CoDel target (ms) | `qos policy fq-codel <name> target 100` |
+| `qos policy limiter <name> class <name> bandwidth` | Rate limit | `qos policy limiter <name> class <name> bandwidth text` |
+| `qos policy limiter <name> class <name> burst` | Burst size | `qos policy limiter <name> class <name> burst text` |
+| `qos policy limiter <name> default bandwidth` | Rate limit | `qos policy limiter <name> default bandwidth text` |
+| `qos policy limiter <name> default burst` | Burst size | `qos policy limiter <name> default burst text` |
+| `qos policy shaper <policy> bandwidth` | Total bandwidth (e.g. 100mbit) | `qos policy shaper <policy> bandwidth 100mbit` |
+| `qos policy shaper <policy> class <name> bandwidth` | Guaranteed bandwidth | `qos policy shaper <policy> class <name> bandwidth text` |
+| `qos policy shaper <policy> class <name> ceiling` | Maximum bandwidth | `qos policy shaper <policy> class <name> ceiling text` |
+| `qos policy shaper <policy> class <name> priority` | Priority 0-7 | `qos policy shaper <policy> class <name> priority 100` |
+| `qos policy shaper <policy> class <name> queue-type` | fq-codel \| fair-queue \| drop-tail | `qos policy shaper <policy> class <name> queue-type text` |
+| `qos policy shaper <policy> default bandwidth` | Default class bandwidth | `qos policy shaper <policy> default bandwidth text` |
+| `qos policy shaper <policy> default queue-type` | fq-codel \| fair-queue \| drop-tail | `qos policy shaper <policy> default queue-type text` |
+
 ## set service
 
 | 命令 | 说明 | 示例 |

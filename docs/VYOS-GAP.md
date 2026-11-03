@@ -25,7 +25,7 @@
 | `high-availability` | VRRP、sync-group、virtual-server | VRRP group（interface/vrid/address/priority/preempt/unicast）+ sync-group | 🟡 VRRP 已可用，virtual-server 未做 |
 | `load-balancing` | WAN 负载均衡、HAProxy | 无 | ❌ 完全缺失 |
 | `pki` | CA/证书/DH/ACME、generate/import | ca/certificate/key-pair/dh 存储到 `/etc/vyoscli/pki` | 🟡 存储已可用，缺 ACME 与 generate/import 操作命令 |
-| `traffic-policy` | 11 种 qdisc + 接口 ingress/egress | 只有 `traffic-policy shaper`（5 节点） | 🟡 名称和结构都与 VyOS 的 `qos` 不同 |
+| `traffic-policy` | 11 种 qdisc + 接口 ingress/egress | 新 `qos`：shaper/limiter/fq-codel/cake + interface ingress/egress | 🟡 常见 qdisc 已可用，缺 fair-queue/priority/random-detect/network-emulator 与复杂 match |
 | `container` | name/network/registry/health-check 等 | 9 节点极简 | 🟡 OpenWrt 默认无 podman，优先级低 |
 | `vrf` | name + table + 接口绑定 | name + table | ✅ 基本够用 |
 
@@ -174,9 +174,10 @@ VyOS 1.5 是 `qos policy <type> <name>` + `qos interface <if> ingress|egress <po
 支持 shaper/limiter/fq-codel/fair-queue/round-robin/drop-tail/priority-queue/
 random-detect/rate-control/network-emulator/cake，以及 traffic-match-group。
 
-我们只有 `traffic-policy shaper <name> interface/bandwidth/per-ip`（自研简化模型），
-后端是 tc。建议改成 VyOS 的 `qos` 结构，至少支持 shaper/limiter/fq-codel/cake
-和接口 ingress/egress 绑定。
+已新增 VyOS 风格的 `qos policy shaper|limiter|fq-codel|cake` 与
+`qos interface <if> ingress|egress <policy>`，后端 tc；旧的
+`traffic-policy shaper` 保留。仍缺 fair-queue/priority-queue/random-detect/
+network-emulator/cake 的完整参数与 class match 规则。
 
 ## 优先级建议
 
