@@ -45,17 +45,14 @@ endef
 
 define Package/vyoscli/install
 	$(INSTALL_DIR) $(1)/usr/lib/vyoscli
-	$(INSTALL_DATA) ./files/usr/lib/vyoscli/__init__.py $(1)/usr/lib/vyoscli/
-	$(INSTALL_DATA) ./files/usr/lib/vyoscli/__main__.py $(1)/usr/lib/vyoscli/
-	$(INSTALL_DATA) ./files/usr/lib/vyoscli/cli.py $(1)/usr/lib/vyoscli/
-	$(INSTALL_DATA) ./files/usr/lib/vyoscli/tree.py $(1)/usr/lib/vyoscli/
-	$(INSTALL_DATA) ./files/usr/lib/vyoscli/config.py $(1)/usr/lib/vyoscli/
-	$(INSTALL_DATA) ./files/usr/lib/vyoscli/commands.py $(1)/usr/lib/vyoscli/
+	$(INSTALL_DATA) $(wildcard ./files/usr/lib/vyoscli/*.py) $(1)/usr/lib/vyoscli/
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) ./files/usr/bin/vyoscli $(1)/usr/bin/vyoscli
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/etc/init.d/vyoscli $(1)/etc/init.d/vyoscli
 	$(INSTALL_DIR) $(1)/etc/vyoscli
+	$(INSTALL_DIR) $(1)/etc/vyoscli/scripts
+	$(INSTALL_DIR) $(1)/etc/vyoscli/lists
 endef
 
 define Package/vyoscli/postinst

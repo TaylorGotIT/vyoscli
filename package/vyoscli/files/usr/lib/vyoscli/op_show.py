@@ -98,9 +98,9 @@ def _op_show_version(ctx: Any, value: Any) -> str:
         f"Hostname:          {host}\n"
         f"OS:                {openwrt_ver}\n"
         f"Kernel:            {uname.release} {uname.machine}\n"
-        f"Hardware vendor:   {hw.get('vendor', '-')}\n"
-        f"Hardware model:    {hw.get('model', '-')}\n"
-        f"Hardware serial:   {hw.get('serial', '-')}\n"
+        f"Hardware vendor:   {hw.get('vendor') or '-'}\n"
+        f"Hardware model:    {hw.get('model') or '-'}\n"
+        f"Hardware serial:   {hw.get('serial') or '-'}\n"
     )
 
 
@@ -141,7 +141,17 @@ def _op_show_interfaces(ctx: Any, value: Any) -> str:
         if len(parts) < 4:
             continue
         iface = parts[1].rstrip(":")
-        state = "u" if "UP" in line else "D"
+        # flags "<BROADCAST,MULTICAST,UP,LOWER_UP>" carry the admin state,
+        # the "state" token carries the link state.
+        flags = ""
+        if "<" in line and ">" in line:
+            flags = line.split("<", 1)[1].split(">", 1)[0]
+        admin = "u" if "UP" in flags.split(",") else "D"
+        oper = "D"
+        for i, p in enumerate(parts):
+            if p == "state" and i + 1 < len(parts):
+                oper = "u" if parts[i + 1] == "UP" else "D"
+                break
         # get mac (ether)
         mac = "--"
         for i, p in enumerate(parts):
@@ -154,7 +164,7 @@ def _op_show_interfaces(ctx: Any, value: Any) -> str:
             if p == "mtu":
                 mtu = parts[i + 1]
                 break
-        link_map[iface] = (mac, mtu, state)
+        link_map[iface] = (mac, mtu, f"{admin}/{oper}")
 
     # get addr info
     try:
@@ -211,7 +221,7 @@ def _op_show_interfaces(ctx: Any, value: Any) -> str:
             addr.ljust(addr_w + 2) +
             mac.ljust(mac_w + 2) +
             mtu.ljust(mtu_w + 2) +
-            f"{state}/{state}   ".ljust(6) +
+            f"{state}   ".ljust(6) +
             desc
         )
     return "\n".join(lines)

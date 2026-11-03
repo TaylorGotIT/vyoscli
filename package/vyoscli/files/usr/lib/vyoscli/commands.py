@@ -423,20 +423,6 @@ def build_tree(store: Any) -> CommandTree:
         br.dynamic = _existing_br
         br._dyn_template = br_tpl  # type: ignore[attr-defined]
 
-        # interface dummy dum0 address x.x.x.x/32
-        dm = Node(name="dummy", help="Dummy loopback-like interface")
-        if_root.add(dm)
-        dm_tpl = Node(name="*", help="Per-dummy")
-        dm_tpl.add(Node(name="address", help="Static address/prefix",
-                        value_type="ipv4net", action=_cfg_noop))
-        def _existing_dm(store=store):
-            try:
-                return list((store.candidate.get("interfaces", {}).get("dummy", {}) or {}).keys())
-            except Exception:
-                return []
-        dm.dynamic = _existing_dm
-        dm._dyn_template = dm_tpl  # type: ignore[attr-defined]
-
         # interfaces wireguard wg0 ...
         wg = Node(name="wireguard", help="WireGuard VPN interface")
         if_root.add(wg)
@@ -496,6 +482,12 @@ def build_tree(store: Any) -> CommandTree:
         tn_tpl.add(Node(name="source-address", help="Source outer IP", value_type="ipv4", action=_cfg_noop))
         tn_tpl.add(Node(name="source-interface", help="Source interface", value_type="str", action=_cfg_noop))
         tn_tpl.add(Node(name="remote", help="Tunnel remote address", value_type="ipv4", action=_cfg_noop))
+        # Legacy aliases: configs written by 0.1.0 use local-ip/remote-ip, and
+        # `show configuration commands` must stay replayable.
+        tn_tpl.add(Node(name="local-ip", help="Source outer IP (legacy alias)",
+                        value_type="ipv4", action=_cfg_noop))
+        tn_tpl.add(Node(name="remote-ip", help="Tunnel remote address (legacy alias)",
+                        value_type="ipv4", action=_cfg_noop))
         tn_tpl.add(Node(name="address", help="Inner tunnel IPv4/prefix",
                         value_type="ipv4net", action=_cfg_noop))
         tn_tpl.add(Node(name="description", help="Description", value_type="str", action=_cfg_noop))
@@ -637,15 +629,17 @@ def build_tree(store: Any) -> CommandTree:
         rm_match_com.add(Node(name="community-list", help="Community-list number",
                               value_type="str", action=_cfg_noop))
 
-        # policy community-list
+        # policy community-list <num> rule <num> regex/action/description
         pol = Node(name="policy", help="Routing policy")
         root.add(pol)
         comlist = Node(name="community-list", help="BGP community-list")
         pol.add(comlist)
-        cl_num = Node(name="", help="List number", dynamic=True, action=_cfg_noop)
+        cl_num = Node(name="", help="List number")
         comlist.add(cl_num)
-        cl_rule = Node(name="rule", help="Rule number", dynamic=True, action=_cfg_noop)
-        cl_num.add(cl_rule)
+        cl_rule_node = Node(name="rule", help="Rule")
+        cl_num.add(cl_rule_node)
+        cl_rule = Node(name="", help="Rule number")
+        cl_rule_node.add(cl_rule)
         cl_rule.add(Node(name="action", help="permit/deny", value_type="str", action=_cfg_noop))
         cl_rule.add(Node(name="description", help="Description", value_type="str", action=_cfg_noop))
         cl_rule.add(Node(name="regex", help="Community regex", value_type="str", action=_cfg_noop))
@@ -814,7 +808,9 @@ def build_tree(store: Any) -> CommandTree:
         pk_dyn.add(Node(name="type", help="ssh-rsa/ssh-ed25519", value_type="str", action=_cfg_noop))
 
         # policy route-redirect ...
-        pol = Node(name="policy", help="Policy")
+        # Reuse the existing "policy" node: creating a second one would
+        # replace it and silently drop community-list.
+        pol = root.children.get("policy") or Node(name="policy", help="Policy")
         root.add(pol)
         rr = Node(name="route-redirect", help="Transparent proxy redirect")
         pol.add(rr)
@@ -939,45 +935,52 @@ def build_tree(store: Any) -> CommandTree:
         cron.dynamic = _existing_cron
         cron._dyn_template = cron_tpl  # type: ignore[attr-defined]
 
-        # service dhcp-server shared-network-name <name> ...
+        # service dhcp-server shared-network-name <name> [interface <uci-net>]
+        #   subnet <cidr> default-router <ip> name-server <ip> ...
+        #     range <id> start <ip> stop <ip>
+        #     static-mapping <name> ip-address <ip> mac-address <mac>
         dhcp = Node(name="dhcp-server", help="DHCP server")
         svc.add(dhcp)
-        dhcp_shared = Node(name="shared-network-name", help="Shared network name", action=_cfg_noop)
+        dhcp_shared = Node(name="shared-network-name", help="Shared network name")
         dhcp.add(dhcp_shared)
-        dhcp_tpl = Node(name="*", help="Per-subnet DHCP")
-        dhcp_tpl.add(Node(name="subnet", help="Subnet CIDR (e.g. 192.168.1.0/24)",
-                          value_type="ipv4net", action=_cfg_noop))
-        dhcp_tpl.add(Node(name="interface", help="Interface name", value_type="str", action=_cfg_noop))
-        dhcp_tpl.add(Node(name="gateway", help="Default gateway", value_type="ipv4", action=_cfg_noop))
-        dhcp_tpl.add(Node(name="dns", help="DNS server (repeatable)", value_type="ipv4", action=_cfg_noop))
-        dhcp_tpl.add(Node(name="domain", help="Domain name", value_type="str", action=_cfg_noop))
-        dhcp_tpl.add(Node(name="domain-search", help="Domain search suffix", value_type="str", action=_cfg_noop))
-        dhcp_tpl.add(Node(name="wpad-url", help="WPAD URL (option 252)", value_type="str", action=_cfg_noop))
-        # range
-        range_node = Node(name="range", help="DHCP range", action=_cfg_noop)
-        dhcp_tpl.add(range_node)
-        range_tpl = Node(name="*", help="Range index")
-        range_tpl.add(Node(name="start", help="Range start IP", value_type="ipv4", action=_cfg_noop))
-        range_tpl.add(Node(name="stop", help="Range end IP", value_type="ipv4", action=_cfg_noop))
-        range_node.dynamic = lambda: []
-        range_node._dyn_template = range_tpl
-        # static mapping
-        static = Node(name="static-mapping", help="Static MAC-IP binding", action=_cfg_noop)
-        dhcp_tpl.add(static)
-        static_tpl = Node(name="*", help="Mapping name")
-        static_tpl.add(Node(name="ip-address", help="Fixed IP", value_type="ipv4", action=_cfg_noop))
-        static_tpl.add(Node(name="mac-address", help="MAC address", value_type="str", action=_cfg_noop))
-        static.dynamic = lambda: []
-        static._dyn_template = static_tpl
-        def _existing_dhcp_shared(store=store):
-            try:
-                return list((store.candidate.get("service", {})
-                             .get("dhcp-server", {})
-                             .get("shared-network-name", {}) or {}).keys())
-            except Exception:
-                return []
-        dhcp_shared.dynamic = _existing_dhcp_shared
-        dhcp_shared._dyn_template = dhcp_tpl  # type: ignore[attr-defined]
+        dhcp_tpl = Node(name="")
+        dhcp_shared.add(dhcp_tpl)
+        dhcp_tpl.add(Node(name="interface",
+                          help="UCI network to serve (default: auto-detect from subnet)",
+                          value_type="str", action=_cfg_noop))
+
+        dhcp_subnet = Node(name="subnet", help="Subnet CIDR (e.g. 192.168.1.0/24)")
+        dhcp_tpl.add(dhcp_subnet)
+        dhcp_subnet_tpl = Node(name="")
+        dhcp_subnet.add(dhcp_subnet_tpl)
+        dhcp_subnet_tpl.add(Node(name="default-router", help="Default gateway",
+                                 value_type="ipv4", action=_cfg_noop))
+        dhcp_subnet_tpl.add(Node(name="name-server", help="DNS server (repeatable)",
+                                 value_type="ipv4", action=_cfg_noop))
+        dhcp_subnet_tpl.add(Node(name="domain-name", help="Domain name",
+                                 value_type="str", action=_cfg_noop))
+        dhcp_subnet_tpl.add(Node(name="domain-search", help="Domain search suffix",
+                                 value_type="str", action=_cfg_noop))
+        dhcp_subnet_tpl.add(Node(name="lease", help="Lease time in seconds",
+                                 value_type="int", action=_cfg_noop))
+
+        range_node = Node(name="range", help="DHCP address range")
+        dhcp_subnet_tpl.add(range_node)
+        range_tpl = Node(name="")
+        range_node.add(range_tpl)
+        range_tpl.add(Node(name="start", help="First address in the range",
+                           value_type="ipv4", action=_cfg_noop))
+        range_tpl.add(Node(name="stop", help="Last address in the range",
+                           value_type="ipv4", action=_cfg_noop))
+
+        static = Node(name="static-mapping", help="Static MAC-IP binding")
+        dhcp_subnet_tpl.add(static)
+        static_tpl = Node(name="")
+        static.add(static_tpl)
+        static_tpl.add(Node(name="ip-address", help="Fixed IP",
+                            value_type="ipv4", action=_cfg_noop))
+        static_tpl.add(Node(name="mac-address", help="MAC address",
+                            value_type="str", action=_cfg_noop))
 
         # service ssh ... (dropbear)
         ssh = Node(name="ssh", help="SSH access (dropbear)")

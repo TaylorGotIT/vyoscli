@@ -7,8 +7,10 @@ accept a value declare a ``value_type`` and an ``action`` callback.
 
 from __future__ import annotations
 
+import ipaddress
+import re
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Tuple, Any
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
 # Value types accepted at leaf nodes. They double as completion hints and
@@ -16,13 +18,68 @@ from typing import Callable, Dict, List, Optional, Tuple, Any
 VALUE_TYPES = {
     None: "command",
     "str": "<text>",
+    "string": "<text>",
     "host": "<hostname>",
     "ipv4": "a.b.c.d",
     "ipv4net": "a.b.c.d/prefix",
+    "ipv4_cidr": "a.b.c.d/prefix",
     "port": "1-65535",
     "integer": "<0-2^31>",
+    "int": "<0-2^31>",
     "boolean": "{true|false}",
+    "bool": "{true|false}",
 }
+
+_SCALAR_TYPES = {"ipv4", "ipv4net", "ipv4_cidr", "port", "integer", "int",
+                 "boolean", "bool", "host"}
+
+
+def validate_value(value_type: Optional[str], value: str) -> Optional[str]:
+    """Validate a leaf value. Returns an error message, or None if valid."""
+    if value_type not in _SCALAR_TYPES:
+        return None
+    if not value:
+        return "value is required"
+    if any(ch.isspace() for ch in value):
+        return "expected a single token (unexpected extra words)"
+    vt = value_type
+    if vt == "ipv4":
+        try:
+            ipaddress.IPv4Address(value)
+        except ValueError:
+            return "not a valid IPv4 address"
+    elif vt in ("ipv4net", "ipv4_cidr"):
+        try:
+            ipaddress.IPv4Network(value, strict=False)
+        except ValueError:
+            return "not a valid IPv4 prefix (a.b.c.d/nn)"
+    elif vt == "port":
+        if not re.fullmatch(r"\d+", value):
+            return "not a port number"
+        if not 1 <= int(value) <= 65535:
+            return "port out of range 1-65535"
+    elif vt in ("integer", "int"):
+        if not re.fullmatch(r"-?\d+", value):
+            return "not an integer"
+    elif vt in ("boolean", "bool"):
+        if value.lower() not in ("true", "false"):
+            return "expected true or false"
+    elif vt == "host":
+        if not re.fullmatch(r"[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?", value):
+            return "not a valid hostname"
+    return None
+
+
+def coerce_value(value_type: Optional[str], value: str) -> Any:
+    """Store scalars with their native Python type (bool/int) like VyOS does."""
+    if value_type in ("boolean", "bool"):
+        return value.lower() == "true"
+    if value_type in ("integer", "int", "port"):
+        try:
+            return int(value)
+        except ValueError:
+            return value
+    return value
 
 
 @dataclass
@@ -41,26 +98,43 @@ class Node:
     dynamic: Optional[Callable[[], List[str]]] = None
 
     def add(self, child: "Node") -> "Node":
+        """Attach a child; ``name=""`` declares a dynamic placeholder.
+
+        A placeholder such as ``neighbor <ip>`` or ``user <name>`` describes
+        the tokens the *parent* accepts, so it is stored as the parent's
+        dynamic template instead of a literal child (which could never be
+        matched by a real token).
+        """
+        if child.name == "":
+            self.dynamic = child.dynamic if callable(child.dynamic) else (lambda: [])
+            self._dyn_template = child
+            return child
         self.children[child.name] = child
         return child
 
-    def walk(self, tokens: List[str]) -> Tuple["Node", List[str], int]:
+    def walk(self, tokens: List[str]) -> Tuple["Node", List[str], int, List[str]]:
         """Greedy-resolve ``tokens`` against this subtree.
 
-        Returns (final_node, remaining_tokens, matched_count).
+        Returns ``(final_node, remaining_tokens, matched_count, canonical)``.
+        ``canonical`` holds the *full* names that each consumed token resolved
+        to, so an abbreviated command (``set syst host-name x``) can be stored
+        under ``system.host-name`` instead of inventing a ``syst`` subtree.
         Dynamic children are resolved on the fly.
         """
         node = self
         i = 0
+        canonical: List[str] = []
         while i < len(tokens):
             tok = tokens[i]
             if tok in node.children:
+                canonical.append(tok)
                 node = node.children[tok]
                 i += 1
                 continue
             # prefix match: unique child starting with tok
             matches = [c for c in node.children if c.startswith(tok)]
             if len(matches) == 1:
+                canonical.append(matches[0])
                 node = node.children[matches[0]]
                 i += 1
                 continue
@@ -76,11 +150,12 @@ class Node:
                     synth.value_type = tpl.value_type
                     synth.action = tpl.action
                 node.children[tok] = synth
+                canonical.append(tok)
                 node = synth
                 i += 1
                 continue
             break
-        return node, tokens[i:], i
+        return node, tokens[i:], i, canonical
 
 
 class CommandTree:

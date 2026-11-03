@@ -26,7 +26,7 @@ except ImportError:  # Windows / minimal python3 without readline
     _HAVE_READLINE = False
 
 from .config import ConfigStore
-from .tree import CommandTree, Node, VALUE_TYPES
+from .tree import CommandTree, Node, VALUE_TYPES, coerce_value, validate_value
 from . import commands as builtin
 
 
@@ -133,13 +133,13 @@ class Cli:
                     break
             root = base
 
-        node, _rem, _matched = root.walk(tokens[:-1])
+        node, _rem, _matched, _canon = root.walk(tokens[:-1])
         out: List[tuple] = []
         for child_name, child in node.children.items():
             out.append((child_name, child.help or ""))
-        if node.dynamic is not None:
+        if node.dynamic is not None and callable(node.dynamic):
             tpl = getattr(node, "_dyn_template", None)
-            tpl_help = (tpl.help if tpl is not None else "") or "(interface)"
+            tpl_help = (tpl.help if tpl is not None else "") or "(dynamic)"
             for dyn in node.dynamic():
                 out.append((dyn, tpl_help))
         if node.value_type and not node.children:
@@ -200,7 +200,7 @@ class Cli:
 
     # ------------ command dispatch ------------
     def _run_op(self, tokens: List[str]) -> str:
-        node, remaining, matched = self.tree.op_root.walk(tokens)
+        node, remaining, _matched, _canon = self.tree.op_root.walk(tokens)
         # fully matched node with action?
         if node.action is not None and not remaining:
             return node.action(self.ctx, None)
@@ -267,7 +267,13 @@ class Cli:
                 self.ctx.mode = "op"
             return ""
         if head == "next" or head == "edit":
-            self.ctx.cfg_path.extend(rest)
+            # Resolve to canonical node names so "edit syst" really lands on
+            # "system" and later "set" sub-commands compose with it.
+            node, remaining, _matched, canon = self.tree.cfg_root.walk(
+                self.ctx.cfg_path + rest)
+            if remaining:
+                return f"edit: no such node: {' '.join(remaining)}"
+            self.ctx.cfg_path = canon
             return ""
         if head == "show":
             rest2 = rest
@@ -302,30 +308,34 @@ class Cli:
     def _apply_set_delete(self, verb: str, path_tokens: List[str]) -> str:
         # Prepend current cfg_path so edit/next sessions compose.
         full = self.ctx.cfg_path + path_tokens
-        # Walk the cfg tree; ``matched`` counts tokens consumed from
-        # [verb] + full, so structural tokens == full[:matched-1].
-        node, remaining, matched = self.tree.cfg_root.walk([verb] + full)
-        structural = full[: matched - 1]
-        value_tokens = full[matched - 1:]
+        # Walk the cfg tree; canonical names are what gets stored, so
+        # abbreviated input ("set syst host-name x") lands in the right node.
+        node, remaining, _matched, canon = self.tree.cfg_root.walk([verb] + full)
+        structural = canon[1:]           # drop the verb itself
+        value_tokens = remaining
+        if not structural:
+            return f"{verb}: path required"
 
         if verb == "set":
             if node.value_type:
                 value = " ".join(value_tokens)
                 if not value:
                     return f"set: missing value for {' '.join(structural)}"
-                self.store.set_value(structural, value)
+                err = validate_value(node.value_type, value)
+                if err:
+                    return (f"set: invalid value '{value}' for "
+                            f"{' '.join(structural)}: {err}")
+                self.store.set_value(structural, coerce_value(node.value_type, value))
                 return ""
             if node.children:
                 return ("set: incomplete path. expected one of: "
                         + ", ".join(sorted(node.children.keys())))
             # Structural leaf with no value_type: create an empty node.
-            self.store._nav(self.store.candidate, structural, create=True)
+            self.store.create_node(structural)
             return ""
 
         # delete: if the landed node is a list, remove matching items;
         # otherwise (scalar leaf or dict) delete the whole structural node.
-        if not structural:
-            return "delete: path required"
         target = self.store.get(structural, candidate=True)
         if isinstance(target, list) and value_tokens:
             for v in value_tokens:
@@ -362,6 +372,7 @@ class Cli:
             if out:
                 print(out)
         print("Bye.")
+        self.postloop()
 
 
 def main() -> None:

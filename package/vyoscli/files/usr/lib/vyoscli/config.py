@@ -18,9 +18,11 @@ Layout on disk:
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import copy
+import shlex
 import shutil
 import subprocess
 import time
@@ -54,12 +56,13 @@ DEFAULT_RUNNING: Dict[str, Any] = {
         },
         "wireless": {},   # wlan0 -> {mode, ssid, channel, hw-mode, security, passphrase, network}
         "role": {},       # lan/wan -> ifname
-        "bridge": {},     # br0 -> [ports]
+        "bridge": {},     # br0 -> {member, address, stp, vlan: {vid: {untagged, tagged}}}
         "dummy": {},      # dum0 -> {address}
         "wireguard": {},  # wg0 -> {address, private-key, listen-port, peer: {}}
         "openvpn": {},    # vtun0 -> {mode, proto, port, dev, ca, cert, key, dh, server, push}
         "tunnel": {},     # tun0 -> {encapsulation, local-ip, remote-ip, address}
         "vxlan": {},      # vxlan0 -> {vni, local-ip, remote-ip, address}
+        "loopback": {},   # lo -> {address, description}
     },
     "vpn": {
         "ipsec": {
@@ -84,9 +87,6 @@ DEFAULT_RUNNING: Dict[str, Any] = {
     },
     "traffic-policy": {
         "shaper": {},  # name -> {interface, bandwidth, per-ip}
-    },
-    "interfaces": {
-        "bridge": {},  # br0 -> {port: [], mac, mac-rebinding, address, vlan-aware, vlan: {vid: {untagged: [], tagged: []}}}
     },
     "nat": {
         "source": {},       # rule-id -> {out-interface, translation}
@@ -121,13 +121,15 @@ DEFAULT_RUNNING: Dict[str, Any] = {
         "console-server": {},   # device -> {speed, ssh-port, description, alias}
         "tcp-accelerate": {
             "congestion-control": "bbr",   # bbr/cubic/hybla
-            "fq_codel": True,
+            "fq-codel": True,   # key matches the command tree
         },
         "fec": {},   # UDPspeeder config
         "kcp": {},   # name -> {mode, local-listen-ip, local-listen-port, remote-listen-ip, remote-listen-port, destination-ip, destination-port, kcp-mode, key}
 
         "crontab": {},          # name -> {schedule, script, description}
-        "dhcp": {},             # name -> {subnet, gateway, dns, domain, domain-search, range-start, range-end, static: {name: {ip, mac}}}
+        "dhcp-server": {        # VyOS shape: shared-network-name -> subnet -> options
+            "shared-network-name": {},
+        },
         "dnsmasq": {
             "port": 53,
             "listen-address": "0.0.0.0",
@@ -155,6 +157,20 @@ DEFAULT_RUNNING: Dict[str, Any] = {
 }
 
 HISTORY_KEEP = 20
+
+
+def _as_list(value: Any) -> List[Any]:
+    """Normalise a scalar-or-list config value into a list.
+
+    Leaves accept a single value ("eth1"), but the UCI layer needs a list.
+    Iterating the bare string was how ``untagged eth1`` became the ports
+    ``e:u* t:u* h:u* 1:u*`` on a live router.
+    """
+    if value is None or value == "":
+        return []
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return [value]
 
 
 class ConfigStore:
@@ -190,8 +206,21 @@ class ConfigStore:
 
     @staticmethod
     def _dump(path: str, data: Dict[str, Any]) -> None:
-        with open(path, "w", encoding="utf-8") as f:
+        """Write JSON atomically with 0600 perms (the config holds secrets)."""
+        tmp = f"{path}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, sort_keys=True)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        try:
+            os.chmod(tmp, 0o600)
+        except OSError:
+            pass
+        os.replace(tmp, path)
+
+    def _persist_candidate(self) -> None:
+        self._dump(self.candidate_path, self.candidate)
 
     # ---------- path helpers ----------
     @staticmethod
@@ -216,7 +245,17 @@ class ConfigStore:
             cur = cur[p]
         return cur
 
-    def set_value(self, path: List[str], value: str) -> None:
+    @staticmethod
+    def _default_is_list(path: List[str]) -> bool:
+        """True when DEFAULT_RUNNING declares this path as a repeatable list."""
+        cur: Any = DEFAULT_RUNNING
+        for part in path:
+            if not isinstance(cur, dict) or part not in cur:
+                return False
+            cur = cur[part]
+        return isinstance(cur, list)
+
+    def set_value(self, path: List[str], value: Any) -> None:
         if not path:
             return
         *parents, leaf = path
@@ -227,8 +266,20 @@ class ConfigStore:
         if isinstance(existing, list):
             if value not in existing:
                 existing.append(value)
+        elif existing is None and leaf not in node and self._default_is_list(path):
+            # Repeatable leaves (name-server, ntp, address, push...) must stay
+            # lists even when the running config predates the key; storing a
+            # bare string here is what turned 223.5.5.5 into 2 2 3 . 5 . 5 . 5.
+            node[leaf] = [value]
         else:
             node[leaf] = value
+        self._persist_candidate()
+
+    def create_node(self, path: List[str]) -> None:
+        """Materialise a structural (valueless) node in the candidate."""
+        if path:
+            self._nav(self.candidate, path, create=True)
+            self._persist_candidate()
 
     def delete_path(self, path: List[str]) -> None:
         if not path:
@@ -239,6 +290,7 @@ class ConfigStore:
             del node[leaf]
         elif isinstance(node, list) and leaf in node:
             node.remove(leaf)
+        self._persist_candidate()
 
     # ---------- transactions ----------
     def modified(self) -> bool:
@@ -268,37 +320,8 @@ class ConfigStore:
         return None
 
     # ---------- apply: old running -> new running ----------
-    def _ensure_package(self, pkg: str, notes: List[str]) -> bool:
-        """Install pkg on demand via opkg. Idempotent. Notes progress."""
-        if shutil.which("opkg") is None:
-            return False
-        chk = subprocess.run(["opkg", "list-installed", pkg],
-                             capture_output=True, text=True, timeout=10)
-        if chk.returncode == 0 and pkg in chk.stdout:
-            return True
-        notes.append(f"installing optional package: {pkg} ...")
-        r = subprocess.run(["opkg", "install", pkg],
-                           capture_output=True, text=True, timeout=600)
-        if r.returncode == 0:
-            notes.append(f"  -> {pkg} installed")
-            return True
-        notes.append(f"  -> {pkg} install FAILED: {r.stderr.strip()[:200]}")
-        return False
-
-    def _ensure_ss(self) -> None:
-        """Auto-install ip-full if ss is missing."""
-        try:
-            subprocess.run(["ss", "--version"], capture_output=True, timeout=5)
-        except FileNotFoundError:
-            try:
-                subprocess.run(["opkg", "install", "ip-full"],
-                               capture_output=True, text=True, timeout=60)
-            except Exception:
-                pass
-
     def _address_port_in_use(self, ip: str, port: int) -> bool:
         """Return True if binding (ip, port) conflicts with an existing listener."""
-        self._ensure_ss()
         try:
             r = subprocess.run(["ss", "-tulnp"], capture_output=True, text=True, timeout=5)
         except Exception:
@@ -417,8 +440,22 @@ class ConfigStore:
         for ifname, cfg in eth.items():
             if not isinstance(cfg, dict) or ifname == "lo":
                 continue
+            addrs = _as_list(cfg.get("address"))
+            # An interface without addresses is not ours to program: creating
+            # a bare proto=static section for it would shadow the stock
+            # lan/wan interfaces and can cut the box off the network.
+            if not addrs:
+                continue
             section = self._find_uci_section("network", "ifname", ifname)
             if section is None:
+                owner = self._find_uci_section("network", "device", ifname)
+                if owner is not None:
+                    # eth1 already belongs to network.wan: creating a second
+                    # static interface on it is how a LAN address ended up on
+                    # the WAN port on a live box.
+                    notes.append(f"{ifname}: already used by network.{owner}, "
+                                 f"skipped (refusing to create a duplicate)")
+                    continue
                 section = f"vyos_{ifname}"
                 self._uci("set", f"network.{section}=interface")
                 notes.append(f"uci: created network.{section} for {ifname}")
@@ -428,35 +465,86 @@ class ConfigStore:
                 self._uci("delete", f"network.{section}.ipaddr")
             except subprocess.CalledProcessError:
                 pass
-            addrs = cfg.get("address") or []
-            if isinstance(addrs, str):
-                addrs = [addrs]
             for addr in addrs:
                 self._uci("add_list", f"network.{section}.ipaddr={addr}")
-        # bridge VLAN
+        # bridge + bridge-vlan (device section carries the ports; the interface
+        # only references it — `type bridge` on an interface makes netifd
+        # prepend "br-", and "br-vyos_br_<name>" exceeds IFNAMSIZ on real boxes)
+        old_br = (old_if.get("bridge") or {})
         bridges = (new_if.get("bridge") or {})
+        for gone in set(old_br) - set(bridges):
+            for section in (f"vyos_br_{gone}", f"{gone}_dev"):
+                try:
+                    self._uci("delete", f"network.{section}")
+                except subprocess.CalledProcessError:
+                    pass
+            # netifd does not remove devices it created once their config is
+            # gone, so drop the kernel bridge ourselves.
+            subprocess.run(["ip", "link", "del", gone],
+                           capture_output=True, timeout=5)
         for brname, brcfg in bridges.items():
             if not isinstance(brcfg, dict):
                 continue
-            br_sec = f"vyos_br_{brname}"
-            self._uci("set", f"network.{br_sec}=interface")
-            self._uci("set", f"network.{br_sec}.type=bridge")
-            self._uci("set", f"network.{br_sec}.proto=static")
-            if brcfg.get("vlan-aware"):
-                self._uci("set", f"network.{br_sec}.vlan_filtering=1")
-            for port in brcfg.get("port") or []:
-                self._uci("add_list", f"network.{br_sec}.ports={port}")
-            # vlan entries
+            if len(brname) > 15:
+                notes.append(f"bridge {brname}: name longer than 15 chars, "
+                             f"netifd cannot create the device")
+                continue
+            dev_sec = f"{brname}_dev"
+            iface_sec = f"vyos_br_{brname}"
+            members = _as_list(brcfg.get("member") or brcfg.get("port"))
+            if not members:
+                notes.append(f"bridge {brname}: no member ports, netifd will "
+                             f"not create the device")
+            self._uci("set", f"network.{dev_sec}=device")
+            self._uci("set", f"network.{dev_sec}.type=bridge")
+            self._uci("set", f"network.{dev_sec}.name={brname}")
+            if brcfg.get("vlan-aware") or brcfg.get("enable-vlan"):
+                self._uci("set", f"network.{dev_sec}.vlan_filtering=1")
+            try:
+                self._uci("delete", f"network.{dev_sec}.ports")
+            except subprocess.CalledProcessError:
+                pass
+            for port in members:
+                self._uci("add_list", f"network.{dev_sec}.ports={port}")
+
+            self._uci("set", f"network.{iface_sec}=interface")
+            # Drop legacy options: `type=bridge` makes netifd rename the device.
+            for legacy in ("type", "ports", "ifname"):
+                try:
+                    self._uci("delete", f"network.{iface_sec}.{legacy}")
+                except subprocess.CalledProcessError:
+                    pass
+            self._uci("set", f"network.{iface_sec}.device={brname}")
+            self._uci("set", f"network.{iface_sec}.proto=static")
+            try:
+                self._uci("delete", f"network.{iface_sec}.ipaddr")
+            except subprocess.CalledProcessError:
+                pass
+            for addr in _as_list(brcfg.get("address")):
+                self._uci("add_list", f"network.{iface_sec}.ipaddr={addr}")
+
+            old_vlans = (old_br.get(brname) or {}).get("vlan") or {}
+            for vid in set(old_vlans) - set(brcfg.get("vlan") or {}):
+                try:
+                    self._uci("delete", f"network.vyos_br_{brname}_vlan{vid}")
+                except subprocess.CalledProcessError:
+                    pass
             for vid, vcfg in (brcfg.get("vlan") or {}).items():
                 if not isinstance(vcfg, dict):
                     continue
                 vsec = f"vyos_br_{brname}_vlan{vid}"
+                # Recreate from scratch: a stale ports list here is how the
+                # "e:u* t:u* h:u* 1:u*" garbage ended up on a live box.
+                try:
+                    self._uci("delete", f"network.{vsec}")
+                except subprocess.CalledProcessError:
+                    pass
                 self._uci("set", f"network.{vsec}=bridge-vlan")
                 self._uci("set", f"network.{vsec}.device={brname}")
                 self._uci("set", f"network.{vsec}.vlan={vid}")
-                for p in vcfg.get("untagged") or []:
+                for p in _as_list(vcfg.get("untagged")):
                     self._uci("add_list", f"network.{vsec}.ports={p}:u*")
-                for p in vcfg.get("tagged") or []:
+                for p in _as_list(vcfg.get("tagged")):
                     self._uci("add_list", f"network.{vsec}.ports={p}:t*")
         self._uci("commit", "network")
         try:
@@ -481,9 +569,9 @@ class ConfigStore:
             return [f"hostname apply failed: {e}"]
 
     def _apply_name_servers(self, old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
-        old_dns = (old.get("system") or {}).get("name-server") or []
-        new_dns = (new.get("system") or {}).get("name-server") or []
-        if list(old_dns) == list(new_dns):
+        old_dns = _as_list((old.get("system") or {}).get("name-server"))
+        new_dns = _as_list((new.get("system") or {}).get("name-server"))
+        if old_dns == new_dns:
             return []
         notes = []
         try:
@@ -494,9 +582,9 @@ class ConfigStore:
             for srv in new_dns:
                 self._uci("add_list", f"dhcp.@dnsmasq[0].server={srv}")
             self._uci("commit", "dhcp")
-            notes.append(f"dns servers -> {', '.join(new_dns)}")
+            notes.append(f"dns servers -> {', '.join(map(str, new_dns))}")
             # domain-search
-            new_search = (new.get("system") or {}).get("domain-search") or []
+            new_search = _as_list((new.get("system") or {}).get("domain-search"))
             if new_search:
                 try:
                     self._uci("set", f"dhcp.@dnsmasq[0].localuse=1")
@@ -508,9 +596,9 @@ class ConfigStore:
         return notes
 
     def _apply_system_dns(self, old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
-        old_dns = (old.get("system") or {}).get("dns") or []
-        new_dns = (new.get("system") or {}).get("dns") or []
-        if list(old_dns) == list(new_dns):
+        old_dns = _as_list((old.get("system") or {}).get("dns"))
+        new_dns = _as_list((new.get("system") or {}).get("dns"))
+        if old_dns == new_dns:
             return []
         notes = []
         try:
@@ -523,7 +611,8 @@ class ConfigStore:
             # reload resolv generator
             subprocess.run(["/etc/init.d/dnsmasq", "reload"],
                            capture_output=True, text=True, timeout=10)
-            notes.append(f"system resolver -> {', '.join(new_dns) or '(cleared)'}")
+            notes.append("system resolver -> "
+                         + (", ".join(map(str, new_dns)) or "(cleared)"))
         except Exception as e:  # noqa: BLE001
             notes.append(f"system dns apply failed: {e}")
         return notes
@@ -559,8 +648,8 @@ class ConfigStore:
                 time.tzset()
                 notes.append(f"timezone -> {tz}")
             # ---- ntp ----
-            old_ntp = list(old_s.get("ntp") or [])
-            new_ntp = list(new_s.get("ntp") or [])
+            old_ntp = _as_list(old_s.get("ntp"))
+            new_ntp = _as_list(new_s.get("ntp"))
             if old_ntp != new_ntp:
                 self._uci("set", "system.ntp.enabled=1")
                 self._uci("set", "system.ntp.enable_server=0")
@@ -570,7 +659,8 @@ class ConfigStore:
                     pass
                 for srv in new_ntp:
                     self._uci("add_list", f"system.ntp.server={srv}")
-                notes.append(f"ntp servers -> {', '.join(new_ntp)}")
+                notes.append("ntp servers -> "
+                             + ", ".join(map(str, new_ntp)))
             self._uci("commit", "system")
             subprocess.run(["/etc/init.d/sysntpd", "restart"],
                            capture_output=True, text=True, timeout=10)
@@ -699,31 +789,48 @@ class ConfigStore:
                         self._uci("delete", f"firewall.{sec}")
                     except subprocess.CalledProcessError:
                         pass
+            # Rule ids live one level down: nat.source.rule.<id> /
+            # nat.destination.rule.<id> (the shape the command tree writes).
+            # NOTE: no `or` fallback here — an empty {"rule": {}} must stay
+            # empty, otherwise "rule" itself is treated as a rule id.
+            src_holder = new_n.get("source") or {}
+            dst_holder = new_n.get("destination") or {}
+            source_rules = (src_holder["rule"]
+                            if isinstance(src_holder.get("rule"), dict)
+                            else src_holder)
+            dest_rules = (dst_holder["rule"]
+                          if isinstance(dst_holder.get("rule"), dict)
+                          else dst_holder)
             # source NAT
-            for rid, rule in (new_n.get("source") or {}).items():
+            for rid, rule in source_rules.items():
+                if not isinstance(rule, dict):
+                    continue
                 s = f"vyos_nat_src_{rid}"
                 self._uci("set", f"firewall.{s}=nat")
                 self._uci("set", f"firewall.{s}.name=vyos_src_{rid}")
                 self._uci("set", f"firewall.{s}.target=MASQUERADE")
+                self._uci("set", f"firewall.{s}.src=lan")
                 if rule.get("out-interface"):
-                    # map interface name to OpenWrt zone guess: wan
-                    self._uci("set", f"firewall.{s}.src=lan")
+                    # fw4 matches zones, not devices; "wan" is the usual zone.
                     self._uci("set", f"firewall.{s}.dest={rule['out-interface']}")
             # destination NAT (port forward)
-            for rid, rule in (new_n.get("destination") or {}).items():
+            for rid, rule in dest_rules.items():
+                if not isinstance(rule, dict):
+                    continue
                 s = f"vyos_nat_dst_{rid}"
-                self._uci("set", f"firewall.{s}=nat")
+                self._uci("set", f"firewall.{s}=redirect")
                 self._uci("set", f"firewall.{s}.name=vyos_dst_{rid}")
                 self._uci("set", f"firewall.{s}.target=DNAT")
                 self._uci("set", f"firewall.{s}.src=wan")
                 if rule.get("port"):
-                    self._uci("set", f"firewall.{s}.dst_dport={rule['port']}")
+                    self._uci("set", f"firewall.{s}.src_dport={rule['port']}")
                 if rule.get("to"):
-                    self._uci("set", f"firewall.{s}.to_dest={rule['to']}")
+                    self._uci("set", f"firewall.{s}.dest_ip={rule['to']}")
             self._uci("commit", "firewall")
             subprocess.run(["/etc/init.d/firewall", "reload"],
                            capture_output=True, text=True, timeout=15)
-            notes.append(f"nat: {len(new_n.get('source') or {})} source, {len(new_n.get('destination') or {})} dst rules")
+            notes.append(f"nat: {len(source_rules)} source, "
+                         f"{len(dest_rules)} dst rules")
         except Exception as e:
             notes.append(f"nat apply failed: {e}")
         return notes
@@ -748,7 +855,7 @@ class ConfigStore:
                     self._uci("delete", f"network.{ifname}.addresses")
                 except subprocess.CalledProcessError:
                     pass
-                for a in cfg.get("address") or []:
+                for a in _as_list(cfg.get("address")):
                     self._uci("add_list", f"network.{ifname}.addresses={a}")
                 # peers
                 pfx = f"peer_{ifname}_"
@@ -798,7 +905,7 @@ class ConfigStore:
                 for k, directive in key_map.items():
                     if cfg.get(k):
                         lines.append(f"{directive} {cfg[k]}")
-                for p in cfg.get("push") or []:
+                for p in _as_list(cfg.get("push")):
                     lines.append(f'push "{p}"')
                 lines += ["persist-key", "persist-tun", "keepalive 10 120"]
                 with open(conf_path, "w", encoding="utf-8") as f:
@@ -933,7 +1040,7 @@ class ConfigStore:
                         self._uci("set", f"frr.{s}=bgp_neighbor")
                         self._uci("set", f"frr.{s}.peer_ip={ip}")
                         self._uci("set", f"frr.{s}.peer_group={nb['peer-group']}")
-                for net in new_b.get("network") or []:
+                for net in _as_list(new_b.get("network")):
                     s = f"vyos_bgp_net_{net.replace('/', '_').replace('.', '_')}"
                     self._uci("set", f"frr.{s}=bgp_network")
                     self._uci("set", f"frr.{s}.prefix={net}")
@@ -1024,30 +1131,37 @@ class ConfigStore:
                     else:
                         self._uci("set", f"network.{role}.proto=static")
                 notes.append(f"interface roles: {new_role}")
-            # ---- bridge ----
-            old_br = old_if.get("bridge") or {}
-            new_br = new_if.get("bridge") or {}
-            if old_br != new_br:
-                for br, ports in new_br.items():
-                    self._uci("set", f"network.{br}=interface")
-                    self._uci("set", f"network.{br}.type=bridge")
-                    self._uci("set", f"network.{br}.proto=static")
-                    try:
-                        self._uci("delete", f"network.{br}.ports")
-                    except subprocess.CalledProcessError:
-                        pass
-                    for p in ports or []:
-                        self._uci("add_list", f"network.{br}.ports={p}")
-                notes.append(f"bridges: {list(new_br.keys())}")
             # ---- dummy ----
             old_dm = old_if.get("dummy") or {}
             new_dm = new_if.get("dummy") or {}
             if old_dm != new_dm:
+                # Removed dummies must lose their UCI sections, otherwise the
+                # interface comes back on the next boot.
+                for gone in set(old_dm) - set(new_dm):
+                    for section in (gone, f"{gone}_dev"):
+                        try:
+                            self._uci("delete", f"network.{section}")
+                        except subprocess.CalledProcessError:
+                            pass
                 for dm, cfg in new_dm.items():
+                    if not isinstance(cfg, dict):
+                        continue
+                    # netifd needs a dummy *device*; an interface alone points
+                    # at a device that never exists.
+                    self._uci("set", f"network.{dm}_dev=device")
+                    self._uci("set", f"network.{dm}_dev.type=dummy")
+                    self._uci("set", f"network.{dm}_dev.name={dm}")
                     self._uci("set", f"network.{dm}=interface")
+                    self._uci("set", f"network.{dm}.device={dm}")
                     self._uci("set", f"network.{dm}.proto=static")
-                    if isinstance(cfg, dict) and cfg.get("address"):
-                        self._uci("set", f"network.{dm}.ipaddr={cfg['address']}")
+                    addrs = _as_list(cfg.get("address"))
+                    if addrs:
+                        try:
+                            self._uci("delete", f"network.{dm}.ipaddr")
+                        except subprocess.CalledProcessError:
+                            pass
+                        for addr in addrs:
+                            self._uci("add_list", f"network.{dm}.ipaddr={addr}")
                 notes.append(f"dummy ifaces: {list(new_dm.keys())}")
             self._uci("commit", "network")
             subprocess.run(["/etc/init.d/network", "reload"],
@@ -1117,61 +1231,60 @@ class ConfigStore:
                         self._uci("delete", f"smartdns.{section}")
                     except subprocess.CalledProcessError:
                         pass
-            # Main smartdns section.
+            # Main smartdns section: reuse the stock anonymous one if present.
             enabled = 1 if new_sd.get("enabled") else 0
-            self._uci("set", "smartdns.cfg_vyos_main=smartdns")
-            self._uci("set", f"smartdns.cfg_vyos_main.enabled={enabled}")
-            self._uci("set", f"smartdns.cfg_vyos_main.port={new_sd.get('port', 5333)}")
+            try:
+                self._uci("get", "smartdns.@smartdns[0]")
+                main = "smartdns.@smartdns[0]"
+            except subprocess.CalledProcessError:
+                self._uci("set", "smartdns.vyos_main=smartdns")
+                main = "smartdns.vyos_main"
+            self._uci("set", f"{main}.enabled={enabled}")
+            self._uci("set", f"{main}.port={new_sd.get('port', 5333)}")
             scm = new_sd.get("speed-check-mode", "")
             if scm:
-                self._uci("set", f"smartdns.cfg_vyos_main.speed_check_mode={scm}")
-            # forbid-aaaa -> force_aaaa=0 (disable AAAA replies)
-            self._uci("set",
-                      f"smartdns.cfg_vyos_main.force_aaaa={0 if new_sd.get('forbid-aaaa') else 1}")
-            # upstreams
+                self._uci("set", f"{main}.speed_check_mode={scm}")
+            # Upstream servers: smartdns UCI has a "server" section type;
+            # server_group is what domain-rules refer to.
             for name, cfg in (new_sd.get("server") or {}).items():
                 if not isinstance(cfg, dict):
                     continue
-                s = f"vyos_srv_{name}"
+                s = f"vyos_srv_{self._slug(name)}"
                 self._uci("set", f"smartdns.{s}=server")
-                self._uci("set", f"smartdns.{s}.name={name}")
+                self._uci("set", f"smartdns.{s}.server_group={name}")
                 if cfg.get("ip"):
                     self._uci("set", f"smartdns.{s}.ip={cfg['ip']}")
                 if cfg.get("port"):
                     self._uci("set", f"smartdns.{s}.port={cfg['port']}")
                 if cfg.get("type"):
                     self._uci("set", f"smartdns.{s}.type={cfg['type']}")
-            # domain-sets (name -> {domain: [...], file: "/path"})
-            for name, cfg in (new_sd.get("domain-set") or {}).items():
-                if not isinstance(cfg, dict):
-                    continue
-                s = f"vyos_dset_{name}"
-                self._uci("set", f"smartdns.{s}=domain-set")
-                self._uci("set", f"smartdns.{s}.name={name}")
-                if cfg.get("file"):
-                    self._uci("set", f"smartdns.{s}.domain_file={cfg['file']}")
-                for d in cfg.get("domain") or []:
-                    self._uci("add_list", f"smartdns.{s}.domain={d}")
-            # domain-rules
+            # domain-rule: attach the referenced domain-set's domains to the
+            # first upstream in "forward". File-backed sets cannot be expressed
+            # in UCI and are reported instead of silently dropped.
+            domain_sets = new_sd.get("domain-set") or {}
             for name, cfg in (new_sd.get("domain-rule") or {}).items():
                 if not isinstance(cfg, dict):
                     continue
-                s = f"vyos_drule_{name}"
-                self._uci("set", f"smartdns.{s}=domain-rule")
-                if cfg.get("domain-set"):
-                    self._uci("set", f"smartdns.{s}.domain-set={cfg['domain-set']}")
-                for fwd in cfg.get("forward") or []:
-                    self._uci("add_list", f"smartdns.{s}.forward={fwd}")
-            # static addresses (intranet hosts)
-            for domain, cfg in (new_sd.get("address") or {}).items():
-                if not isinstance(cfg, dict):
+                dset = domain_sets.get(cfg.get("domain-set")) or {}
+                domains = _as_list(dset.get("domain"))
+                forwards = _as_list(cfg.get("forward"))
+                if not domains:
+                    if dset.get("file"):
+                        notes.append(f"smartdns rule {name}: domain-set file "
+                                     f"{dset['file']} kept as-is (not mapped to UCI)")
                     continue
-                slug = domain.replace(".", "_").replace(":", "_")
-                s = f"vyos_addr_{slug}"
-                self._uci("set", f"smartdns.{s}=address")
-                self._uci("set", f"smartdns.{s}.domain={domain}")
-                if cfg.get("ip"):
-                    self._uci("set", f"smartdns.{s}.address={cfg['ip']}")
+                s = f"vyos_drule_{self._slug(name)}"
+                self._uci("set", f"smartdns.{s}=domain-rule")
+                for domain in domains:
+                    self._uci("add_list", f"smartdns.{s}.domain={domain}")
+                if forwards:
+                    self._uci("set", f"smartdns.{s}.server_group={forwards[0]}")
+            if new_sd.get("address"):
+                notes.append("smartdns: 'address' entries are not mapped to "
+                             "UCI yet (use domain-rule/address.conf)")
+            # forbid-aaaa has no main-section UCI option on OpenWrt's smartdns.
+            if new_sd.get("forbid-aaaa"):
+                notes.append("smartdns: forbid-aaaa is not applied via UCI")
             self._uci("commit", "smartdns")
             subprocess.run(["/etc/init.d/smartdns", "restart"],
                            capture_output=True, text=True, timeout=15)
@@ -1179,6 +1292,42 @@ class ConfigStore:
         except Exception as e:  # noqa: BLE001
             notes.append(f"smartdns apply failed: {e} (is the smartdns package installed?)")
         return notes
+
+    @staticmethod
+    def merge_crontab(existing: str, jobs: Dict[str, Any]) -> List[str]:
+        """Rebuild /etc/crontabs/root: user lines + our managed blocks.
+
+        Managed blocks are delimited by marker comments, so the whole block
+        (markers *and* the cron line) must be dropped before re-adding jobs —
+        otherwise deleting a job leaves the crontab entry behind.
+        """
+        lines: List[str] = []
+        inside_block = False
+        for line in existing.splitlines():
+            if line.startswith("# --- vyoscli:begin:"):
+                inside_block = True
+                continue
+            if line.startswith("# --- vyoscli:end:"):
+                inside_block = False
+                continue
+            if inside_block:
+                continue
+            lines.append(line)
+        while lines and not lines[-1].strip():
+            lines.pop()
+        for name, cfg in jobs.items():
+            if not isinstance(cfg, dict):
+                continue
+            schedule = cfg.get("schedule")
+            script = cfg.get("script")
+            if not schedule or not script:
+                continue
+            lines.append(f"# --- vyoscli:begin:{name} ---")
+            if cfg.get("description"):
+                lines.append(f"# {cfg['description']}")
+            lines.append(f"{schedule} {script}")
+            lines.append(f"# --- vyoscli:end:{name} ---")
+        return lines
 
     def _apply_crontab(self, old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
         old_cron = (old.get("service") or {}).get("crontab") or {}
@@ -1188,30 +1337,11 @@ class ConfigStore:
         notes = []
         tab_path = "/etc/crontabs/root"
         try:
-            # Keep user-authored lines (outside our block markers).
             existing = ""
             if os.path.exists(tab_path):
                 with open(tab_path, encoding="utf-8") as f:
                     existing = f.read()
-            lines = [ln for ln in existing.splitlines()
-                     if "--- vyoscli:" not in ln]
-            # strip trailing empty lines
-            while lines and not lines[-1].strip():
-                lines.pop()
-            # append our managed blocks
-            for name, cfg in new_cron.items():
-                if not isinstance(cfg, dict):
-                    continue
-                sched = cfg.get("schedule")
-                script = cfg.get("script")
-                desc = cfg.get("description", "")
-                if not sched or not script:
-                    continue
-                lines.append(f"# --- vyoscli:begin:{name} ---")
-                if desc:
-                    lines.append(f"# {desc}")
-                lines.append(f"{sched} {script}")
-                lines.append(f"# --- vyoscli:end:{name} ---")
+            lines = self.merge_crontab(existing, new_cron)
             with open(tab_path, "w", encoding="utf-8") as f:
                 f.write("\n".join(lines) + "\n")
             os.chmod(tab_path, 0o600)
@@ -1222,62 +1352,129 @@ class ConfigStore:
             notes.append(f"crontab apply failed: {e}")
         return notes
 
-    def _apply_dhcp(self, old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
-        old_d = (old.get("service") or {}).get("dhcp") or {}
-        new_d = (new.get("service") or {}).get("dhcp") or {}
-        if old_d == new_d:
-            return []
-        notes = []
+    @staticmethod
+    def _slug(text: str) -> str:
+        return "".join(ch if ch.isalnum() else "_" for ch in str(text)).strip("_")
+
+    def _iface_for_subnet(self, new: Dict[str, Any], cidr: str) -> Optional[str]:
+        """Find the interface whose address falls inside ``cidr``."""
         try:
-            for name, cfg in new_d.items():
+            net = ipaddress.IPv4Network(cidr, strict=False)
+        except ValueError:
+            return None
+        ifaces = new.get("interfaces") or {}
+        for group in ("ethernet", "bridge", "loopback", "dummy", "wireguard"):
+            for name, cfg in (ifaces.get(group) or {}).items():
                 if not isinstance(cfg, dict):
                     continue
-                s = f"vyos_dhcp_{name}"
-                subnet = cfg.get("subnet", "")
-                interface = cfg.get("interface", name)
-                self._uci("set", f"dhcp.{s}=dhcp")
-                self._uci("set", f"dhcp.{s}.interface={interface}")
-                self._uci("set", f"dhcp.{s}.dhcpv4=server")
-                # range
-                rs = cfg.get("range-start", "")
-                re_ = cfg.get("range-end", "")
-                if rs and re_:
+                addrs = cfg.get("address") or []
+                if isinstance(addrs, str):
+                    addrs = [addrs]
+                for addr in addrs:
                     try:
-                        host_start = int(rs.split(".")[-1])
-                        host_end = int(re_.split(".")[-1])
-                        limit = max(1, host_end - host_start + 1)
-                        self._uci("set", f"dhcp.{s}.start={host_start}")
-                        self._uci("set", f"dhcp.{s}.limit={limit}")
+                        if ipaddress.IPv4Interface(addr).ip in net:
+                            return name
                     except ValueError:
-                        pass
-                # options
-                try:
-                    self._uci("delete", f"dhcp.{s}.dhcp_option")
-                except subprocess.CalledProcessError:
-                    pass
-                if cfg.get("gateway"):
-                    self._uci("add_list", f"dhcp.{s}.dhcp_option=router,{cfg['gateway']}")
-                for d in cfg.get("dns") or []:
-                    self._uci("add_list", f"dhcp.{s}.dhcp_option=option:dns,{d}")
-                if cfg.get("domain"):
-                    self._uci("add_list", f"dhcp.{s}.dhcp_option=option:domain,{cfg['domain']}")
-                if cfg.get("domain-search"):
-                    self._uci("add_list", f"dhcp.{s}.dhcp_option=option:domain-search,{cfg['domain-search']}")
-                if cfg.get("wpad-url"):
-                    self._uci("add_list", f"dhcp.{s}.dhcp_option=option:252,{cfg['wpad-url']}")
-                # static leases
-                for sname, scfg in (cfg.get("static-mapping") or {}).items():
-                    if not isinstance(scfg, dict):
                         continue
-                    hs = f"vyos_dhcp_host_{name}_{sname}"
-                    self._uci("set", f"dhcp.{hs}=host")
-                    self._uci("set", f"dhcp.{hs}.name={sname}")
-                    self._uci("set", f"dhcp.{hs}.mac={scfg.get('mac', '')}")
-                    self._uci("set", f"dhcp.{hs}.ip={scfg.get('ip-address', '')}")
+        return None
+
+    def _apply_dhcp(self, old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
+        old_d = ((old.get("service") or {}).get("dhcp-server") or {})
+        new_d = ((new.get("service") or {}).get("dhcp-server") or {})
+        if old_d == new_d:
+            return []
+        notes: List[str] = []
+        try:
+            # Replace our own sections so deleted subnets/leases disappear.
+            out = self._uci("show", "dhcp").stdout
+            for line in out.splitlines():
+                if line.startswith("dhcp.vyos_dhcp_"):
+                    sec = line.split(".")[1].split("=")[0]
+                    try:
+                        self._uci("delete", f"dhcp.{sec}")
+                    except subprocess.CalledProcessError:
+                        pass
+
+            shared = new_d.get("shared-network-name") or {}
+            for sname, body in shared.items():
+                if not isinstance(body, dict):
+                    continue
+                for cidr, cfg in (body.get("subnet") or {}).items():
+                    if not isinstance(cfg, dict):
+                        continue
+                    try:
+                        net = ipaddress.IPv4Network(cidr, strict=False)
+                    except ValueError:
+                        notes.append(f"dhcp {sname}: invalid subnet {cidr}, skipped")
+                        continue
+                    iface = (cfg.get("interface") or body.get("interface")
+                             or self._iface_for_subnet(new, cidr))
+                    if not iface:
+                        notes.append(f"dhcp {sname}/{cidr}: no interface holds an "
+                                     f"address in this subnet; set "
+                                     f"shared-network-name {sname} interface <uci-net>")
+                        continue
+                    sec = f"vyos_dhcp_{self._slug(sname)}_{self._slug(cidr)}"
+                    self._uci("set", f"dhcp.{sec}=dhcp")
+                    self._uci("set", f"dhcp.{sec}.interface={iface}")
+                    self._uci("set", f"dhcp.{sec}.dhcpv4=server")
+
+                    # range 0 { start, stop } -> start offset / limit
+                    ranges = cfg.get("range") or {}
+                    rng = ranges.get("0") if isinstance(ranges, dict) else None
+                    if isinstance(rng, dict) and rng.get("start") and rng.get("stop"):
+                        try:
+                            start = ipaddress.IPv4Address(rng["start"])
+                            stop = ipaddress.IPv4Address(rng["stop"])
+                            if start not in net or stop not in net:
+                                notes.append(f"dhcp {sname}/{cidr}: range "
+                                             f"{start}-{stop} outside subnet, skipped")
+                            else:
+                                offset = int(start) - int(net.network_address)
+                                self._uci("set", f"dhcp.{sec}.start={offset}")
+                                self._uci("set",
+                                          f"dhcp.{sec}.limit={int(stop) - int(start) + 1}")
+                        except ValueError:
+                            notes.append(f"dhcp {sname}/{cidr}: bad range, skipped")
+
+                    if cfg.get("lease"):
+                        self._uci("set", f"dhcp.{sec}.leasetime={cfg['lease']}")
+
+                    try:
+                        self._uci("delete", f"dhcp.{sec}.dhcp_option")
+                    except subprocess.CalledProcessError:
+                        pass
+                    if cfg.get("default-router"):
+                        self._uci("add_list",
+                                  f"dhcp.{sec}.dhcp_option=router,{cfg['default-router']}")
+                    dns = cfg.get("name-server") or []
+                    if isinstance(dns, str):
+                        dns = [dns]
+                    for server in dns:
+                        self._uci("add_list",
+                                  f"dhcp.{sec}.dhcp_option=option:dns,{server}")
+                    if cfg.get("domain-name"):
+                        self._uci("add_list",
+                                  f"dhcp.{sec}.dhcp_option=domain,{cfg['domain-name']}")
+                    if cfg.get("domain-search"):
+                        self._uci("add_list",
+                                  f"dhcp.{sec}.dhcp_option=option:domain-search,"
+                                  f"{cfg['domain-search']}")
+
+                    for mname, mapping in (cfg.get("static-mapping") or {}).items():
+                        if not isinstance(mapping, dict):
+                            continue
+                        host = f"vyos_dhcp_host_{self._slug(sname)}_{self._slug(mname)}"
+                        self._uci("set", f"dhcp.{host}=host")
+                        self._uci("set", f"dhcp.{host}.name={mname}")
+                        if mapping.get("mac-address"):
+                            self._uci("set", f"dhcp.{host}.mac={mapping['mac-address']}")
+                        if mapping.get("ip-address"):
+                            self._uci("set", f"dhcp.{host}.ip={mapping['ip-address']}")
+                    notes.append(f"dhcp {sname}/{cidr} -> {iface}")
             self._uci("commit", "dhcp")
             subprocess.run(["/etc/init.d/dnsmasq", "reload"],
                            capture_output=True, text=True, timeout=10)
-            notes.append(f"dhcp: {len(new_d)} subnet(s) configured")
         except Exception as e:  # noqa: BLE001
             notes.append(f"dhcp apply failed: {e}")
         return notes
@@ -1311,18 +1508,17 @@ class ConfigStore:
             return []
         notes = []
         try:
-            # UCI /etc/config/adguardhome
-            self._uci("set", "adguardhome.main=adguardhome")
-            self._uci("set", f"adguardhome.main.enabled={'1' if new_ag.get('enabled') else '0'}")
-            if new_ag.get("port"):
-                self._uci("set", f"adguardhome.main.listen_port={new_ag['port']}")
-            if new_ag.get("web-port"):
-                self._uci("set", f"adguardhome.main.web_port={new_ag['web-port']}")
+            # OpenWrt's adguardhome UCI section is "config" and only carries
+            # enabled/workdir; DNS and web ports live in /etc/adguardhome.yaml.
+            self._uci("set", "adguardhome.config=adguardhome")
+            self._uci("set",
+                      f"adguardhome.config.enabled={'1' if new_ag.get('enabled') else '0'}")
             self._uci("commit", "adguardhome")
             subprocess.run(["/etc/init.d/adguardhome", "restart"],
                            capture_output=True, text=True, timeout=15)
             if new_ag.get("enabled"):
-                notes.append(f"adguardhome: enabled on DNS port {new_ag.get('port',53)}, web :{new_ag.get('web-port',3000)}")
+                notes.append("adguardhome: enabled (DNS/web ports come from "
+                             "/etc/adguardhome.yaml; UCI only toggles the service)")
             else:
                 notes.append("adguardhome: disabled")
         except Exception as e:  # noqa: BLE001
@@ -1358,14 +1554,16 @@ class ConfigStore:
                 iface = cfg.get("interface", "eth0")
                 bandwidth = cfg.get("bandwidth", "100mbit")
                 per_ip = cfg.get("per-ip", "10mbit")
-                # root qdisc
-                subprocess.run(["tc", "qdisc", "add", "dev", iface, "root", "handle", "1:", "htb", "default", "10"],
+                # root qdisc + default class (replace => idempotent re-commit)
+                subprocess.run(["tc", "qdisc", "replace", "dev", iface, "root",
+                                "handle", "1:", "htb", "default", "10"],
                                capture_output=True, timeout=5)
-                # default class
-                subprocess.run(["tc", "class", "add", "dev", iface, "parent", "1:", "classid", "1:10",
-                                "htb", "rate", bandwidth, "ceil", bandwidth],
+                subprocess.run(["tc", "class", "replace", "dev", iface, "parent", "1:",
+                                "classid", "1:10", "htb", "rate", bandwidth,
+                                "ceil", bandwidth],
                                capture_output=True, timeout=5)
-                notes.append(f"qos {name}: {iface} total={bandwidth}, per-ip={per_ip}")
+                notes.append(f"qos {name}: {iface} total={bandwidth} "
+                             f"(per-ip {per_ip} not enforced yet)")
         except Exception as e:
             notes.append(f"qos failed: {e}")
         return notes
@@ -1377,24 +1575,20 @@ class ConfigStore:
             return []
         notes = []
         try:
-            iface = new_sqm.get("interface", "eth0")
+            iface = new_sqm.get("interface", "eth1")
             download = new_sqm.get("download", 100000)
             upload = new_sqm.get("upload", 10000)
             qdisc = new_sqm.get("qdisc", "cake")
-            # create sections if missing
-            try:
-                self._uci("get", "sqm.@general[0]")
-            except subprocess.CalledProcessError:
-                self._uci("add", "sqm", "general")
-            try:
-                self._uci("get", "sqm.@queue[0]")
-            except subprocess.CalledProcessError:
-                self._uci("add", "sqm", "queue")
-            self._uci("set", "sqm.@general[0].enabled=1")
-            self._uci("set", f"sqm.@queue[0].interface={iface}")
-            self._uci("set", f"sqm.@queue[0].download={download}")
-            self._uci("set", f"sqm.@queue[0].upload={upload}")
-            self._uci("set", f"sqm.@queue[0].qdisc={qdisc}")
+            # OpenWrt's sqm config uses one named queue section per interface.
+            sec = f"sqm.{iface}"
+            self._uci("set", f"{sec}=queue")
+            self._uci("set", f"{sec}.enabled=1")
+            self._uci("set", f"{sec}.interface={iface}")
+            self._uci("set", f"{sec}.download={download}")
+            self._uci("set", f"{sec}.upload={upload}")
+            self._uci("set", f"{sec}.qdisc={qdisc}")
+            self._uci("set", f"{sec}.script="
+                      + ("piece_of_cake.qos" if qdisc == "cake" else "simple.qos"))
             self._uci("commit", "sqm")
             subprocess.run(["/etc/init.d/sqm", "restart"],
                            capture_output=True, text=True, timeout=10)
@@ -1433,10 +1627,11 @@ class ConfigStore:
                 conf += "stop() {\n"
                 conf += f"    pkill -f 'kcptun-{mode}' 2>/dev/null\n"
                 conf += "}\n"
-                open(f"/etc/init.d/kcp_{name}", "w").write(conf)
-                subprocess.run(["chmod", "+x", f"/etc/init.d/kcp_{name}"],
-                               capture_output=True, timeout=5)
-                subprocess.run(["/etc/init.d", f"kcp_{name}", "restart"],
+                script = f"/etc/init.d/kcp_{name}"
+                with open(script, "w", encoding="utf-8") as f:
+                    f.write(conf)
+                os.chmod(script, 0o755)
+                subprocess.run([script, "restart"],
                                capture_output=True, text=True, timeout=10)
             notes.append(f"kcp: {len(new_acc)} tunnels")
         except Exception as e:
@@ -1454,7 +1649,7 @@ class ConfigStore:
             # sysctl
             subprocess.run(["sysctl", "-w", f"net.ipv4.tcp_congestion_control={cc}"],
                            capture_output=True, text=True, timeout=5)
-            if new_tcp.get("fq_codel", True):
+            if new_tcp.get("fq-codel", True):
                 subprocess.run(["sysctl", "-w", "net.core.default_qdisc=fq_codel"],
                                capture_output=True, text=True, timeout=5)
             notes.append(f"tcp cc = {cc}, qdisc = fq_codel")
@@ -1517,49 +1712,104 @@ class ConfigStore:
             notes.append(f"vrf apply failed: {e}")
         return notes
 
+    @staticmethod
+    def _have_tool(name: str) -> bool:
+        return shutil.which(name) is not None
+
+    def _user_exists(self, name: str) -> bool:
+        try:
+            return subprocess.run(["id", "-u", name], capture_output=True,
+                                  timeout=5).returncode == 0
+        except OSError:
+            return False
+
+    def _create_user(self, name: str, notes: List[str]) -> bool:
+        """OpenWrt has no shadow suite: busybox adduser, else useradd."""
+        for cmd in (["adduser", "-D", "-s", "/bin/ash", "-h", f"/home/{name}", name],
+                    ["useradd", "-m", "-s", "/bin/ash", name]):
+            if not self._have_tool(cmd[0]):
+                continue
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            if r.returncode == 0:
+                return True
+            notes.append(f"user {name}: {cmd[0]} failed: {r.stderr.strip()[:120]}")
+        notes.append(f"user {name}: neither adduser nor useradd available")
+        return False
+
+    def _set_password(self, name: str, password: str, notes: List[str]) -> None:
+        if self._have_tool("chpasswd"):
+            subprocess.run(["chpasswd"], input=f"{name}:{password}\n", text=True,
+                           capture_output=True, timeout=10)
+            return
+        if self._have_tool("passwd"):
+            r = subprocess.run(["passwd", name], input=f"{password}\n{password}\n",
+                               text=True, capture_output=True, timeout=10)
+            if r.returncode != 0:
+                msg = (r.stderr or r.stdout).strip()[:120]
+                notes.append(f"user {name}: passwd failed: {msg}")
+            return
+        notes.append(f"user {name}: no chpasswd/passwd available, password not set")
+
+    def _set_disabled(self, name: str, disabled: bool, notes: List[str]) -> None:
+        flag = "-L" if disabled else "-U"
+        if self._have_tool("usermod"):
+            subprocess.run(["usermod", flag, name], capture_output=True,
+                           text=True, timeout=5)
+        elif self._have_tool("passwd"):
+            flag = "-l" if disabled else "-u"
+            r = subprocess.run(["passwd", flag, name], capture_output=True,
+                               text=True, timeout=5)
+            if r.returncode != 0:
+                notes.append(f"user {name}: could not {'lock' if disabled else 'unlock'}")
+        else:
+            notes.append(f"user {name}: cannot lock/unlock (no usermod/passwd)")
+
     def _apply_login(self, old, new):
         old_login = (old.get("system") or {}).get("login") or {}
         new_login = (new.get("system") or {}).get("login") or {}
         if old_login == new_login:
             return []
-        notes = []
+        notes: List[str] = []
         try:
-            for name, u in (new_login.get("user") or {}).items():
-                if not isinstance(u, dict):
+            for name, user in (new_login.get("user") or {}).items():
+                if not isinstance(user, dict):
                     continue
-                # create user if not exists
-                subprocess.run(["id", name], capture_output=True, timeout=5)
-                if subprocess.run(["id", name], capture_output=True, timeout=5).returncode != 0:
-                    subprocess.run(["useradd", "-m", "-s", "/bin/ash", name],
-                                   capture_output=True, timeout=5)
-                # password
-                pwd = u.get("password")
-                if pwd:
-                    subprocess.run(["chpasswd"], input=f"{name}:{pwd}\n",
-                                   text=True, capture_output=True, timeout=5)
-                # disable
-                if u.get("disable"):
-                    subprocess.run(["usermod", "-L", name], capture_output=True, timeout=5)
-                else:
-                    subprocess.run(["usermod", "-U", name], capture_output=True, timeout=5)
-                # ssh keys
-                keys = u.get("public-keys") or {}
+                auth = user.get("authentication") or {}
+                if not self._user_exists(name):
+                    if not self._create_user(name, notes):
+                        continue
+                    notes.append(f"user {name}: created")
+                password = auth.get("plaintext-password") or user.get("password")
+                if password:
+                    self._set_password(name, password, notes)
+                if user.get("disable") is not None:
+                    self._set_disabled(name, bool(user.get("disable")), notes)
+                keys = auth.get("public-keys") or user.get("public-keys") or {}
                 if keys:
                     ssh_dir = f"/home/{name}/.ssh"
-                    subprocess.run(["mkdir", "-p", ssh_dir], capture_output=True, timeout=5)
+                    os.makedirs(ssh_dir, exist_ok=True)
                     lines = []
-                    for kid, k in keys.items():
-                        if isinstance(k, dict) and k.get("key"):
-                            ktype = k.get("type", "ssh-rsa")
-                            lines.append(f"{ktype} {k['key']} {kid}")
-                    open(f"{ssh_dir}/authorized_keys", "w").write("\n".join(lines) + "\n")
-                    subprocess.run(["chmod", "600", f"{ssh_dir}/authorized_keys"],
+                    for kid, key in keys.items():
+                        if isinstance(key, dict) and key.get("key"):
+                            lines.append(f"{key.get('type', 'ssh-rsa')} "
+                                         f"{key['key']} {kid}")
+                    path = os.path.join(ssh_dir, "authorized_keys")
+                    with open(path, "w", encoding="utf-8") as f:
+                        f.write("\n".join(lines) + "\n")
+                    os.chmod(path, 0o600)
+                    subprocess.run(["chown", "-R", name, ssh_dir],
                                    capture_output=True, timeout=5)
-                    subprocess.run(["chown", "-R", name, ssh_dir], capture_output=True, timeout=5)
-            notes.append(f"login: {len(new_login.get('user') or {})} users")
-        except Exception as e:
+            notes.append(f"login: {len(new_login.get('user') or {})} user(s)")
+        except Exception as e:  # noqa: BLE001
             notes.append(f"login apply failed: {e}")
         return notes
+
+    # IKE DH group number -> strongSwan proposal keyword.
+    DH_GROUP_KEYWORD = {
+        2: "modp1024", 5: "modp1536", 14: "modp2048", 15: "modp3072",
+        16: "modp4096", 17: "modp6144", 18: "modp8192",
+        19: "ecp256", 20: "ecp384", 21: "ecp521",
+    }
 
     def _apply_ipsec(self, old, new):
         old_ip = (old.get("vpn") or {}).get("ipsec") or {}
@@ -1576,7 +1826,9 @@ class ConfigStore:
                 conf.append(f"  lifetime={ike.get('lifetime', 28800)}s")
                 props = []
                 for pnum, p in (ike.get("proposal") or {}).items():
-                    props.append(f"{p.get('encryption','aes256')}-{p.get('hash','sha256')}-modp{p.get('dh-group',14)*256}")
+                    dh = int(p.get("dh-group", 14) or 14)
+                    dh_kw = self.DH_GROUP_KEYWORD.get(dh, f"modp{dh * 256}")
+                    props.append(f"{p.get('encryption','aes256')}-{p.get('hash','sha256')}-{dh_kw}")
                 conf.append(f"  ike={';'.join(props)}")
             for esp_name, esp in (new_ip.get("esp-group") or {}).items():
                 conf.append(f"conn {esp_name}")
@@ -1594,9 +1846,9 @@ class ConfigStore:
                 conf.append("  right=%any")
                 conf.append("  rightauth=psk")
                 conf.append(f"  rightsourceip={ra.get('pool-start','10.100.0.10')}-{ra.get('pool-end','10.100.0.100')}")
-                dns = ra.get("dns") or []
+                dns = _as_list(ra.get("dns"))
                 if dns:
-                    conf.append(f"  rightdns={','.join(dns)}")
+                    conf.append(f"  rightdns={','.join(map(str, dns))}")
                 conf.append("  auto=add")
             for peer_ip, peer in (new_ip.get("peer") or {}).items():
                 conf.append(f"conn peer-{peer_ip}")
@@ -1611,21 +1863,11 @@ class ConfigStore:
                     conf.append(f"  leftsubnet={tun.get('local-prefix','0.0.0.0/0')}")
                     conf.append(f"  rightsubnet={tun.get('remote-prefix','0.0.0.0/0')}")
             open("/etc/ipsec.conf", "w").write("\n".join(conf) + "\n")
-            # write ipsec.secrets
+            # write ipsec.secrets (the remote-access PSK belongs here)
             secrets = []
-            ra = new_ip.get("remote-access") or {}
-            if ra.get("enabled"):
-                conf.append("conn remote-access")
-                conf.append(f"  left={ra.get('local-address','%any')}")
-                conf.append(f"  leftid={ra.get('local-id','')}")
-                conf.append("  leftauth=psk")
-                conf.append("  right=%any")
-                conf.append("  rightauth=psk")
-                conf.append(f"  rightsourceip={ra.get('pool-start','10.100.0.10')}-{ra.get('pool-end','10.100.0.100')}")
-                dns = ra.get("dns") or []
-                if dns:
-                    conf.append(f"  rightdns={','.join(dns)}")
-                conf.append("  auto=add")
+            if ra.get("enabled") and ra.get("secret"):
+                secrets.append(
+                    f"{ra.get('local-id', '%any')} %any : PSK \"{ra['secret']}\"")
             for peer_ip, peer in (new_ip.get("peer") or {}).items():
                 sec = peer.get("secret")
                 if sec:
@@ -1717,7 +1959,7 @@ class ConfigStore:
             "smartdns": "smartdns",
             "adguard": "adguardhome",
             "dnsmasq": "dnsmasq",
-            "dhcp": "dnsmasq",
+            "dhcp-server": "dnsmasq",
             "crontab": "cron",
         }
         old_svc = old.get("service") or {}
@@ -1773,9 +2015,9 @@ class ConfigStore:
                        f"--restart={cfg.get('restart', 'always')}"]
                 if cfg.get("network"):
                     cmd += ["--network", cfg["network"]]
-                for p in cfg.get("port") or []:
+                for p in _as_list(cfg.get("port")):
                     cmd += ["-p", p]
-                for v in cfg.get("volume") or []:
+                for v in _as_list(cfg.get("volume")):
                     cmd += ["-v", v]
                 for k, v in (cfg.get("environment") or {}).items():
                     cmd += ["-e", f"{k}={v}"]
@@ -1823,47 +2065,63 @@ class ConfigStore:
             stdout=log, stderr=log, stdin=subprocess.DEVNULL,
             start_new_session=True,
         )
-        with open(self.rollback_conf, "w", encoding="utf-8") as f:
-            json.dump({"pid": proc.pid,
-                       "deadline": time.time() + seconds,
-                       "snapshot": snapshot_path}, f)
+        self._dump(self.rollback_conf, {"pid": proc.pid,
+                                        "deadline": time.time() + seconds,
+                                        "snapshot": snapshot_path})
         return proc.pid
 
     def disarm_rollback_timer(self) -> Optional[int]:
-        if not os.path.exists(self.rollback_conf):
+        conf = self.pending_rollback()
+        if conf is None:
             return None
-        with open(self.rollback_conf, encoding="utf-8") as f:
-            conf = json.load(f)
         pid = conf.get("pid")
-        try:
-            os.kill(pid, 15)
-        except Exception:
-            pass
-        os.remove(self.rollback_conf)
+        if pid:
+            try:
+                os.kill(pid, 15)
+            except OSError:
+                pass
+        self._remove_quietly(self.rollback_conf)
         return pid
 
     def pending_rollback(self) -> Optional[Dict[str, Any]]:
         if not os.path.exists(self.rollback_conf):
             return None
-        with open(self.rollback_conf, encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(self.rollback_conf, encoding="utf-8") as f:
+                conf = json.load(f)
+        except (OSError, ValueError):
+            return None
+        # A timer left over from a reboot can never fire: drop it instead of
+        # letting "commit confirm" claim a rollback is still pending.
+        if float(conf.get("deadline", 0)) < time.time():
+            self._remove_quietly(self.rollback_conf)
+            return None
+        return conf
+
+    @staticmethod
+    def _remove_quietly(path: str) -> None:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
     # ---------- commit / confirm / rollback ----------
     def commit(self, confirmed_minutes: int = 0) -> str:
         if not self.modified():
             return "No changes to commit."
+        # Validate before touching anything: a rejected commit must leave the
+        # running config and the candidate exactly as they were.
+        conflicts = self._check_dns_conflicts(self.candidate)
+        if conflicts:
+            return "Commit aborted: " + "; ".join(conflicts)
+
         snapshot = self._snapshot_current_running()
         old_running = copy.deepcopy(self.running)
         self.running = copy.deepcopy(self.candidate)
-        # DNS port conflict guard
-        conflicts = self._check_dns_conflicts(self.running)
-        if conflicts:
-            # roll back running to old so candidate stays dirty
-            self.running = old_running
-            self._dump(self.running_path, self.running)
-            return "Commit aborted: " + "; ".join(conflicts)
-        self._dump(self.running_path, self.running)
         notes = self._apply_all(old_running, self.running)
+        # Persist only after the backend has been driven, so a crashed apply
+        # cannot leave running.json claiming a state the device is not in.
+        self._dump(self.running_path, self.running)
 
         out = "Commit complete."
         if confirmed_minutes > 0:
@@ -1875,6 +2133,8 @@ class ConfigStore:
         return out
 
     def confirm(self) -> str:
+        if self.pending_rollback() is None:
+            return "No pending confirmed commit."
         pid = self.disarm_rollback_timer()
         if pid is None:
             return "No pending confirmed commit."
@@ -1928,9 +2188,25 @@ class ConfigStore:
 
     def save(self) -> str:
         self._dump(self.running_path, self.running)
-        return "Saved to /etc/vyoscli/running.json"
+        return f"Saved to {self.running_path}"
 
     # ---------- rendering ----------
+    @staticmethod
+    def _is_unset(v: Any) -> bool:
+        """True for values that must not be rendered.
+
+        Unset defaults (None / "" / empty containers) would otherwise render
+        as ``set x None``; replaying that export stores the literal string
+        "None" and silently corrupts the config.
+        """
+        return v is None or v == "" or (isinstance(v, (dict, list)) and not v)
+
+    @staticmethod
+    def _quote_token(tok: Any) -> str:
+        if isinstance(tok, bool):
+            return "true" if tok else "false"
+        return shlex.quote(str(tok))
+
     def render_set_commands(self, cfg: Optional[Dict[str, Any]] = None, prefix: List[str] = None) -> List[str]:
         cfg = cfg if cfg is not None else self.candidate
         prefix = prefix or []
@@ -1938,13 +2214,19 @@ class ConfigStore:
         if isinstance(cfg, dict):
             for k in sorted(cfg.keys()):
                 v = cfg[k]
+                if self._is_unset(v):
+                    continue
                 if isinstance(v, dict):
                     out.extend(self.render_set_commands(v, prefix + [k]))
                 elif isinstance(v, list):
                     for item in v:
-                        out.append("set " + " ".join(prefix + [k, str(item)]))
+                        if self._is_unset(item):
+                            continue
+                        out.append("set " + " ".join(
+                            self._quote_token(t) for t in prefix + [k, item]))
                 else:
-                    out.append("set " + " ".join(prefix + [k, str(v)]))
+                    out.append("set " + " ".join(
+                        self._quote_token(t) for t in prefix + [k, v]))
         return out
 
     def render_tree(self, cfg: Optional[Dict[str, Any]] = None, indent: int = 0) -> str:
@@ -1958,12 +2240,19 @@ class ConfigStore:
         lines: List[str] = []
         for k in sorted(cfg.keys()):
             v = cfg[k]
+            if self._is_unset(v):
+                continue
             if isinstance(v, dict):
+                body = self.render_tree(v, indent + 1)
+                if not body:
+                    continue        # whole subtree is unset -> omit it
                 lines.append(f"{pad}{k} {{")
-                lines.append(self.render_tree(v, indent + 1))
+                lines.append(body)
                 lines.append(f"{pad}}}")
             elif isinstance(v, list):
                 for item in v:
+                    if self._is_unset(item):
+                        continue
                     lines.append(f"{pad}{k} {item}")
             else:
                 lines.append(f"{pad}{k} {v}")
