@@ -42,7 +42,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 变更 | 说明 |
 |---|---|
 | `GUIDE.md` → `docs/GUIDE.md`，`REQUIRED_PACKAGES.md` → `docs/DEPENDENCIES.md` | 文档集中到 `docs/` |
-| 新增 `tests/`（4 个文件、57 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
+| 新增 `tests/`（4 个文件、60 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
 | 新增 `.gitignore` | 忽略 `__pycache__`、`*.ipk`、`.audit/` 等 |
 | `git rm --cached package/vyoscli.zip` | 陈旧构建产物，已从仓库移除 |
 | `Makefile` 安装改用 `$(wildcard .../*.py)` | 以后加模块不用再改 Makefile |
@@ -81,6 +81,10 @@ import vyoscli.cli          ≈ 0.07 s
 | 27 | 改 hostname 只写 UCI，`uci apply` 在 23.05 上不存在 | 真机验证内核主机名一直没变；改为 `uci apply`（24.10+）+ `/etc/init.d/system reload`，实测 `/proc/sys/kernel/hostname` 同步 | `config.py:_apply_hostname` |
 | 28 | 漂移只能看见、不能修复 | configure 模式 `sync`：按 `applied.json` 记录的 owner **只重放漂移段落**；无漂移直接返回，旧 manifest 首次升级时退化为全量。真机验证：改 hostname 后 `Sync complete (drift sections) / hostname -> OpenWrt`，未触发 network/firewall reload | `config.py:sync` / `_apply_steps` |
 | 29 | `interfaces ethernet <if> address` 对已有 lan/wan 设备只能"跳过" | 引入 `_network_map()`：直连设备且 proto 为 static/none 时接管现有 section；DHCP/PPPoE 与桥端口明确拒绝并提示；同时统一了 `interfaces lan device` 与 `interfaces.role` 两种写法 | `config.py:_network_map` / `_apply_interfaces` / `_apply_interface_roles` |
+| 30 | WireGuard 把 `host:port` 整段写进 `endpoint_host`；删除接口不清理 UCI/内核设备 | 真机 wg 报 `Name does not resolve: [192.0.2.10:51999]:51820`，peer 建不出来；删除后 `network.wg*` 与 `wg*` 设备残留。已拆分 endpoint_host/port、按类型清 peer、`ip link del` | `config.py:_apply_wireguard` |
+| 31 | BGP 通过 UCI `frr.*` 下发，但该固件的 frr 包**没有 /etc/config/frr** | 配置永不生效。改为生成 `/etc/frr/frr.conf` + 打开 `daemons` 的 zebra/bgpd，真机 `vtysh -d bgpd -c "show bgp summary"` 验证 AS65001/邻居/network；community-list 需 `expanded` 语法 | `config.py:render_frr_conf` |
+| 32 | IPsec peer 存在 `vpn.ipsec.site-to-site.peer` 下却没读；`ike=`/`esp=` 写成 group 名；`config setup:` 多冒号；没有 teardown | 真机 `ipsec statusall` 看不到连接。改为按 group 展开算法串、去掉 group 伪 conn、删除时清空 secrets，验证到 `peer-203.0.113.5 ... child: 10.1.0.0/24 === 10.2.0.0/24` | `config.py:_apply_ipsec` |
+| 33 | console-server / wireless 的真实链路 | conserver 真机验证：生成 `conserver.cf` 并启动；本机**无无线硬件**，`wireless` 仍未验证 | `config.py:_apply_console_server` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示
@@ -129,6 +133,7 @@ DOC_DRIFT 里显式承认不支持**，不允许悄悄失效。
 - **firewall / NAT 实测**：`firewall rule 900 dest-port 65000 DROP` 生成 nft 规则且 SSH 不受影响，删除后规则清空；DNAT 修正 schema 后生成 `dnat ip to 192.0.2.9:65001`，SNAT 生成 `masquerade comment "!fw4: vyos_src_100"`，删除后 UCI 与 nft 均清理；
 - **漂移检测实测**：commit 后 `show system drift` 无输出；手工 `uci set system.@system[0].hostname` 后报告 `changed system.@system[0]`，恢复后回到无漂移；`applied.json` 为 0600；
 - **sync 实测**：手工改 UCI 的 hostname 后 `show system drift` 报 `changed`，`sync` 输出 `hostname -> OpenWrt` 并把内核/UCI 主机名都拉回，随后 drift 为空；
+- **WireGuard / BGP / IPsec / conserver 实测**：wg 接口+peer（endpoint 拆分）生效；frr 用 frr.conf + daemons 启动，`vtysh` 显示 AS/邻居/network/community-list；strongSwan 生成 peer conn（PSK、隧道子网）并出现在 `ipsec statusall`；conserver 生成配置并启动；设备无无线硬件，wireless 未验证；
 - 包格式：OpenWrt 的 `.ipk` 是 **gzip(tar)**（`./debian-binary` + `control.tar.gz` +
   `data.tar.gz`），不是 Debian ar；`scripts/make-ipk.py` 按此格式生成，`opkg install` 通过。
 
@@ -209,21 +214,21 @@ DOC_DRIFT 里显式承认不支持**，不允许悄悄失效。
 | `interfaces lan/wan device` | ⚠️ | 存 `interfaces.<role>.device`，下发读 `interfaces.role`（不一致） |
 | `interfaces bridge member/address/vlan` | ✅/⚠️ | 端口/VLAN 已修，`stp/priority/aging...` 仍未下发 |
 | `interfaces dummy / loopback` | ⚠️ | dummy 下发 address；loopback 未下发 |
-| `interfaces wireless` | ❓ | 复用 radio 的假设未验证 |
+| `interfaces wireless` | ❓ | 本机无无线硬件，仍未验证 |
 | `interfaces wireguard` | ❓ | UCI wireguard（`wireguard_<if>` peer 段）未在真机验证 |
 | `interfaces openvpn` | ❓ | 写 `/etc/openvpn/*.conf` + UCI openvpn |
 | `interfaces tunnel / vxlan` | ❓ | gre/ipip 走 UCI proto，sit/ip6ip6 未实现 |
 | `protocols static route` | ✅ | `network.vyos_route_*` |
-| `protocols bgp` / `route-map` | ❓ | frr 未安装，UCI `frr` 段结构待验证 |
+| `protocols bgp` / `route-map` | ✅/⚠️ | 真机验证（frr.conf + daemons）；route-map/community-list 已生成，复杂策略未逐一验证 |
 | `policy community-list / route-redirect` | ⚠️/✅ | community-list 仅存储；route-redirect 走 nft |
 | `vrf name` | ❓ | `ip link add ... type vrf`，未验证 |
-| `vpn ipsec *` | ❓ | 已修 DH/重复块/PSK，配置格式需真机 |
+| `vpn ipsec *` | ✅/⚠️ | 真机验证 site-to-site（PSK + 隧道）；remote-access 与证书模式未验证 |
 | `service smartdns` | ⚠️ | main/server/domain-rule 已按真机 UCI 重写；`address`、file 型 domain-set、`forbid-aaaa` 未映射（会输出提示） |
 | `service adguard` | ⚠️ | 只切 UCI `enabled`；端口在 yaml |
 | `service dnsmasq / ssh / crontab / kcp / tcp-accelerate` | ✅ | kcp 修了 init.d 调用 |
 | `service dhcp-server` | ✅ | 按 subnet 自动匹配接口，offset/limit 正确计算 |
 | `service sqm` | ✅ | 改为 `sqm.<iface>=queue` |
-| `service console-server` | ❓ | 逐设备起 dropbear，kill 逻辑仍是 `kill $(cat ...)` 的 shell 写法 |
+| `service console-server` | ✅/⚠️ | 配置文件与服务启动已验证；per-device dropbear 与 kill 逻辑未验证 |
 | `firewall zone/forwarding/rule` | ✅ | fw4 UCI |
 | `nat source/destination` | ✅/⚠️ | 真机验证 DNAT/SNAT 生效；源/目的 zone 仍固定 `lan`/`wan`，未跟随 `firewall zone` |
 | `container` | ⚠️ | podman rm/run，未验证 podman 在 OpenWrt 上的行为 |

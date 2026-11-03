@@ -69,6 +69,31 @@ class CrontabMergeTest(unittest.TestCase):
         self.assertNotIn("*/9 * * * * /bin/false", lines)
 
 
+class FrrRenderTest(unittest.TestCase):
+    def test_render_bgp_and_policy(self):
+        lines = config_mod.ConfigStore.render_frr_conf(
+            {"local-as": 65001, "router-id": "10.0.0.1",
+             "neighbor": {"10.0.0.2": {"remote-as": 65002,
+                                       "description": "peer"}},
+             "network": ["10.9.0.0/16"]},
+            {"RM1": {"permit": {"10": {"set": {"local-preference": 200}}}}},
+            {"10": {"10": {"regex": "65001:*", "action": "permit"}}},
+            "r1")
+        text = "\n".join(lines)
+        for needle in ("router bgp 65001", "bgp router-id 10.0.0.1",
+                       "neighbor 10.0.0.2 remote-as 65002",
+                       "neighbor 10.0.0.2 description peer",
+                       "network 10.9.0.0/16",
+                       "route-map RM1 permit 10",
+                       "set local-preference 200",
+                       "bgp community-list expanded 10 permit 65001:*"):
+            self.assertIn(needle, text)
+
+    def test_disabled_bgp_has_no_router_block(self):
+        text = "\n".join(config_mod.ConfigStore.render_frr_conf({}, {}, {}, "r1"))
+        self.assertNotIn("router bgp", text)
+
+
 class CommitBackendTest(unittest.TestCase):
     def setUp(self):
         self.cli = new_cli()
@@ -221,6 +246,25 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn("is a port of network.lan", out)
         self.assertNotIn(["uci", "set", "network.vyos_eth0=interface"],
                          self.fake.uci_calls())
+
+    def test_wireguard_peer_endpoint_split_and_cleanup(self):
+        key = "A" * 43 + "="
+        cfg(self.cli,
+            f"set interfaces wireguard wg9 private-key {key}",
+            "set interfaces wireguard wg9 address 10.99.0.1/24",
+            "set interfaces wireguard wg9 peer PUBKEY allowed-ips 10.99.0.2/32",
+            "set interfaces wireguard wg9 peer PUBKEY endpoint 192.0.2.10:51999")
+        self.commit()
+        calls = self.fake.uci_calls()
+        self.assertIn(["uci", "set", "network.wg9.proto=wireguard"], calls)
+        self.assertIn(["uci", "set",
+                       "network.peer_wg9_PUBKEY.endpoint_host=192.0.2.10"], calls)
+        self.assertIn(["uci", "set",
+                       "network.peer_wg9_PUBKEY.endpoint_port=51999"], calls)
+        cfg(self.cli, "delete interfaces wireguard wg9")
+        self.commit()
+        self.assertIn(["uci", "delete", "network.wg9"], self.fake.calls)
+        self.assertIn(["ip", "link", "del", "wg9"], self.fake.calls)
 
     def test_dnat_uses_rule_level_ids_and_fw4_options(self):
         cfg(self.cli,

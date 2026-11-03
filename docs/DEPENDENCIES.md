@@ -12,11 +12,11 @@ vyoscli 本身是纯 Python（约 200 KB），但要让各子系统真正下发�
 | `ip-full` | `show ip route`、`ip` 高级参数 | 建议保留 |
 | `smartdns` | DNS 分流/测速 | 不用可删 |
 | `adguardhome` | 广告过滤 DNS | 不用可删（注意：UCI 只能开关服务，DNS/Web 端口在 `/etc/adguardhome.yaml`） |
-| `frr` | BGP、route-map | 不用可删 |
+| `frr` + `frr-bgpd`/`frr-zebra`/`frr-watchfrr` | BGP、route-map（`frr` 只是库和工具，守护进程在子包里） | 不用可删 |
 | `kmod-tcp-bbr`、`kmod-tcp-hybla` | 拥塞控制 | 不用可删 |
 | `kmod-wireguard`、`wireguard-tools` | WireGuard | 不用可删 |
 | `openvpn-openssl` | OpenVPN | 不用可删 |
-| `strongswan`（或 `strongswan-minimal`） | IPsec | 不用可删 |
+| `strongswan`（或 `strongswan-minimal`） | IPsec；23.05 使用 `ipsec.conf` + stroke（`ipsec` CLI 已标记废弃） | 不用可删 |
 | `conserver` | 串口服务器 | 不用可删 |
 | `podman` | 容器 | 不用可删（体积最大） |
 | `kmod-gre`、`kmod-ipip`、`kmod-vxlan` | 隧道 | 不用可删 |

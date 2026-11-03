@@ -22,6 +22,7 @@ import hashlib
 import ipaddress
 import json
 import os
+import re
 import copy
 import shlex
 import shutil
@@ -964,6 +965,33 @@ class ConfigStore:
             notes.append(f"nat apply failed: {e}")
         return notes
 
+    def _sections_of_type(self, config: str, sec_type: str) -> List[str]:
+        """Section names of a given UCI type, e.g. wireguard_wg0 peers."""
+        try:
+            out = self._uci("show", config).stdout
+        except Exception:
+            return []
+        found = []
+        for line in out.splitlines():
+            lhs, _, value = line.partition("=")
+            if "." in lhs[len(config) + 1:]:
+                continue
+            if value.strip("'\"") == sec_type:
+                found.append(lhs.split(".", 1)[1])
+        return found
+
+    @staticmethod
+    def _split_endpoint(endpoint: str) -> Tuple[str, Optional[str]]:
+        """'1.2.3.4:51820' -> ('1.2.3.4', '51820'); '[::1]:51820' handled too."""
+        host, port = endpoint, None
+        if endpoint.startswith("[") and "]:" in endpoint:
+            host, _, port = endpoint[1:].partition("]:")
+        elif endpoint.count(":") == 1:
+            host, _, port = endpoint.partition(":")
+        if port is not None and not port.isdigit():
+            host, port = endpoint, None
+        return host, port
+
     def _apply_wireguard(self, old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
         old_wg = (old.get("interfaces") or {}).get("wireguard") or {}
         new_wg = (new.get("interfaces") or {}).get("wireguard") or {}
@@ -971,6 +999,18 @@ class ConfigStore:
             return []
         notes = []
         try:
+            for gone in set(old_wg) - set(new_wg):
+                try:
+                    self._uci("delete", f"network.{gone}")
+                except subprocess.CalledProcessError:
+                    pass
+                for section in self._sections_of_type("network", f"wireguard_{gone}"):
+                    try:
+                        self._uci("delete", f"network.{section}")
+                    except subprocess.CalledProcessError:
+                        pass
+                subprocess.run(["ip", "link", "del", gone],
+                               capture_output=True, timeout=5)
             for ifname, cfg in new_wg.items():
                 if not isinstance(cfg, dict):
                     continue
@@ -986,17 +1026,25 @@ class ConfigStore:
                     pass
                 for a in _as_list(cfg.get("address")):
                     self._uci("add_list", f"network.{ifname}.addresses={a}")
-                # peers
+                # Recreate peers from scratch so removed ones disappear.
+                for section in self._sections_of_type("network", f"wireguard_{ifname}"):
+                    try:
+                        self._uci("delete", f"network.{section}")
+                    except subprocess.CalledProcessError:
+                        pass
                 pfx = f"peer_{ifname}_"
                 for pk, peer in (cfg.get("peer") or {}).items():
                     if not isinstance(peer, dict):
                         continue
-                    slug = pk[:20].replace("/", "_").replace("+", "_")
+                    slug = "".join(ch if ch.isalnum() else "_" for ch in pk[:20])
                     ps = f"{pfx}{slug}"
                     self._uci("set", f"network.{ps}=wireguard_{ifname}")
                     self._uci("set", f"network.{ps}.public_key={pk}")
                     if peer.get("endpoint"):
-                        self._uci("set", f"network.{ps}.endpoint_host={peer['endpoint']}")
+                        host, port = self._split_endpoint(str(peer["endpoint"]))
+                        self._uci("set", f"network.{ps}.endpoint_host={host}")
+                        if port:
+                            self._uci("set", f"network.{ps}.endpoint_port={port}")
                     if peer.get("allowed-ips"):
                         self._uci("set", f"network.{ps}.allowed_ips={peer['allowed-ips']}")
             self._uci("commit", "network")
@@ -1118,128 +1166,142 @@ class ConfigStore:
             notes.append(f"vxlan apply failed: {e}")
         return notes
 
-    def _apply_bgp(self, old, new):
-        old_b = (old.get("protocols") or {}).get("bgp") or {}
-        new_b = (new.get("protocols") or {}).get("bgp") or {}
-        if old_b == new_b:
-            return []
-        notes = []
+    @staticmethod
+    def render_frr_conf(bgp: Dict[str, Any], route_maps: Dict[str, Any],
+                        community_lists: Dict[str, Any],
+                        hostname: str = "") -> List[str]:
+        """Render /etc/frr/frr.conf for the OpenWrt frr package (no UCI)."""
+        lines = [
+            "# managed by vyoscli",
+            "frr defaults traditional",
+            f"hostname {hostname or 'OpenWrt'}",
+            "log syslog informational",
+            "service integrated-vtysh-config",
+            "!",
+        ]
+        asn = bgp.get("local-as")
+        if asn:
+            lines.append(f"router bgp {asn}")
+            if bgp.get("router-id"):
+                lines.append(f" bgp router-id {bgp['router-id']}")
+            for name, pg in (bgp.get("peer-group") or {}).items():
+                if not isinstance(pg, dict):
+                    continue
+                lines.append(f" neighbor {name} peer-group")
+                if pg.get("remote-as"):
+                    lines.append(f" neighbor {name} remote-as {pg['remote-as']}")
+                if pg.get("update-source"):
+                    lines.append(f" neighbor {name} update-source "
+                                 f"{pg['update-source']}")
+                if pg.get("route-map-import"):
+                    lines.append(f" neighbor {name} route-map "
+                                 f"{pg['route-map-import']} in")
+            for ip, nb in (bgp.get("neighbor") or {}).items():
+                if not isinstance(nb, dict):
+                    continue
+                if nb.get("peer-group"):
+                    lines.append(f" neighbor {ip} peer-group {nb['peer-group']}")
+                if nb.get("remote-as"):
+                    lines.append(f" neighbor {ip} remote-as {nb['remote-as']}")
+                if nb.get("description"):
+                    lines.append(f" neighbor {ip} description {nb['description']}")
+                if nb.get("route-map-in"):
+                    lines.append(f" neighbor {ip} route-map {nb['route-map-in']} in")
+                if nb.get("route-map-out"):
+                    lines.append(f" neighbor {ip} route-map {nb['route-map-out']} out")
+            networks = _as_list(bgp.get("network"))
+            if networks:
+                lines.append(" address-family ipv4 unicast")
+                for net in networks:
+                    lines.append(f"  network {net}")
+                lines.append(" exit-address-family")
+            lines.append("!")
+        for num, body in (community_lists or {}).items():
+            if not isinstance(body, dict):
+                continue
+            # command tree nests rules one level deeper: {rule: {10: {...}}}
+            rules = body.get("rule") if isinstance(body.get("rule"), dict) else body
+            for _ruleno, rule in rules.items():
+                if not isinstance(rule, dict):
+                    continue
+                action = rule.get("action", "permit")
+                regex = rule.get("regex") or ""
+                if regex:
+                    # regex membership needs FRR's "expanded" form
+                    lines.append(f"bgp community-list expanded {num} "
+                                 f"{action} {regex}")
+                else:
+                    lines.append(f"bgp community-list {num} {action}")
+        for name, body in (route_maps or {}).items():
+            if not isinstance(body, dict):
+                continue
+            for action, rules in body.items():
+                if action not in ("permit", "deny"):
+                    continue
+                for ruleno, rbody in (rules or {}).items():
+                    if not isinstance(rbody, dict):
+                        continue
+                    lines.append(f"route-map {name} {action} {ruleno}")
+                    for key, value in (rbody.get("match") or {}).items():
+                        if isinstance(value, dict):
+                            for inner in value.values():
+                                lines.append(f" match {key} {inner}")
+                        else:
+                            lines.append(f" match {key} {value}")
+                    for key, value in (rbody.get("set") or {}).items():
+                        lines.append(f" set {key} {value}")
+        lines.append("!")
+        return lines
+
+    @staticmethod
+    def _set_frr_daemons(enable_bgpd: bool) -> None:
+        path = "/etc/frr/daemons"
         try:
-            # wipe old vyos sections
-            out = self._uci("show", "frr").stdout
-            for line in out.splitlines():
-                if line.startswith("frr.vyos_"):
-                    sec = line.split(".")[1].split("=")[0]
-                    try:
-                        self._uci("delete", f"frr.{sec}")
-                    except subprocess.CalledProcessError:
-                        pass
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+        except OSError:
+            return
+
+        def put(body: str, key: str, value: str) -> str:
+            pattern = re.compile(rf"^{re.escape(key)}=.*$", re.M)
+            line = f"{key}={value}"
+            return (pattern.sub(line, body) if pattern.search(body) else
+                    body.rstrip("\n") + "\n" + line + "\n")
+
+        text = put(text, "zebra", "yes")
+        text = put(text, "bgpd", "yes" if enable_bgpd else "no")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _apply_bgp(self, old, new):
+        new_b = (new.get("protocols") or {}).get("bgp") or {}
+        old_b = (old.get("protocols") or {}).get("bgp") or {}
+        rmaps = (new.get("protocols") or {}).get("route-map") or {}
+        old_rmaps = (old.get("protocols") or {}).get("route-map") or {}
+        comlists = (new.get("policy") or {}).get("community-list") or {}
+        old_comlists = (old.get("policy") or {}).get("community-list") or {}
+        if (old_b == new_b and old_rmaps == rmaps
+                and old_comlists == comlists):
+            return []
+        notes: List[str] = []
+        if not os.path.isdir("/etc/frr") or shutil.which("vtysh") is None:
+            return ["bgp: frr is not installed, config kept in vyoscli JSON"]
+        try:
+            hostname = (new.get("system") or {}).get("host-name") or ""
+            text = "\n".join(self.render_frr_conf(new_b, rmaps, comlists,
+                                                  hostname)) + "\n"
+            with open("/etc/frr/frr.conf", "w", encoding="utf-8") as f:
+                f.write(text)
+            os.chmod("/etc/frr/frr.conf", 0o640)
+            self._set_frr_daemons(bool(new_b.get("local-as")))
+            subprocess.run(["/etc/init.d/frr", "restart"],
+                           capture_output=True, text=True, timeout=20)
             if new_b.get("local-as"):
-                self._uci("set", "frr.vyos_bgp=bgp")
-                self._uci("set", f"frr.vyos_bgp.asn={new_b['local-as']}")
-                if new_b.get("router-id"):
-                    self._uci("set", f"frr.vyos_bgp.router_id={new_b['router-id']}")
-                for ip, nb in (new_b.get("neighbor") or {}).items():
-                    if not isinstance(nb, dict):
-                        continue
-                    s = f"vyos_bgp_nb_{ip.replace('.', '_').replace(':', '_')}"
-                    self._uci("set", f"frr.{s}=bgp_neighbor")
-                    self._uci("set", f"frr.{s}.peer_ip={ip}")
-                    if nb.get("remote-as"):
-                        self._uci("set", f"frr.{s}.peer_asn={nb['remote-as']}")
-                    if nb.get("description"):
-                        self._uci("set", f"frr.{s}.description={nb['description']}")
-                for pgname, pg in (new_b.get("peer-group") or {}).items():
-                    if not isinstance(pg, dict):
-                        continue
-                    s = f"vyos_bgp_pg_{pgname}"
-                    self._uci("set", f"frr.{s}=bgp_peer_group")
-                    self._uci("set", f"frr.{s}.peer_group={pgname}")
-                    if pg.get("remote-as"):
-                        self._uci("set", f"frr.{s}.peer_asn={pg['remote-as']}")
-                    if pg.get("update-source"):
-                        self._uci("set", f"frr.{s}.update_source={pg['update-source']}")
-                    if pg.get("route-map-import"):
-                        self._uci("set", f"frr.{s}.route_map_in={pg['route-map-import']}")
-                for ip, nb in (new_b.get("neighbor") or {}).items():
-                    if not isinstance(nb, dict):
-                        continue
-                    if nb.get("peer-group"):
-                        s = f"vyos_bgp_nb_{ip.replace('.', '_').replace(':', '_')}"
-                        self._uci("set", f"frr.{s}=bgp_neighbor")
-                        self._uci("set", f"frr.{s}.peer_ip={ip}")
-                        self._uci("set", f"frr.{s}.peer_group={nb['peer-group']}")
-                for net in _as_list(new_b.get("network")):
-                    s = f"vyos_bgp_net_{net.replace('/', '_').replace('.', '_')}"
-                    self._uci("set", f"frr.{s}=bgp_network")
-                    self._uci("set", f"frr.{s}.prefix={net}")
-            self._uci("commit", "frr")
-            # append route-maps to frr.conf (FRR UCI route-map support is weak)
-            rmaps = (new.get("protocols") or {}).get("route-map") or {}
-            conf = "/etc/frr/frr.conf"
-            try:
-                old_conf = open(conf).read()
-            except Exception:
-                old_conf = ""
-            # strip old marked block
-            import re
-            old_conf = re.sub(r"# --- vyoscli:route-map:begin ---.*?# --- vyoscli:route-map:end ---\n?", "", old_conf, flags=re.S)
-            # community-list
-            comlists = (new.get("policy") or {}).get("community-list") or {}
-            block = []
-            if rmaps or comlists:
-                block.append("# --- vyoscli:route-map:begin ---")
-                for clnum, clbody in comlists.items():
-                    if not isinstance(clbody, dict):
-                        continue
-                    for ruleno, rule in (clbody or {}).items():
-                        regex = (rule or {}).get("regex", "")
-                        block.append(f"bgp community-list {clnum} permit {regex}")
-                for name, body in rmaps.items():
-                    if not isinstance(body, dict):
-                        continue
-                    for action, rules in body.items():
-                        for ruleno, rbody in (rules or {}).items():
-                            sets = (rbody or {}).get("set") or {}
-                            matches = (rbody or {}).get("match") or {}
-                            block.append(f"route-map {name} {action} {ruleno}")
-                            for k, v in matches.items():
-                                block.append(f"  match {k.replace('-', ' ')} {v}")
-                            for k, v in sets.items():
-                                block.append(f"  set {k.replace('-', ' ')} {v}")
-                block.append("# --- vyoscli:route-map:end ---")
-            new_conf = old_conf.rstrip() + "\n" + "\n".join(block) + "\n"
-            try:
-                open(conf, "w").write(new_conf)
-            except Exception:
-                pass
-            # decide hot reload vs restart
-            old_bgp_core = {k: v for k, v in old_b.items() if k != "route-map"}
-            new_bgp_core = {k: v for k, v in new_b.items() if k != "route-map"}
-            if old_bgp_core != new_bgp_core:
-                # core config changed, need restart
-                subprocess.run(["/etc/init.d/frr", "restart"],
-                               capture_output=True, text=True, timeout=20)
-                notes.append(f"bgp: restarted, AS{new_b.get('local-as')}, {len(new_b.get('neighbor') or {})} peers")
+                notes.append(f"bgp: AS{new_b['local-as']}, "
+                             f"{len(new_b.get('neighbor') or {})} peers")
             else:
-                # route-map only: hot reload via vtysh
-                # no old route-maps
-                old_rmaps = (old.get("protocols") or {}).get("route-map") or {}
-                for name in old_rmaps:
-                    subprocess.run(["vtysh", "-c", "configure terminal",
-                                    "-c", f"no route-map {name}"],
-                                   capture_output=True, text=True, timeout=5)
-                for line in block:
-                    if line.startswith("#"):
-                        continue
-                    cmd = line.strip()
-                    if not cmd:
-                        continue
-                    subprocess.run(["vtysh", "-c", "configure terminal",
-                                    "-c", cmd],
-                                   capture_output=True, text=True, timeout=5)
-                notes.append(f"bgp: route-maps hot-loaded ({len(rmaps)})")
-        except Exception as e:
+                notes.append("bgp: disabled (bgpd=no)")
+        except Exception as e:  # noqa: BLE001
             notes.append(f"bgp apply failed: {e}")
         return notes
 
@@ -1949,80 +2011,113 @@ class ConfigStore:
         19: "ecp256", 20: "ecp384", 21: "ecp521",
     }
 
+    def _ipsec_proposal(self, group: Dict[str, Any], with_dh: bool) -> str:
+        props = []
+        for _num, p in (group.get("proposal") or {}).items():
+            if not isinstance(p, dict):
+                continue
+            parts = [p.get("encryption", "aes256"), p.get("hash", "sha256")]
+            if with_dh:
+                dh = int(p.get("dh-group", 14) or 14)
+                parts.append(self.DH_GROUP_KEYWORD.get(dh, f"modp{dh * 256}"))
+            props.append("-".join(parts))
+        return ";".join(props)
+
     def _apply_ipsec(self, old, new):
         old_ip = (old.get("vpn") or {}).get("ipsec") or {}
         new_ip = (new.get("vpn") or {}).get("ipsec") or {}
         if old_ip == new_ip:
             return []
-        # The default JSON carries an (disabled) remote-access block; writing
-        # /etc/ipsec.conf for it would be pointless and surprising.
-        if not (new_ip.get("peer") or new_ip.get("ike-group")
-                or new_ip.get("esp-group")
-                or (new_ip.get("remote-access") or {}).get("enabled")):
-            return []
-        notes = []
+        peers = ((new_ip.get("site-to-site") or {}).get("peer")
+                 or new_ip.get("peer") or {})
+        remote = new_ip.get("remote-access") or {}
+
+        ike_groups = new_ip.get("ike-group") or {}
+        esp_groups = new_ip.get("esp-group") or {}
+        notes: List[str] = []
         try:
-            # write ipsec.conf
-            conf = ["# managed by vyoscli", "config setup:"]
-            for ike_name, ike in (new_ip.get("ike-group") or {}).items():
-                conf.append(f"conn {ike_name}")
-                conf.append(f"  keyexchange=ikev2")
-                conf.append(f"  lifetime={ike.get('lifetime', 28800)}s")
-                props = []
-                for pnum, p in (ike.get("proposal") or {}).items():
-                    dh = int(p.get("dh-group", 14) or 14)
-                    dh_kw = self.DH_GROUP_KEYWORD.get(dh, f"modp{dh * 256}")
-                    props.append(f"{p.get('encryption','aes256')}-{p.get('hash','sha256')}-{dh_kw}")
-                conf.append(f"  ike={';'.join(props)}")
-            for esp_name, esp in (new_ip.get("esp-group") or {}).items():
-                conf.append(f"conn {esp_name}")
-                props = []
-                for pnum, p in (esp.get("proposal") or {}).items():
-                    props.append(f"{p.get('encryption','aes256')}-{p.get('hash','sha256')}")
-                conf.append(f"  esp-proposals={';'.join(props)}")
-                conf.append(f"  lifetime={esp.get('lifetime', 3600)}s")
-            ra = new_ip.get("remote-access") or {}
-            if ra.get("enabled"):
+            conf = [
+                "# managed by vyoscli",
+                "config setup",
+                '  charondebug="ike 1, cfg 1"',
+                "conn %default",
+                "  keyexchange=ikev2",
+                "  authby=secret",
+                "  dpddelay=30s",
+                "  dpdtimeout=120s",
+                "  dpdaction=clear",
+                "  auto=add",
+            ]
+
+            def ike_of(name: str) -> str:
+                if name and name in ike_groups:
+                    return self._ipsec_proposal(ike_groups[name], True)
+                return "aes256-sha256-modp2048" if name else ""
+
+            def esp_of(name: str) -> str:
+                if name and name in esp_groups:
+                    return self._ipsec_proposal(esp_groups[name], False)
+                return "aes256-sha256" if name else ""
+
+            for peer_ip, peer in peers.items():
+                if not isinstance(peer, dict):
+                    continue
+                conf.append(f"conn peer-{peer_ip}")
+                conf.append(f"  left={peer.get('local-address', '0.0.0.0')}")
+                if peer.get("local-id"):
+                    conf.append(f"  leftid={peer['local-id']}")
+                conf.append(f"  right={peer.get('remote-address', peer_ip)}")
+                if peer.get("remote-id"):
+                    conf.append(f"  rightid={peer['remote-id']}")
+                ike = ike_of(peer.get("ike-group", ""))
+                esp = esp_of(peer.get("esp-group", ""))
+                if ike:
+                    conf.append(f"  ike={ike}")
+                if esp:
+                    conf.append(f"  esp={esp}")
+                for _num, tun in (peer.get("tunnel") or {}).items():
+                    if not isinstance(tun, dict):
+                        continue
+                    conf.append(f"  leftsubnet={tun.get('local-prefix', '0.0.0.0/0')}")
+                    conf.append(f"  rightsubnet={tun.get('remote-prefix', '0.0.0.0/0')}")
+                conf.append("  auto=start")
+
+            if remote.get("enabled"):
                 conf.append("conn remote-access")
-                conf.append(f"  left={ra.get('local-address','%any')}")
-                conf.append(f"  leftid={ra.get('local-id','')}")
+                conf.append(f"  left={remote.get('local-address') or '%any'}")
+                if remote.get("local-id"):
+                    conf.append(f"  leftid={remote['local-id']}")
                 conf.append("  leftauth=psk")
                 conf.append("  right=%any")
                 conf.append("  rightauth=psk")
-                conf.append(f"  rightsourceip={ra.get('pool-start','10.100.0.10')}-{ra.get('pool-end','10.100.0.100')}")
-                dns = _as_list(ra.get("dns"))
+                conf.append(f"  rightsourceip={remote.get('pool-start', '10.100.0.10')}"
+                            f"-{remote.get('pool-end', '10.100.0.100')}")
+                dns = _as_list(remote.get("dns"))
                 if dns:
                     conf.append(f"  rightdns={','.join(map(str, dns))}")
-                conf.append("  auto=add")
-            for peer_ip, peer in (new_ip.get("peer") or {}).items():
-                conf.append(f"conn peer-{peer_ip}")
-                conf.append(f"  left={peer.get('local-address', '0.0.0.0')}")
-                conf.append(f"  leftid={peer.get('local-id', peer.get('local-address',''))}")
-                conf.append(f"  right={peer.get('remote-address', peer_ip)}")
-                conf.append(f"  rightid={peer.get('remote-id', '')}")
-                conf.append(f"  auto=start")
-                conf.append(f"  ike={peer.get('ike-group','')}")
-                conf.append(f"  esp={peer.get('esp-group','')}")
-                for tnum, tun in (peer.get("tunnel") or {}).items():
-                    conf.append(f"  leftsubnet={tun.get('local-prefix','0.0.0.0/0')}")
-                    conf.append(f"  rightsubnet={tun.get('remote-prefix','0.0.0.0/0')}")
+
             with open("/etc/ipsec.conf", "w", encoding="utf-8") as f:
                 f.write("\n".join(conf) + "\n")
-            # write ipsec.secrets (the remote-access PSK belongs here)
+            os.chmod("/etc/ipsec.conf", 0o600)
+
             secrets = []
-            if ra.get("enabled") and ra.get("secret"):
-                secrets.append(
-                    f"{ra.get('local-id', '%any')} %any : PSK \"{ra['secret']}\"")
-            for peer_ip, peer in (new_ip.get("peer") or {}).items():
-                sec = peer.get("secret")
-                if sec:
-                    secrets.append(f"{peer.get('local-address','')} {peer.get('remote-address',peer_ip)} : PSK \"{sec}\"")
+            if remote.get("enabled") and remote.get("secret"):
+                secrets.append(f"{remote.get('local-id') or '%any'} %any : "
+                               f"PSK \"{remote['secret']}\"")
+            for peer_ip, peer in peers.items():
+                if isinstance(peer, dict) and peer.get("secret"):
+                    secrets.append(f"{peer.get('local-address', '%any')} "
+                                   f"{peer.get('remote-address', peer_ip)} : "
+                                   f"PSK \"{peer['secret']}\"")
             with open("/etc/ipsec.secrets", "w", encoding="utf-8") as f:
                 f.write("\n".join(secrets) + "\n")
+            os.chmod("/etc/ipsec.secrets", 0o600)
+
             subprocess.run(["/etc/init.d/ipsec", "restart"],
-                           capture_output=True, text=True, timeout=15)
-            notes.append(f"ipsec: {len(new_ip.get('peer') or {})} peers")
-        except Exception as e:
+                           capture_output=True, text=True, timeout=30)
+            notes.append(f"ipsec: {len(peers)} peer(s)"
+                         + (", remote-access" if remote.get("enabled") else ""))
+        except Exception as e:  # noqa: BLE001
             notes.append(f"ipsec apply failed: {e}")
         return notes
 
