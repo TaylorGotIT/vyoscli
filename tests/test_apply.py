@@ -297,16 +297,42 @@ class CommitBackendTest(unittest.TestCase):
         changed = dict(self.cli.store.drift())
         self.assertEqual(changed.get("system.@system[0]"), "changed")
 
-    def test_sync_reapplies_even_without_json_diff(self):
+    def test_sync_replays_only_the_drifted_owner(self):
         cfg(self.cli, "set system host-name sync-test")
         self.commit()
+        manifest = load_json(self.cli.store.applied_path)
+        section = "system.@system[0]"
+        self.assertEqual(manifest[section]["owner"], "hostname")
+        # Pretend that section was edited behind our back.
+        manifest[section]["digest"] = "stale"
+        self.cli.store._dump(self.cli.store.applied_path, manifest)
         before = len(self.fake.calls)
         out = self.cli.store.sync()
+        self.assertIn("drift sections", out)
         self.assertIn("hostname -> sync-test", out)
         new_calls = self.fake.calls[before:]
         self.assertIn(["uci", "set", "system.@system[0].hostname=sync-test"],
                       new_calls)
-        self.assertIn(["/etc/init.d/system", "reload"], new_calls)
+        self.assertFalse(
+            any(c[:2] == ["uci", "set"] and c[2].startswith("network.")
+                for c in new_calls),
+            "targeted sync must not touch network config")
+
+    def test_sync_without_drift_is_a_noop(self):
+        cfg(self.cli, "set system host-name sync-test")
+        self.commit()
+        before = len(self.fake.uci_statements())
+        self.assertEqual(self.cli.store.sync(),
+                         "Sync: no drift, nothing to do.")
+        self.assertEqual(len(self.fake.uci_statements()), before)
+
+    def test_sync_without_manifest_runs_full_pass(self):
+        cfg(self.cli, "set system host-name sync-test")
+        self.commit()
+        os.remove(self.cli.store.applied_path)   # forget what was applied
+        out = self.cli.store.sync()
+        self.assertIn("full", out)
+        self.assertIn("hostname -> sync-test", out)
 
     def test_no_manifest_means_no_drift_claim(self):
         self.assertIsNone(self.cli.store.drift())

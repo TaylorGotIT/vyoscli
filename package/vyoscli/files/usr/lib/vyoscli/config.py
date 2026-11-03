@@ -184,8 +184,9 @@ class ConfigStore:
         self.rollback_conf = os.path.join(base_dir, "rollback.conf")
         self.running: Dict[str, Any] = {}
         self.candidate: Dict[str, Any] = {}
-        # UCI sections written by the current apply pass (for drift tracking).
-        self._touched: set = set()
+        # UCI sections written by the current apply pass: section -> owner step
+        self._touched: Dict[str, str] = {}
+        self._current_owner: Optional[str] = None
         self.load()
 
     # ---------- persistence ----------
@@ -310,7 +311,7 @@ class ConfigStore:
             target = args[1].split("=", 1)[0]
             parts = target.split(".")
             if len(parts) >= 2:
-                self._touched.add(f"{parts[0]}.{parts[1]}")
+                self._touched[f"{parts[0]}.{parts[1]}"] = self._current_owner or ""
         return subprocess.run(["uci", *args], check=True,
                               capture_output=True, text=True)
 
@@ -326,22 +327,32 @@ class ConfigStore:
             return "absent"
         return hashlib.sha256(r.stdout.encode()).hexdigest()
 
+    def _load_applied(self) -> Dict[str, Any]:
+        try:
+            with open(self.applied_path, encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
     def _record_applied(self) -> None:
         """Remember what commit actually wrote, so later drift is detectable.
 
         The manifest accumulates across commits: a section written once stays
         tracked until a later commit rewrites it (or records it as absent).
+        Each entry stores the owning apply step so `sync` can replay just the
+        affected groups instead of reloading everything.
         """
-        manifest: Dict[str, str] = {}
-        if os.path.exists(self.applied_path):
-            try:
-                with open(self.applied_path, encoding="utf-8") as f:
-                    manifest = json.load(f)
-            except (OSError, ValueError):
-                manifest = {}
-        for section in sorted(self._touched):
-            manifest[section] = self._section_digest(section)
+        manifest = self._load_applied()
+        for section, owner in self._touched.items():
+            manifest[section] = {"owner": owner,
+                                 "digest": self._section_digest(section)}
         self._dump(self.applied_path, manifest)
+
+    @staticmethod
+    def _manifest_digest(entry: Any) -> Any:
+        # applied.json from older builds stored a bare digest string.
+        return entry.get("digest") if isinstance(entry, dict) else entry
 
     def drift(self) -> Optional[List[Tuple[str, str]]]:
         """Sections whose UCI content changed since the last commit.
@@ -351,15 +362,11 @@ class ConfigStore:
         """
         if not os.path.exists(self.applied_path):
             return None
-        try:
-            with open(self.applied_path, encoding="utf-8") as f:
-                manifest = json.load(f)
-        except (OSError, ValueError):
-            return None
+        manifest = self._load_applied()
         changed: List[Tuple[str, str]] = []
-        for section, expected in sorted(manifest.items()):
+        for section, entry in sorted(manifest.items()):
             now = self._section_digest(section)
-            if now != expected:
+            if now != self._manifest_digest(entry):
                 changed.append((section, "missing" if now == "absent" else "changed"))
         return changed
 
@@ -433,58 +440,60 @@ class ConfigStore:
                     f"PORT IN USE: {name} wants {ip}:{port} but something is already listening there.")
         return problems
 
-    def _apply_all(self, old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
-        """按依赖优先级下发配置：system -> interfaces -> protocols -> vpn -> service"""
+    def _apply_steps(self):
+        """Ordered (owner, method) pairs; the owner names land in applied.json."""
+        return [
+            ("hostname", self._apply_hostname),
+            ("system-meta", self._apply_system_meta),
+            ("name-servers", self._apply_name_servers),
+            ("system-dns", self._apply_system_dns),
+            ("login", self._apply_login),
+            ("interfaces", self._apply_interfaces),
+            ("wireless", self._apply_wireless),
+            ("interface-roles", self._apply_interface_roles),
+            ("vrf", self._apply_vrf),
+            ("static-routes", self._apply_static_routes),
+            ("bgp", self._apply_bgp),
+            ("policy", self._apply_policy),
+            ("firewall", self._apply_firewall),
+            ("nat", self._apply_nat),
+            ("wireguard", self._apply_wireguard),
+            ("openvpn", self._apply_openvpn),
+            ("tunnel", self._apply_tunnel),
+            ("vxlan", self._apply_vxlan),
+            ("ipsec", self._apply_ipsec),
+            ("dhcp", self._apply_dhcp),
+            ("ssh", self._apply_ssh),
+            ("adguard", self._apply_adguard),
+            ("dnsmasq", self._apply_dnsmasq),
+            ("smartdns", self._apply_smartdns),
+            ("traffic-policy", self._apply_traffic_policy),
+            ("sqm", self._apply_sqm),
+            ("kcp", self._apply_kcp),
+            ("tcp-accelerate", self._apply_tcp_accelerate),
+            ("console-server", self._apply_console_server),
+            ("containers", self._apply_containers),
+            ("crontab", self._apply_crontab),
+            ("service-disable", self._apply_service_disable),
+        ]
+
+    def _apply_all(self, old: Dict[str, Any], new: Dict[str, Any],
+                   only: Optional[set] = None) -> List[str]:
+        """按依赖优先级下发配置：system -> interfaces -> protocols -> vpn -> service
+
+        ``only`` restricts the pass to the given owner names (used by a targeted
+        ``sync``); ``None`` runs everything.
+        """
         notes: List[str] = []
         if not self._have_uci():
             notes.append("(no uci on this host, changes kept in vyoscli JSON only)")
             return notes
-
-        # 1. system 基础（hostname/DNS/login）
-        notes.extend(self._apply_hostname(old, new))
-        notes.extend(self._apply_system_meta(old, new))
-        notes.extend(self._apply_name_servers(old, new))
-        notes.extend(self._apply_system_dns(old, new))
-        notes.extend(self._apply_login(old, new))
-
-        # 2. interfaces（IP/bridge/wireless/vrf）
-        notes.extend(self._apply_interfaces(old, new))
-        notes.extend(self._apply_wireless(old, new))
-        notes.extend(self._apply_interface_roles(old, new))
-        notes.extend(self._apply_vrf(old, new))
-
-        # 3. protocols（static route/BGP/policy）
-        notes.extend(self._apply_static_routes(old, new))
-        notes.extend(self._apply_bgp(old, new))
-        notes.extend(self._apply_policy(old, new))
-
-        # 4. firewall / nat
-        notes.extend(self._apply_firewall(old, new))
-        notes.extend(self._apply_nat(old, new))
-
-        # 5. vpn（wireguard/openvpn/tunnel/vxlan/ipsec）
-        notes.extend(self._apply_wireguard(old, new))
-        notes.extend(self._apply_openvpn(old, new))
-        notes.extend(self._apply_tunnel(old, new))
-        notes.extend(self._apply_vxlan(old, new))
-        notes.extend(self._apply_ipsec(old, new))
-
-        # 6. service（dhcp/ssh/dns/sqm/kcp/qos）
-        notes.extend(self._apply_dhcp(old, new))
-        notes.extend(self._apply_ssh(old, new))
-        notes.extend(self._apply_adguard(old, new))
-        notes.extend(self._apply_dnsmasq(old, new))
-        notes.extend(self._apply_smartdns(old, new))
-        notes.extend(self._apply_traffic_policy(old, new))
-        notes.extend(self._apply_sqm(old, new))
-        notes.extend(self._apply_kcp(old, new))
-        notes.extend(self._apply_tcp_accelerate(old, new))
-        notes.extend(self._apply_console_server(old, new))
-        notes.extend(self._apply_containers(old, new))
-
-        # 7. other
-        notes.extend(self._apply_crontab(old, new))
-        notes.extend(self._apply_service_disable(old, new))
+        for owner, step in self._apply_steps():
+            if only is not None and owner not in only:
+                continue
+            self._current_owner = owner
+            notes.extend(step(old, new))
+        self._current_owner = None
         return notes
 
     def _network_map(self) -> Dict[str, Dict[str, Any]]:
@@ -2256,7 +2265,7 @@ class ConfigStore:
         snapshot = self._snapshot_current_running()
         old_running = copy.deepcopy(self.running)
         self.running = copy.deepcopy(self.candidate)
-        self._touched = set()
+        self._touched = {}
         notes = self._apply_all(old_running, self.running)
         # Persist only after the backend has been driven, so a crashed apply
         # cannot leave running.json claiming a state the device is not in.
@@ -2272,18 +2281,36 @@ class ConfigStore:
             out += f"\n  - {n}"
         return out
 
-    def sync(self) -> str:
+    def sync(self, only_drift: bool = True) -> str:
         """Re-apply running.json to the backend, ignoring the JSON diff.
 
         Drift repair path: ``show system drift`` lists what was changed behind
-        vyoscli's back, ``sync`` writes the desired state again.
+        vyoscli's back, ``sync`` writes the desired state again. With
+        ``only_drift`` (default) just the owning apply steps of the drifted
+        sections are replayed, so a hand-edited hostname does not reload
+        network/firewall or restart containers.
         """
         if not self._have_uci():
             return "sync: no uci on this host"
-        self._touched = set()
-        notes = self._apply_all({}, copy.deepcopy(self.running))
+        drifted = self.drift()
+        owners: Optional[set] = None
+        if only_drift and drifted is not None:
+            if not drifted:
+                return "Sync: no drift, nothing to do."
+            manifest = self._load_applied()
+            owners = set()
+            for section, _state in drifted:
+                entry = manifest.get(section)
+                owner = entry.get("owner") if isinstance(entry, dict) else None
+                if not owner:
+                    owners = None        # unknown provenance -> full sync
+                    break
+                owners.add(owner)
+        self._touched = {}
+        notes = self._apply_all({}, copy.deepcopy(self.running), only=owners)
         self._record_applied()
-        out = "Sync complete."
+        scope = "drift sections" if owners is not None else "full"
+        out = f"Sync complete ({scope})."
         for n in notes:
             out += f"\n  - {n}"
         return out
@@ -2314,7 +2341,7 @@ class ConfigStore:
         self.candidate = copy.deepcopy(self.running)
         self._dump(self.running_path, self.running)
         self._dump(self.candidate_path, self.candidate)
-        self._touched = set()
+        self._touched = {}
         notes = self._apply_all(old_running, self.running)
         self._record_applied()
         self.disarm_rollback_timer()
