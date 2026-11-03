@@ -32,6 +32,7 @@ tests/                            # unittest（CLI / apply / schema，无第三�
 docs/
 ├── COMMANDS.md                   # 完整命令参考（自动生成，223 条）
 ├── GUIDE.md                      # 场景化配置指南
+├── VYOS-GAP.md                   # 与 VyOS 1.5 官方文档的功能差距与优先级
 ├── DEPENDENCIES.md               # 依赖清单与体积
 └── AUDIT.md                      # 代码审查、已知问题、重构路线
 ```
@@ -248,7 +249,7 @@ python3 scripts/make-ipk.py --minimal-deps
 
 ## 已知限制
 
-完整清单见 [docs/AUDIT.md](docs/AUDIT.md)。最需要注意的：
+完整清单见 [docs/AUDIT.md](docs/AUDIT.md)；与 VyOS 1.5 官方配置指南的逐项对比和补全优先级见 [docs/VYOS-GAP.md](docs/VYOS-GAP.md)。最需要注意的：
 
 - 部分叶子（`description`/`mtu`/`mac`/`vif`/`vrf` 等）目前只写入 JSON，尚未下发；
 - IPsec 的 remote-access/证书模式、wireless（需射频硬件）未做端到端验证；
