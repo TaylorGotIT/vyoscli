@@ -42,7 +42,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 变更 | 说明 |
 |---|---|
 | `GUIDE.md` → `docs/GUIDE.md`，`REQUIRED_PACKAGES.md` → `docs/DEPENDENCIES.md` | 文档集中到 `docs/` |
-| 新增 `tests/`（5 个文件、84 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
+| 新增 `tests/`（5 个文件、87 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
 | 新增 `.gitignore` | 忽略 `__pycache__`、`*.ipk`、`.audit/` 等 |
 | `git rm --cached package/vyoscli.zip` | 陈旧构建产物，已从仓库移除 |
 | `Makefile` 安装改用 `$(wildcard .../*.py)` | 以后加模块不用再改 Makefile |
@@ -107,6 +107,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 53 | NAT 依赖 fw4 的 zone 名称（硬编码 lan/wan），字段也不全 | 改为 VyOS 风格 nft NAT：source/destination 规则支持地址/端口/协议匹配、`translation address/port`、静态 1:1、`hairpin`、log/disable，渲染到 `inet vyos_nat`（dstnat-10/srcnat-10，先于 fw4）；真机验证 DNAT 18080→192.0.2.1:80 生成两条（hairpin）规则、删除后表消失 | `config.py:render_nat_nft` / `_apply_nat` |
 | 54 | `firewall global-options` 只是存 JSON，没有实际效果 | `all-ping`/`broadcast-ping`/`syn-cookies`/`log-martians` 映射为 `sysctl -w`；`state-policy established/invalid` 渲染为 nft 链首的 `ct state ... accept/drop`；真机验证 syncookies=1、状态规则生效 | `config.py:render_firewall_nft` / `_apply_firewall15` |
 | 55 | system 只有 hostname/DNS/NTP 等，缺运维基础项 | 新增 `system syslog`（local/console/remote→logd）、`system conntrack`（table-size/timeout→nf_conntrack sysctl）、`system sysctl parameter`、`system watchdog`（module→modprobe，超时值仅存储）；真机验证 log_ip/log_port/conloglevel 与 3 条 sysctl 生效 | `config_tree.py` / `config.py:_apply_system_extra` |
+| 56 | policy 只有 community-list，route-map match/set 很少 | 新增 `policy access-list/prefix-list/as-path-list`（动态列表+规则）并扩展 route-map 的 match（prefix-list/as-path/metric/tag）与 set（metric/tag/weight/next-hop/origin）；`render_frr_conf` 输出 prefix-list/as-path/access-list 与 `match ip address prefix-list`；frr 重启超时 20s→60s。单元测试覆盖渲染；**真机验证被操作策略拒绝，待补** | `config_tree.py` / `config.py:render_frr_conf` / `_apply_bgp` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示

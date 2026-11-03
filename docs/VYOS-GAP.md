@@ -17,7 +17,7 @@
 | `interfaces` | 19 种接口 | 11 种（ethernet/bridge/wireguard/openvpn/tunnel/loopback/dummy/vxlan/wireless/lan/wan） | 🟡 缺 bonding、pppoe、macsec、geneve、vti、wwan 等 |
 | `firewall` | ipv4/ipv6/bridge/zone/group/global-options/flowtable | ipv4/ipv6 input/forward/output filter rule + group（nft 表 `vyos_fw`）；zone/forwarding/rule 保留 | 🟡 方向规则与 group 已可用，缺 named rule-set/flowtable/bridge，global-options 仅存 JSON |
 | `nat` | nat44 全量、nat64、nat66、cgnat | nat44 匹配/转换、静态 1:1、hairpin（nft `vyos_nat`） | 🟡 nat44 已完整，nat66/nat64/cgnat 未做 |
-| `policy` | access-list/prefix-list/route/route-map/as-path/community/… | community-list、route-redirect | ❌ 缺大部分 |
+| `policy` | access-list/prefix-list/route/route-map/as-path/community/… | community-list、access-list、prefix-list、as-path-list；route-map 扩展了 prefix-list/as-path/metric/tag/next-hop/origin | 🟡 主体已补，缺 local-route/extcommunity/large-community |
 | `protocols` | 静态、BGP、OSPF、ISIS、RIP、BFD、MPLS、SR、PIM… | static、bgp 子集、route-map 子集 | 🟡 能跑简单 BGP/静态路由 |
 | `service` | 22 类服务 | 10 类（含 OpenWrt 特有：sqm/adguard/smartdns/kcp） | 🟡 缺 NTP/DNS/HTTPS API/SNMP/LLDP/DHCP-relay 等 |
 | `system` | 21 类 | 13 类（+syslog/conntrack/sysctl/watchdog） | 🟡 syslog/conntrack/sysctl/watchdog 已落地；缺 task-scheduler/console/ip/ipv6/updates 等 |
@@ -91,13 +91,13 @@ set nat destination rule 10 protocol tcp
 
 | VyOS 1.5 | 现状 | 说明 |
 |---|---|---|
-| `policy access-list` | ❌ | 标准/扩展 ACL |
-| `policy prefix-list` | ❌ | 前缀过滤 |
-| `policy as-path-list` | ❌ | AS 路径过滤 |
+| `policy access-list` | ✅ | 标准/扩展 ACL，渲染到 FRR |
+| `policy prefix-list` | ✅ | 前缀过滤（含 ge/le），渲染到 FRR |
+| `policy as-path-list` | ✅ | AS 路径过滤，渲染到 FRR |
 | `policy community-list` | 🟡 | 只有 regex |
 | `policy extcommunity-list` | ❌ | |
 | `policy large-community-list` | ❌ | |
-| `policy route-map` | 🟡 | 只有 permit/set local-preference 等少量 |
+| `policy route-map` | 🟡 | 现有 `protocols route-map`，match 支持 community/prefix-list/as-path/metric/tag，set 支持 community/local-preference/med/metric/tag/weight/next-hop/origin |
 | `policy local-route` | ❌ | 本机流量策略路由 |
 | `policy route` | ❌ | 我们叫 route-redirect，且只覆盖透明代理场景 |
 

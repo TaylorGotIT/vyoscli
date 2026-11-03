@@ -628,6 +628,7 @@ class ConfigStore:
             ("system-dns", self._apply_system_dns),
             ("login", self._apply_login),
             ("interfaces", self._apply_interfaces),
+            ("pppoe", self._apply_pppoe),
             ("wireless", self._apply_wireless),
             ("interface-roles", self._apply_interface_roles),
             ("vrf", self._apply_vrf),
@@ -796,6 +797,70 @@ class ConfigStore:
             except subprocess.CalledProcessError:
                 pass
             notes.append(f"{ifname}: removed network.{ours}")
+
+    def _apply_pppoe(self, old, new):
+        old_if = (old.get("interfaces") or {})
+        new_if = (new.get("interfaces") or {})
+        old_pp = old_if.get("pppoe") or {}
+        new_pp = new_if.get("pppoe") or {}
+        if old_pp == new_pp:
+            return []
+        notes: List[str] = []
+        try:
+            for gone in set(old_pp) - set(new_pp):
+                section = re.sub(r"[^A-Za-z0-9_]", "_", str(gone))
+                try:
+                    self._uci("delete", f"network.{section}")
+                except subprocess.CalledProcessError:
+                    pass
+                notes.append(f"pppoe: removed network.{section}")
+            for ifname, cfg in new_pp.items():
+                if not isinstance(cfg, dict):
+                    continue
+                section = re.sub(r"[^A-Za-z0-9_]", "_", str(ifname))
+                source = cfg.get("source-interface")
+                auth = cfg.get("authentication") or {}
+                self._uci("set", f"network.{section}=interface")
+                self._uci("set", f"network.{section}.proto=pppoe")
+                if source:
+                    self._uci("set", f"network.{section}.device={source}")
+                if auth.get("username"):
+                    self._uci("set", f"network.{section}.username={auth['username']}")
+                if auth.get("password"):
+                    self._uci("set", f"network.{section}.password={auth['password']}")
+                if cfg.get("mtu"):
+                    self._uci("set", f"network.{section}.mtu={cfg['mtu']}")
+                if cfg.get("access-concentrator"):
+                    self._uci("set",
+                              f"network.{section}.ac={cfg['access-concentrator']}")
+                if cfg.get("service-name"):
+                    self._uci("set",
+                              f"network.{section}.service={cfg['service-name']}")
+                if cfg.get("no-peer-dns"):
+                    self._uci("set", f"network.{section}.peerdns=0")
+                if cfg.get("no-default-route"):
+                    self._uci("set", f"network.{section}.defaultroute=0")
+                if cfg.get("default-route-distance"):
+                    self._uci("set", f"network.{section}.metric="
+                              f"{cfg['default-route-distance']}")
+                if cfg.get("disable"):
+                    self._uci("set", f"network.{section}.auto=0")
+                pppd = []
+                if cfg.get("mru"):
+                    pppd.append(f"mru {cfg['mru']}")
+                if cfg.get("holdoff"):
+                    pppd.append(f"holdoff {cfg['holdoff']}")
+                if pppd:
+                    self._uci("set", f"network.{section}.pppd_options="
+                              f"'{' '.join(pppd)}'")
+                notes.append(f"pppoe: configured network.{section}")
+            self._uci("commit", "network")
+            subprocess.run(["/etc/init.d/network", "reload"],
+                           capture_output=True, text=True, timeout=15)
+            notes.append("pppoe: netifd reloaded")
+        except Exception as e:  # noqa: BLE001
+            notes.append(f"pppoe apply failed: {e}")
+        return notes
 
     def _apply_interfaces(self, old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
         old_if = old.get("interfaces") or {}
@@ -1571,7 +1636,10 @@ class ConfigStore:
     @staticmethod
     def render_frr_conf(bgp: Dict[str, Any], route_maps: Dict[str, Any],
                         community_lists: Dict[str, Any],
-                        hostname: str = "") -> List[str]:
+                        hostname: str = "",
+                        prefix_lists: Optional[Dict[str, Any]] = None,
+                        as_path_lists: Optional[Dict[str, Any]] = None,
+                        access_lists: Optional[Dict[str, Any]] = None) -> List[str]:
         """Render /etc/frr/frr.conf for the OpenWrt frr package (no UCI)."""
         lines = [
             "# managed by vyoscli",
@@ -1634,6 +1702,53 @@ class ConfigStore:
                                  f"{action} {regex}")
                 else:
                     lines.append(f"bgp community-list {num} {action}")
+        for num, body in (access_lists or {}).items():
+            if not isinstance(body, dict):
+                continue
+            rules = body.get("rule") if isinstance(body.get("rule"), dict) else body
+            for _n, rule in rules.items():
+                if not isinstance(rule, dict):
+                    continue
+                action = rule.get("action", "permit")
+                src = (rule.get("source") or {}).get("address") or "any"
+                dst = (rule.get("destination") or {}).get("address") or "any"
+                proto = rule.get("protocol")
+                sport = (rule.get("source") or {}).get("port")
+                dport = (rule.get("destination") or {}).get("port")
+                if proto and proto != "ip":
+                    body_txt = f"access-list {num} {action} {proto} {src}"
+                    if sport:
+                        body_txt += f" eq {sport}"
+                    body_txt += f" {dst}"
+                    if dport:
+                        body_txt += f" eq {dport}"
+                else:
+                    body_txt = f"access-list {num} {action} {src}"
+                lines.append(body_txt)
+        for name, body in (prefix_lists or {}).items():
+            if not isinstance(body, dict):
+                continue
+            rules = body.get("rule") if isinstance(body.get("rule"), dict) else body
+            for seq, rule in rules.items():
+                if not isinstance(rule, dict) or not rule.get("prefix"):
+                    continue
+                action = rule.get("action", "permit")
+                entry = f"ip prefix-list {name} seq {seq} {action} {rule['prefix']}"
+                if rule.get("ge"):
+                    entry += f" ge {rule['ge']}"
+                if rule.get("le"):
+                    entry += f" le {rule['le']}"
+                lines.append(entry)
+        for name, body in (as_path_lists or {}).items():
+            if not isinstance(body, dict):
+                continue
+            rules = body.get("rule") if isinstance(body.get("rule"), dict) else body
+            for _n, rule in rules.items():
+                if not isinstance(rule, dict) or not rule.get("regex"):
+                    continue
+                lines.append(f"ip as-path access-list {name} "
+                             f"{rule.get('action', 'permit')} {rule['regex']}")
+        lines.append("!")
         for name, body in (route_maps or {}).items():
             if not isinstance(body, dict):
                 continue
@@ -1645,7 +1760,11 @@ class ConfigStore:
                         continue
                     lines.append(f"route-map {name} {action} {ruleno}")
                     for key, value in (rbody.get("match") or {}).items():
-                        if isinstance(value, dict):
+                        if key == "prefix-list":
+                            lines.append(f" match ip address prefix-list {value}")
+                        elif key == "as-path":
+                            lines.append(f" match as-path {value}")
+                        elif isinstance(value, dict):
                             for inner in value.values():
                                 lines.append(f" match {key} {inner}")
                         else:
@@ -1680,24 +1799,35 @@ class ConfigStore:
         old_b = (old.get("protocols") or {}).get("bgp") or {}
         rmaps = (new.get("protocols") or {}).get("route-map") or {}
         old_rmaps = (old.get("protocols") or {}).get("route-map") or {}
-        comlists = (new.get("policy") or {}).get("community-list") or {}
-        old_comlists = (old.get("policy") or {}).get("community-list") or {}
+        pol = new.get("policy") or {}
+        old_pol = old.get("policy") or {}
+        comlists = pol.get("community-list") or {}
+        old_comlists = old_pol.get("community-list") or {}
+        prefix_lists = pol.get("prefix-list") or {}
+        old_prefix = old_pol.get("prefix-list") or {}
+        as_path_lists = pol.get("as-path-list") or {}
+        old_as_path = old_pol.get("as-path-list") or {}
+        access_lists = pol.get("access-list") or {}
+        old_access = old_pol.get("access-list") or {}
         if (old_b == new_b and old_rmaps == rmaps
-                and old_comlists == comlists):
+                and old_comlists == comlists and old_prefix == prefix_lists
+                and old_as_path == as_path_lists and old_access == access_lists):
             return []
         notes: List[str] = []
         if not os.path.isdir("/etc/frr") or shutil.which("vtysh") is None:
             return ["bgp: frr is not installed, config kept in vyoscli JSON"]
         try:
             hostname = (new.get("system") or {}).get("host-name") or ""
-            text = "\n".join(self.render_frr_conf(new_b, rmaps, comlists,
-                                                  hostname)) + "\n"
+            text = "\n".join(self.render_frr_conf(
+                new_b, rmaps, comlists, hostname,
+                prefix_lists=prefix_lists, as_path_lists=as_path_lists,
+                access_lists=access_lists)) + "\n"
             with open("/etc/frr/frr.conf", "w", encoding="utf-8") as f:
                 f.write(text)
             os.chmod("/etc/frr/frr.conf", 0o640)
             self._set_frr_daemons(bool(new_b.get("local-as")))
             subprocess.run(["/etc/init.d/frr", "restart"],
-                           capture_output=True, text=True, timeout=20)
+                           capture_output=True, text=True, timeout=60)
             if new_b.get("local-as"):
                 notes.append(f"bgp: AS{new_b['local-as']}, "
                              f"{len(new_b.get('neighbor') or {})} peers")

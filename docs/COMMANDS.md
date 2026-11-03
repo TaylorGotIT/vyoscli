@@ -159,6 +159,19 @@
 | `interfaces openvpn <vtun-name> proto` | udp\|tcp | `interfaces openvpn <vtun-name> proto text` |
 | `interfaces openvpn <vtun-name> push` | Push option to client (repeatable) | `interfaces openvpn <vtun-name> push text` |
 | `interfaces openvpn <vtun-name> server` | VPN pool: x.x.x.x 255.255.255.0 | `interfaces openvpn <vtun-name> server text` |
+| `interfaces pppoe <name> access-concentrator` | Target access concentrator | `interfaces pppoe <name> access-concentrator text` |
+| `interfaces pppoe <name> authentication password` | ISP password | `interfaces pppoe <name> authentication password text` |
+| `interfaces pppoe <name> authentication username` | ISP username | `interfaces pppoe <name> authentication username text` |
+| `interfaces pppoe <name> default-route-distance` | Distance for the ISP default route | `interfaces pppoe <name> default-route-distance 100` |
+| `interfaces pppoe <name> description` | Description | `interfaces pppoe <name> description text` |
+| `interfaces pppoe <name> disable` | Administratively disable | `interfaces pppoe <name> disable true` |
+| `interfaces pppoe <name> holdoff` | Redial delay in seconds | `interfaces pppoe <name> holdoff 100` |
+| `interfaces pppoe <name> mru` | MRU (default 1492) | `interfaces pppoe <name> mru 100` |
+| `interfaces pppoe <name> mtu` | MTU (default 1492) | `interfaces pppoe <name> mtu 100` |
+| `interfaces pppoe <name> no-default-route` | Do not install the ISP default route | `interfaces pppoe <name> no-default-route true` |
+| `interfaces pppoe <name> no-peer-dns` | Ignore ISP-provided DNS servers | `interfaces pppoe <name> no-peer-dns true` |
+| `interfaces pppoe <name> service-name` | Service name | `interfaces pppoe <name> service-name text` |
+| `interfaces pppoe <name> source-interface` | Underlying interface (e.g. eth0) | `interfaces pppoe <name> source-interface text` |
 | `interfaces tunnel <tun-name> address` | Inner tunnel IPv4/prefix | `interfaces tunnel <tun-name> address 192.0.2.1/24` |
 | `interfaces tunnel <tun-name> description` | Description | `interfaces tunnel <tun-name> description text` |
 | `interfaces tunnel <tun-name> disable` | Administratively disable | `interfaces tunnel <tun-name> disable true` |
@@ -218,9 +231,21 @@
 
 | 命令 | 说明 | 示例 |
 |---|---|---|
+| `policy access-list <name> rule <id> action` | permit \| deny | `policy access-list <name> rule <id> action text` |
+| `policy access-list <name> rule <id> destination address` | Destination prefix | `policy access-list <name> rule <id> destination address 192.0.2.1/24` |
+| `policy access-list <name> rule <id> destination port` | Destination port | `policy access-list <name> rule <id> destination port 8080` |
+| `policy access-list <name> rule <id> protocol` | ip \| tcp \| udp \| icmp | `policy access-list <name> rule <id> protocol text` |
+| `policy access-list <name> rule <id> source address` | Source prefix | `policy access-list <name> rule <id> source address 192.0.2.1/24` |
+| `policy access-list <name> rule <id> source port` | Source port | `policy access-list <name> rule <id> source port 8080` |
+| `policy as-path-list <name> rule <id> action` | permit \| deny | `policy as-path-list <name> rule <id> action text` |
+| `policy as-path-list <name> rule <id> regex` | AS path regular expression | `policy as-path-list <name> rule <id> regex text` |
 | `policy community-list <list-num> rule <id> action` | permit/deny | `policy community-list <list-num> rule <id> action permit` |
 | `policy community-list <list-num> rule <id> description` | Description | `policy community-list <list-num> rule <id> description text` |
 | `policy community-list <list-num> rule <id> regex` | Community regex | `policy community-list <list-num> rule <id> regex text` |
+| `policy prefix-list <name> rule <id> action` | permit \| deny | `policy prefix-list <name> rule <id> action text` |
+| `policy prefix-list <name> rule <id> ge` | Minimum prefix length | `policy prefix-list <name> rule <id> ge 100` |
+| `policy prefix-list <name> rule <id> le` | Maximum prefix length | `policy prefix-list <name> rule <id> le 100` |
+| `policy prefix-list <name> rule <id> prefix` | Prefix to match | `policy prefix-list <name> rule <id> prefix 192.0.2.1/24` |
 | `policy route-redirect <name> rule <id> dport` | Destination port to match | `policy route-redirect <name> rule <id> dport 8080` |
 | `policy route-redirect <name> rule <id> redirect-to` | Redirect to IP:port | `policy route-redirect <name> rule <id> redirect-to text` |
 
@@ -239,11 +264,19 @@
 | `protocols bgp peer-group <name> soft-reconfiguration` | Soft reconfig inbound | `protocols bgp peer-group <name> soft-reconfiguration text` |
 | `protocols bgp peer-group <name> update-source` | Update source IP | `protocols bgp peer-group <name> update-source 192.0.2.1` |
 | `protocols bgp router-id` | BGP router-id | `protocols bgp router-id 10.0.0.1` |
+| `protocols route-map <name> permit <name> match as-path` | Match an AS path list | `protocols route-map <name> permit <name> match as-path text` |
 | `protocols route-map <name> permit <name> match community community-list` | Community-list number | `protocols route-map <name> permit <name> match community community-list text` |
+| `protocols route-map <name> permit <name> match metric` | Match route metric | `protocols route-map <name> permit <name> match metric 100` |
+| `protocols route-map <name> permit <name> match prefix-list` | Match an IPv4 prefix-list | `protocols route-map <name> permit <name> match prefix-list text` |
+| `protocols route-map <name> permit <name> match tag` | Match route tag | `protocols route-map <name> permit <name> match tag 100` |
 | `protocols route-map <name> permit <name> set community` | BGP community (e.g. 65001:100) | `protocols route-map <name> permit <name> set community text` |
 | `protocols route-map <name> permit <name> set local-preference` | BGP local-preference | `protocols route-map <name> permit <name> set local-preference 100` |
 | `protocols route-map <name> permit <name> set med` | BGP MED | `protocols route-map <name> permit <name> set med 100` |
+| `protocols route-map <name> permit <name> set metric` | Set route metric | `protocols route-map <name> permit <name> set metric 100` |
 | `protocols route-map <name> permit <name> set next-hop` | Set next-hop | `protocols route-map <name> permit <name> set next-hop 192.0.2.1` |
+| `protocols route-map <name> permit <name> set origin` | Set BGP origin (igp\|egp\|incomplete) | `protocols route-map <name> permit <name> set origin text` |
+| `protocols route-map <name> permit <name> set tag` | Set route tag | `protocols route-map <name> permit <name> set tag 100` |
+| `protocols route-map <name> permit <name> set weight` | Set BGP weight | `protocols route-map <name> permit <name> set weight 100` |
 | `protocols static route <prefix> blackhole` | Silently drop packets | `protocols static route <prefix> blackhole true` |
 | `protocols static route <prefix> interface` | Egress interface | `protocols static route <prefix> interface text` |
 | `protocols static route <prefix> next-hop` | Next-hop gateway IPv4 | `protocols static route <prefix> next-hop 192.0.2.1` |

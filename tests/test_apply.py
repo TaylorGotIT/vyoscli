@@ -370,6 +370,51 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn("drop", text)
         self.assertIn(["nft", "-f", path], self.fake.calls)
 
+    def test_frr_renders_policy_lists_and_matches(self):
+        lines = self.cli.store.render_frr_conf(
+            {"local-as": 65001}, {"RM": {"permit": {"10": {
+                "match": {"prefix-list": "PL"},
+                "set": {"local-preference": 200}}}}}, {},
+            "r1",
+            prefix_lists={"PL": {"rule": {"10": {
+                "action": "permit", "prefix": "10.0.0.0/8", "ge": 16}}}},
+            as_path_lists={"ASP": {"rule": {"10": {
+                "action": "permit", "regex": "^65001$"}}}},
+            access_lists={"10": {"rule": {"10": {
+                "action": "permit", "source": {"address": "192.0.2.0/24"}}}}})
+        text = "\n".join(lines)
+        self.assertIn("ip prefix-list PL seq 10 permit 10.0.0.0/8 ge 16", text)
+        self.assertIn("ip as-path access-list ASP permit ^65001$", text)
+        self.assertIn("access-list 10 permit 192.0.2.0/24", text)
+        self.assertIn("match ip address prefix-list PL", text)
+        self.assertIn("set local-preference 200", text)
+
+    def test_pppoe_maps_to_netifd(self):
+        cfg(self.cli,
+            "set interfaces pppoe pppoe0 authentication username user@isp",
+            "set interfaces pppoe pppoe0 authentication password secret",
+            "set interfaces pppoe pppoe0 source-interface eth0",
+            "set interfaces pppoe pppoe0 mtu 1492",
+            "set interfaces pppoe pppoe0 no-peer-dns true")
+        self.commit()
+        calls = self.fake.uci_calls()
+        self.assertIn(["uci", "set", "network.pppoe0=interface"], calls)
+        self.assertIn(["uci", "set", "network.pppoe0.proto=pppoe"], calls)
+        self.assertIn(["uci", "set", "network.pppoe0.device=eth0"], calls)
+        self.assertIn(["uci", "set", "network.pppoe0.username=user@isp"], calls)
+        self.assertIn(["uci", "set", "network.pppoe0.password=secret"], calls)
+        self.assertIn(["uci", "set", "network.pppoe0.peerdns=0"], calls)
+        self.assertIn(["uci", "commit", "network"], calls)
+
+    def test_pppoe_removal_deletes_section(self):
+        cfg(self.cli,
+            "set interfaces pppoe pppoe0 source-interface eth0",
+            "set interfaces pppoe pppoe0 authentication username u")
+        self.commit()
+        cfg(self.cli, "delete interfaces pppoe pppoe0")
+        self.commit()
+        self.assertIn(["uci", "delete", "network.pppoe0"], self.fake.calls)
+
     def test_syslog_remote_maps_to_logd(self):
         cfg(self.cli,
             "set system syslog remote 192.0.2.10 protocol tcp",
