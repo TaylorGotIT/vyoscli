@@ -212,14 +212,31 @@ def template(specs: Iterable[Spec], help_text: str = "Per-interface config",
     return tpl
 
 
-def _attach_data(parent: Node, item: dict, action) -> None:
-    node = Node(name=item["name"], help=item.get("help", ""))
+def _keys_at(config: dict, path: tuple) -> list:
+    cur = config
+    for part in path:
+        if not isinstance(cur, dict) or part not in cur:
+            return []
+        cur = cur[part]
+    return list(cur.keys()) if isinstance(cur, dict) else []
+
+
+def _attach_data(parent: Node, item: dict, action, path: tuple = (),
+                 resolvable: bool = True, store=None) -> None:
+    name = item["name"]
+    node = Node(name=name, help=item.get("help", ""))
     children = item.get("children") or []
     if item.get("dyn"):
         template = Node(name="*", help=item.get("tpl_help", ""))
         for child in children:
-            _attach_data(template, child, action)
-        node.dynamic = lambda: []
+            # Instances live under this node's config path, but their children
+            # cannot be resolved without knowing a concrete instance name.
+            _attach_data(template, child, action, path + (name,), False, store)
+        if store is not None and resolvable:
+            cfg_path = path + (name,)
+            node.dynamic = lambda p=cfg_path: _keys_at(store.candidate, p)
+        else:
+            node.dynamic = lambda: []
         node._dyn_template = template  # type: ignore[attr-defined]
         parent.add(node)
         return
@@ -229,12 +246,12 @@ def _attach_data(parent: Node, item: dict, action) -> None:
         parent.add(node)
         return
     for child in children:
-        _attach_data(node, child, action)
+        _attach_data(node, child, action, path + (name,), resolvable, store)
     parent.add(node)
 
 
-def build_tree(root: Node, data, action) -> Node:
+def build_tree(root: Node, data, action, store=None) -> Node:
     """Build a config subtree from config_tree.TREE (JSON data)."""
     for item in data:
-        _attach_data(root, item, action)
+        _attach_data(root, item, action, (), True, store)
     return root

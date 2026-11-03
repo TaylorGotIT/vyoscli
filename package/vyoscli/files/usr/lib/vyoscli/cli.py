@@ -135,6 +135,8 @@ class Cli:
         node, _rem, _matched, _canon = root.walk(head)
         out: List[tuple] = []
         for child_name, child in node.children.items():
+            if getattr(child, "_synthetic", False):
+                continue  # listed by the dynamic candidates below
             out.append((child_name, child.help or ""))
         if node.dynamic is not None and callable(node.dynamic):
             tpl = getattr(node, "_dyn_template", None)

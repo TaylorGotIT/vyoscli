@@ -301,7 +301,7 @@ def build_tree(store: Any) -> CommandTree:
     for verb in ("set", "delete", "edit"):
         root = Node(name=verb, help=f"{verb} configuration node")
         tree.cfg_root.add(root)
-        schema.build_tree(root, config_tree.TREE, _cfg_noop)
+        schema.build_tree(root, config_tree.TREE, _cfg_noop, store=store)
 
     # config-mode top-level verbs
     for verb, help_text in (

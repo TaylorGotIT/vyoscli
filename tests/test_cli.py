@@ -218,6 +218,14 @@ class CompletionTest(unittest.TestCase):
         self.cli.ctx.cfg_path = ["system"]
         self.assertIn("host-name", self.cli._help_text(""))
 
+    def test_dynamic_completion_lists_existing_instances(self):
+        names = [name for name, _ in completions(self.cli, "set interfaces ethernet ")]
+        self.assertIn("eth0", names)
+        self.assertIn("eth1", names)
+        cfg(self.cli, "set interfaces bridge br9 description test")
+        names = [name for name, _ in completions(self.cli, "set interfaces bridge ")]
+        self.assertEqual(names.count("br9"), 1, names)
+
     def test_leaf_completion_has_value_hint(self):
         self.cli.ctx.cfg_path = []
         pairs = dict(completions(self.cli, "set interfaces ethernet eth0 address "))

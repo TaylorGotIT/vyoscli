@@ -143,6 +143,7 @@ class Node:
             # is only consulted for Tab completion hints.
             if node.dynamic is not None:
                 synth = Node(name=tok, help="(dynamic)")
+                synth._synthetic = True  # type: ignore[attr-defined]
                 tpl = getattr(node, "_dyn_template", None)
                 if tpl is not None:
                     for k, v in tpl.children.items():
