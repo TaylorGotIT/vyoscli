@@ -98,6 +98,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 44 | bridge/tunnel/vxlan/loopback/dummy 的模板字段同样是手写 | 迁移到 `schema.TEMPLATES`（5 组、38 条），`schema.template()` 生成动态模板；bridge 的 vlan 子节点保持手写。真机验证 `set interfaces bridge ?` 与 tunnel 老键 `local-ip/remote-ip` 仍可用 | `schema.py` / `commands.py` |
 | 45 | 动态节点（bridge/vlan/peer…）在 `?`/Tab 下没有任何提示 | 没有候选时补 `<name>` 提示，并且不再对动态节点误报 `<Enter>` | `cli.py:_matches_with_help` |
 | 46 | firewall zone/forwarding/rule 与 nat source/destination rule 的模板字段同样手写 | 迁移到 `schema.TEMPLATES`（新增 5 组、15 条），`?` 真机验证 `firewall zone` / `firewall rule` / `nat destination rule` 的字段提示正常 | `schema.py` / `commands.py` |
+| 47 | `commands.py` 里约 700 行手写配置树，字段/help 三份冗余 | 整棵配置树改为生成数据：`config_tree.py`（353 个节点、49 个动态模板，JSON 内嵌）+ `schema.build_tree()` 构建；`commands.py` 从 1120 行降到 329 行。先用脚本导出旧树做基线，重建后 354 条记录逐项一致；真机抽查 DHCP/route-map/ipsec/wireguard/bgp/community-list 深路径均正常。动态节点 Tab 候选改为通用 `<name>` 提示（不再列现有实例名） | `config_tree.py` / `schema.py` / `commands.py` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示

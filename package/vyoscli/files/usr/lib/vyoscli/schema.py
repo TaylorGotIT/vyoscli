@@ -12,7 +12,7 @@ keeps the type/help in one place.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Tuple
+from typing import Iterable, Optional, Tuple
 
 from .tree import Node
 
@@ -210,3 +210,31 @@ def template(specs: Iterable[Spec], help_text: str = "Per-interface config",
                     action=action)
         tpl.add(node)
     return tpl
+
+
+def _attach_data(parent: Node, item: dict, action) -> None:
+    node = Node(name=item["name"], help=item.get("help", ""))
+    children = item.get("children") or []
+    if item.get("dyn"):
+        template = Node(name="*", help=item.get("tpl_help", ""))
+        for child in children:
+            _attach_data(template, child, action)
+        node.dynamic = lambda: []
+        node._dyn_template = template  # type: ignore[attr-defined]
+        parent.add(node)
+        return
+    if item.get("type") and not children:
+        node.value_type = item["type"]
+        node.action = action
+        parent.add(node)
+        return
+    for child in children:
+        _attach_data(node, child, action)
+    parent.add(node)
+
+
+def build_tree(root: Node, data, action) -> Node:
+    """Build a config subtree from config_tree.TREE (JSON data)."""
+    for item in data:
+        _attach_data(root, item, action)
+    return root
