@@ -2,6 +2,10 @@
 
 类 VyOS 的 OpenWrt CLI。目录结构对齐 [VyOS 1.5 官方文档](https://docs.vyos.io/en/1.5/configuration/index.html)。
 
+> **实现状态**：本指南描述的是目标行为。哪些路径已经真正下发到 UCI、哪些只写 JSON、
+> 哪些还没在真机验证，见 [AUDIT.md](AUDIT.md) §5 的对照表。遇到"set 成功但没生效"，
+> 先查那张表。
+
 ## 目录
 
 - [入门](#入门)
@@ -70,7 +74,7 @@
 set system
   host-name <text>
   timezone <IANA tz>                e.g. Asia/Shanghai
-  ntp server <host>
+  ntp <host>                         (可重复)
   language <locale>
   name-server <ipv4>                dnsmasq 上游
   dns <ipv4>                        路由器自身 resolver
@@ -79,14 +83,19 @@ set system
 set interfaces ethernet <ifname>
   address <ipv4/pfx>                (可重复)
   description <text>
-  role <lan|wan>
+  mtu <n> | mac <mac> | vrf <name>
+  disable <true|false>
+  vif <vlan-id> address <ipv4/pfx>
+
+set interfaces lan|wan
+  device <ifname>
 
 set interfaces wireless <ifname>
   mode <ap|sta>
   ssid <text>
   channel <num>
   security <wpa2|wpa3|none>
-  key <text>
+  passphrase <text>
 
 set interfaces bridge br0
   member <ifname>
@@ -96,9 +105,9 @@ set interfaces dummy dum0
   address <ipv4/pfx>
 
 set interfaces tunnel tun0
-  mode <gre|ipip>
-  local-ip <ipv4>
-  remote-ip <ipv4>
+  encapsulation <gre|ipip|sit|ip6ip6>
+  source-address <ipv4>
+  remote <ipv4>
   address <ipv4/pfx>
 
 set interfaces vxlan vxlan0
@@ -114,8 +123,13 @@ set interfaces wireguard wg0
     endpoint <ip:port>
 
 set interfaces openvpn vtun0
-  mode <tun>
-  config-file <path>
+  mode <server|client>
+  proto <udp|tcp>
+  port <port>
+  dev <tun|tap>
+  ca <path> | cert <path> | key <path> | dh <path>
+  server <pool> <netmask>
+  push <"route ...">                (可重复)
 
 set protocols static route <prefix>
   next-hop <ipv4>
@@ -140,12 +154,16 @@ set service ssh
   port <port>
   root-login <true|false>
 
-set service dhcp <ifname>
-  start <ipv4>
-  end <ipv4>
-  lease <time>
-  gateway <ipv4>
-  dns <ipv4>                        (可重复)
+set service dhcp-server shared-network-name <name>
+  interface <uci-net>               可选，缺省时按 subnet 自动匹配接口
+  subnet <cidr>
+    default-router <ipv4>
+    name-server <ipv4>              (可重复)
+    domain-name <text>
+    domain-search <text>
+    lease <seconds>
+    range <id> start <ipv4> stop <ipv4>
+    static-mapping <name> ip-address <ipv4> mac-address <mac>
 
 set service smartdns
   enabled <true|false>
@@ -153,7 +171,8 @@ set service smartdns
   listen-address <ipv4>
   forbid-aaaa <true|false>
   server <name> ip <ipv4>
-  domain-rules-file <path>
+  domain-set <name> domain <domain>  (可重复)
+  domain-rule <name> domain-set <name> forward <server>
 
 set service adguard
   enabled <true|false>
@@ -167,7 +186,7 @@ set service dnsmasq
 
 set service crontab <name>
   schedule "<cron>"
-  command <path>
+  script <path>
 
 set firewall zone <name>
   network <net>
@@ -217,7 +236,7 @@ set container <name>
 | protocols static route | UCI network.vyos_route_* | netifd reload |
 | protocols bgp | UCI frr.vyos_bgp_* + frr.conf 标记块 | restart（核心变）/ vtysh 热加载（route-map） |
 | service ssh | UCI dropbear.* | dropbear restart |
-| service dhcp | UCI dhcp.vyos_* | dnsmasq reload |
+| service dhcp-server | UCI dhcp.vyos_dhcp_*（按 subnet 自动定位接口） | dnsmasq reload |
 | service dnsmasq | UCI dhcp.@dnsmasq[0].port/listenaddress | dnsmasq restart |
 | service smartdns | UCI smartdns.vyos_* | smartdns restart |
 | service adguard | UCI adguardhome.main | adguardhome restart |
@@ -234,18 +253,21 @@ commit 前自动检测：
 - 0.0.0.0 通配监听会和任何同端口冲突
 - 冲突直接拒绝 commit，running 回滚到旧值
 
-## 按需安装（commit 时才 opkg install）
+## 依赖安装策略
 
-| 包 | 触发条件 |
-|---|---|
-| smartdns | set service smartdns enabled true |
-| adguardhome | set service adguard enabled true |
-| podman / podman-plugins | set container ... |
-| frr | set protocols bgp local-as |
-| kmod-wireguard / wireguard-tools | set interfaces wireguard |
-| openvpn-openssl | set interfaces openvpn |
+自 0.1.x 起**不再在 commit 时自动 opkg install**（路由器在线装包容易把
+管理面卡死）。依赖统一由 Makefile 的 `DEPENDS` 或手工 `opkg install` 解决：
 
-硬依赖仅 python3 + python3-readline + ip-full（~6 MB）。
+```
+opkg install python3 python3-readline ip-full
+opkg install smartdns adguardhome frr wireguard-tools openvpn-openssl \
+             strongswan-minimal conserver podman sqm-scripts
+```
+
+`show dependencies` 会逐项检查并给出缺失列表与安装命令。
+完整清单与体积见 [DEPENDENCIES.md](DEPENDENCIES.md)；只想要精简镜像时，
+按需删掉 Makefile `DEPENDS` 里用不到的行即可（代码对缺包是容错的：
+对应 apply 会输出 `... apply failed`，其余配置照常生效）。
 
 ## 目录布局
 
@@ -303,7 +325,7 @@ commit
 
 ```
 set system timezone Asia/Shanghai
-set system ntp server ntp.aliyun.com
+set system ntp ntp.aliyun.com
 commit
 ```
 
@@ -404,8 +426,8 @@ commit
 ### Interface role
 
 ```
-set interfaces ethernet eth0 role wan
-set interfaces ethernet eth1 role lan
+set interfaces lan device eth1
+set interfaces wan device eth0
 commit
 ```
 
@@ -415,7 +437,7 @@ commit
 set interfaces wireless wlan0 mode ap
 set interfaces wireless wlan0 ssid "MyWiFi"
 set interfaces wireless wlan0 security wpa2
-set interfaces wireless wlan0 key "password123"
+set interfaces wireless wlan0 passphrase "password123"
 commit
 ```
 
@@ -713,8 +735,9 @@ set service smartdns forbid-aaaa true
 set service smartdns server aliyun ip 223.5.5.5
 set service smartdns server google ip 8.8.8.8
 
-# 域名列表文件
-set service smartdns domain-rules-file /etc/vyoscli/lists/domains.txt
+# 域名列表 / 分流
+set service smartdns domain-set ads domain ads.example.com
+set service smartdns domain-rule cn domain-set ads forward aliyun
 commit
 ```
 
@@ -1014,8 +1037,12 @@ commit
 ### OpenVPN
 
 ```
-set interfaces openvpn vtun0 mode tun
-set interfaces openvpn vtun0 config-file /etc/vyoscli/openvpn/client.ovpn
+set interfaces openvpn vtun0 mode client
+set interfaces openvpn vtun0 proto udp
+set interfaces openvpn vtun0 dev tun
+set interfaces openvpn vtun0 ca /etc/vyoscli/openvpn/ca.crt
+set interfaces openvpn vtun0 cert /etc/vyoscli/openvpn/client.crt
+set interfaces openvpn vtun0 key /etc/vyoscli/openvpn/client.key
 commit
 ```
 

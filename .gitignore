@@ -1,0 +1,15 @@
+# Python / build artefacts
+__pycache__/
+*.py[cod]
+*.ipk
+*.tar.gz
+
+# Local scratch directories (audit probes, transfer staging)
+.audit/
+.tmp/
+
+# Stray build products from the OpenWrt SDK
+package/*.zip
+
+dist/
+dist-full/

@@ -1,193 +1,138 @@
 # vyoscli — 类 VyOS 的 OpenWrt CLI
 
-> 本项目由 **豆包 (Doubao)** 辅助编写。
+用 Python 实现的 VyOS 风格命令行，以 opkg 包形式安装到 OpenWrt。
+保留 VyOS 的核心交互模型：**操作模式 / 配置模式**分离、
+**candidate → commit → running** 事务、Tab 补全、`commit confirmed` 自动回滚。
 
-一个用 Python 写的、VyOS 风格的命令行接口，作为 OpenWrt 原生 `opkg` 包编译安装。
-保留 VyOS 的核心交互模型：**操作模式 / 配置模式**分离、**候选配置 (candidate) → commit → running** 三段式事务、Tab 补全。
+编译产物是纯 Python 包，不依赖 UCI 之外的任何框架；没有 UCI 对应项时
+才退化为 `ip`/`nft`/`tc` 等原生命令。
 
 ## 目录结构
 
 ```
 package/vyoscli/
-├── Makefile                          # OpenWrt 包定义（opkg）
-└── files/
-    ├── usr/
-    │   ├── bin/vyoscli               # shell 启动器
-    │   └── lib/vyoscli/              # Python 包本体
-    │       ├── __init__.py
-    │       ├── __main__.py           # python -m vyoscli 入口
-    │       ├── cli.py                # REPL、双模式、命令分发
-    │       ├── tree.py               # 命令树节点 + 动态参数节点
-    │       ├── config.py             # running/candidate 双层 JSON 配置库
-    │       └── commands.py           # 内置命令注册
-    └── etc/
-        ├── init.d/vyoscli            # procd 启动脚本
-        └── vyoscli/                  # 运行时生成 running.json / candidate.json
+├── Makefile                      # OpenWrt 包定义（opkg）
+├── files/
+│   ├── usr/bin/vyoscli           # shell 启动器
+│   ├── usr/lib/vyoscli/          # Python 包
+│   │   ├── cli.py                # REPL、双模式、补全、命令分发
+│   │   ├── tree.py               # 命令树、动态节点、路径解析、值校验
+│   │   ├── commands.py           # 命令树定义
+│   │   ├── config.py             # 配置库、事务、UCI/原生下发
+│   │   ├── op_show.py            # show * 实现
+│   │   └── __main__.py           # 入口 + 回滚定时器子进程
+│   └── etc/init.d/vyoscli        # boot 时准备配置目录
+scripts/build-ipk.sh              # SDK 内一键编译（无 sudo / 无 menuconfig）
+tests/                            # unittest 测试（跨平台，无第三方依赖）
+docs/
+├── GUIDE.md                      # 完整配置指南
+├── DEPENDENCIES.md               # 依赖清单与体积
+└── AUDIT.md                      # 代码审查、已知问题、重构路线
 ```
 
-## 编译到 OpenWrt
-
-### 安装编译依赖
+## 编译与安装
 
 ```bash
-sudo apt install -y build-essential clang flex bison g++ gawk \
-  gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev \
-  python3-distutils rsync unzip zlib1g-dev file wget python3-pyelftools \
-  bash bc curl zstd
+# 1. 准备 SDK（版本按目标固件选，纯 Python 包对目标架构不敏感，但 DEPENDS
+#    会按该 SDK 的包清单解析，建议与固件版本一致）
+wget https://downloads.openwrt.org/releases/24.10.0/targets/x86/64/openwrt-sdk-24.10.0-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+tar -I zstd -xvf openwrt-sdk-24.10.0-*.tar.zst
+
+# 2. 一键编译（无需 sudo / menuconfig）
+SDK=~/openwrt-sdk-24.10.0-x86-64_gcc-13.3.0_musl.Linux-x86_64 \
+    ./scripts/build-ipk.sh
 ```
 
-### 下载 SDK
+脚本做三件事：把 `package/vyoscli` 复制进 SDK、在 `.config` 里勾选
+`CONFIG_PACKAGE_vyoscli=y`、`make package/utils/vyoscli/compile`，最后打印 ipk 路径。
+手工编译等价于：
 
 ```bash
-wget https://downloads.openwrt.org/releases/25.12.6/targets/x86/64/openwrt-sdk-25.12.6-x86-64_gcc-14.2.0_musl.Linux-x86_64.tar.zst
-sudo tar -I zstd -xvf openwrt-sdk-25.12.6-x86-64_gcc-14.2.0_musl.Linux-x86_64.tar.zst
-cd openwrt-sdk-25.12.6-x86-64_gcc-14.2.0_musl.Linux-x86_64/
-```
-
-### 放入包源码
-
-```bash
-mkdir -p package/utils
-# 把本项目 package/vyoscli/ 上传到 package/utils/ 下
-```
-
-### 编译
-
-```bash
+cd openwrt-sdk-*/
+mkdir -p package/utils && cp -r /path/to/repo/package/vyoscli package/utils/
 make defconfig
-make menuconfig
-# Utilities  --->  <M> vyoscli
-make package/utils/vyoscli/compile V=s
+sed -i 's/^# CONFIG_PACKAGE_vyoscli is not set/CONFIG_PACKAGE_vyoscli=y/' .config
+make defconfig && make package/utils/vyoscli/compile V=s
+find bin/packages -name 'vyoscli*.ipk'
 ```
 
-### 产出
-
 ```bash
-find bin/ -name 'vyoscli*.ipk'
-```
-
-### 安装到路由器
-
-```bash
-scp bin/packages/x86_64/base/vyoscli_*.ipk root@router:/tmp/
+scp bin/packages/*/base/vyoscli_*.ipk root@router:/tmp/
 ssh root@router 'opkg install /tmp/vyoscli_*.ipk'
 ```
-## 使用
 
-登录路由器后执行：
+### 无 SDK 快速打包（仅用于设备测试）
+
+vyoscli 是 `PKGARCH:=all` 的纯 Python 包，SDK 只负责打包、不编译任何代码。
+临时验证时可以直接生成 ipk：
+
+```bash
+python3 scripts/make-ipk.py --minimal-deps    # -> dist/vyoscli_0.1.0-r1_all.ipk
+python3 scripts/make-ipk.py                   # 带完整 Depends，等同于 Makefile
+```
+
+注意 OpenWrt 的 `.ipk` 不是 Debian 的 ar 格式，而是 **gzip 包裹的 tar**
+（内含 `./debian-binary`、`./control.tar.gz`、`./data.tar.gz`）；脚本按这个格式生成，
+`opkg install` 可直接安装。`--minimal-deps` 只声明 `libc/python3/python3-readline/ip-full`，
+便于在没装齐可选包的路由器上做冒烟测试；正式发布仍建议走 SDK（`scripts/build-ipk.sh`）。
+
+依赖见 [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)。默认依赖较多（约 52 MB），
+小闪存设备请删除 `Makefile` 中 `DEPENDS` 里用不到的行——缺包时对应功能会输出
+`... apply failed`，其余配置不受影响。
+
+## 使用
 
 ```
 root@OpenWrt:~# vyoscli
-Welcome to vyoscli (a VyOS-style CLI for OpenWrt). Type 'exit' to quit.
+Welcome to vyoscli (a VyOS-style CLI for OpenWrt).
 root@OpenWrt:~$ configure
 root@OpenWrt# set system host-name edge-router
 root@OpenWrt# set interfaces ethernet eth0 address 203.0.113.10/24
-root@OpenWrt# set interfaces ethernet eth0 description Uplink
+root@OpenWrt# set service dhcp-server shared-network-name LAN subnet 192.168.50.0/24 default-router 192.168.50.1
 root@OpenWrt# show configuration
+root@OpenWrt# compare
 root@OpenWrt# commit
-Commit complete. Configuration applied to running system.
-root@edge-router# save
-Saved to /etc/vyoscli/running.json
-root@edge-router# exit
-root@edge-router:~$ show interface
 ```
 
-## 命令一览
+远程改 SSH/防火墙等敏感配置时用两段式提交：
 
-| 模式 | 命令 | 作用 |
-|---|---|---|
-| op | `configure` | 进入配置模式 |
-| op | `show version` | 显示系统/版本信息 |
-| op | `show interface` | 接口摘要（来自 running 配置） |
-| op | `show system` | 打印当前 running 配置 |
-| op | `ping <host>` | 调 busybox ping |
-| cfg | `set <path> <value>` | 在 candidate 里写值（list 类型自动追加） |
-| cfg | `delete <path> [value]` | 删除节点或 list 中某一项 |
-| cfg | `edit <path>` / `next <path>` | 进入子节点，提示符带路径 |
-| cfg | `up` | 上一层 |
-| cfg | `show configuration` | 打印 candidate（未提交会标注） |
-| cfg | `commit` | candidate → running，落盘 running.json |
-| cfg | `discard` | 丢弃未提交修改 |
-| cfg | `save` | 持久化 running.json |
-| cfg | `exit` | 退出当前层；在顶层则退回操作模式 |
+```
+root@OpenWrt# commit confirmed 5     # 5 分钟内不确认就自动回滚
+root@edge-router# commit confirm     # 一切正常，取消定时器
+```
+
+命令清单与各配置项示例见 [docs/GUIDE.md](docs/GUIDE.md)。
 
 ## 配置存储
 
-- `/etc/vyoscli/running.json` — 当前运行配置（commit 时写入，开机加载）。
-- `/etc/vyoscli/candidate.json` — 未提交的修改（重启 CLI 后仍保留）。
-- `/etc/vyoscli/history/<timestamp>.json` — 每次 commit 前的快照，保留最近 20 个。
-- `/etc/vyoscli/rollback.conf` — 存在即表示有挂起的 auto-rollback 定时器。
-
-## 两条工程规则
-
-1. **底层下发优先级**：OpenWrt 有 UCI 对应功能的，一律走 `uci` + `reload <service>`（网络、hostname、DNS、防火墙、DHCP……）；没有 UCI 对应功能的，才直接用 Linux 命令（`ip route`、`sysctl`、`nft`……）。
-2. **配置版本化 + 定时回滚**：每次 commit 前打时间戳快照；远程改配置用 `commit confirmed <分钟>`，超时不 confirm 就自动回滚，防止把自己锁在门外。
-
-## commit confirmed（远程运维防自杀）
-
-```
-configure
-set interfaces ethernet eth1 address 192.168.5.1/24
-commit confirmed 5          # 5 分钟内不 confirm 就回滚
-# 假设改完你 SSH 断了，5 分钟后设备自动恢复原配置，你能重新连回来
-# 如果一切正常，重新登录后：
-configure
-commit confirm              # 取消定时器，永久生效
-```
-
-状态机：
-
-```
-candidate 有修改
-   │
-   ├── commit                → 立即生效，无定时器（老行为）
-   ├── commit confirmed [N]  → 生效 + 挂 N 分钟定时器（默认 5）
-   │                              ├── N 内 commit confirm → 定时器取消，永久生效
-   │                              └── N 超时 → 自动 rollback 到 commit 前快照
-   └── rollback [timestamp]  → 手动回滚到指定快照（默认最近一次）
-```
-
-## 新增命令
-
-| 命令 | 作用 |
+| 路径 | 内容 |
 |---|---|
-| `commit` | 立即生效，不挂定时器 |
-| `commit confirmed [minutes]` | 生效并挂自动回滚定时器（默认 5 分钟） |
-| `commit confirm` | 取消挂起的定时器 |
-| `rollback [timestamp]` | 回滚到指定快照；不带时间戳回滚到最近一次 |
-| `show history` | 列出所有快照时间戳 |
+| `/etc/vyoscli/running.json` | 当前生效配置（commit 成功后写入） |
+| `/etc/vyoscli/candidate.json` | 未提交的修改（每条 set/delete 即时落盘） |
+| `/etc/vyoscli/history/<ts>.json` | 每次 commit 前的快照，保留 20 个 |
+| `/etc/vyoscli/rollback.conf` | 存在即表示有挂起的 confirmed-commit 定时器 |
 
-## 已接入 UCI 下发的配置
+配置文件为 `0600`（内含 WireGuard 私钥、PSK、密码等）。
 
-| VyOS 路径 | UCI 落点 | reload |
-|---|---|---|
-| `interfaces ethernet <x> address <ip/pfx>` | `network.<section>.ipaddr` | `/etc/init.d/network reload` |
-| `system host-name <name>` | `system.@system[0].hostname` | `uci apply` |
-| `system name-server <ip>` | `dhcp.@dnsmasq[0].server` | (下次 dnsmasq 重启生效) |
+## 测试
 
-未接入 UCI 的（仅存 JSON，留待扩展）：`interfaces ethernet <x> description`。
-
-
-
-## 扩展新命令
-
-在 `commands.py` 的 `build_tree()` 里加一行即可，例如加 NTP：
-
-```python
-sys_named.add(Node(name="ntp", help="NTP server",
-                   value_type="ipv4", action=_cfg_noop))
+```bash
+python3 -m unittest discover -s tests -v
 ```
 
-然后在 `config.py` 的 `DEFAULT_RUNNING` 里加上对应字段。真正下发到 netifd/UCI 的逻辑目前留了 `TODO` 钩子（`config.py:commit()`），按你的硬件环境补就行。
+- `tests/test_cli.py`：候选配置、渲染回放、commit/discard/rollback、补全
+- `tests/test_paths.py`：文档命令与命令树的可达性矩阵
+- `tests/test_apply.py`：mock `uci`/`init.d`，断言 commit 生成的确切命令
 
-## 本地开发（Windows/macOS/Linux）
+测试不需要路由器，Linux/macOS/Windows 均可运行。
 
-不依赖 OpenWrt 也能跑：
+## 已知限制
 
-```powershell
-$env:PYTHONPATH = "C:\Users\taylorg\Documents\OpenWrt\package\vyoscli\files\usr\lib"
-$env:VYOSCLI_ETC = "$env:TEMP\vyoscli-etc"
-python -m vyoscli
-```
+`docs/AUDIT.md` 记录了完整清单。最需要注意的几点：
 
-冒烟脚本：`python smoke_test.py` / `python smoke_test2.py`。
+- 部分配置项（`description`/`mtu`/`mac`/`vif`/`vrf` 等）目前只写入 JSON，尚未下发；
+- BGP/IPsec/WireGuard/wireless/conserver 的 UCI 下发尚未在真机验证；
+- JSON 与 UCI 是两份状态，没有开机对账，手工改 UCI 后 `show configuration` 会与设备不一致；
+- commit 不是原子操作：某一段下发失败时其余段仍会执行，并返回成功。
+
+后续规划见 [docs/AUDIT.md](docs/AUDIT.md) 的"建议的演进方案"。
