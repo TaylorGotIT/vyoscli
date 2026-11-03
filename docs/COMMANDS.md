@@ -23,6 +23,83 @@
 |---|---|---|
 | `firewall forwarding <name> dest` | Destination zone | `firewall forwarding <name> dest text` |
 | `firewall forwarding <name> src` | Source zone | `firewall forwarding <name> src text` |
+| `firewall global-options all-ping` | Respond to ICMP echo (ping) | `firewall global-options all-ping true` |
+| `firewall global-options broadcast-ping` | Allow broadcast ping | `firewall global-options broadcast-ping true` |
+| `firewall global-options log-martians` | Log packets with impossible addresses | `firewall global-options log-martians true` |
+| `firewall global-options state-policy established` | ACCEPT/DROP | `firewall global-options state-policy established ACCEPT` |
+| `firewall global-options state-policy invalid` | ACCEPT/DROP | `firewall global-options state-policy invalid ACCEPT` |
+| `firewall global-options state-policy related` | ACCEPT/DROP | `firewall global-options state-policy related ACCEPT` |
+| `firewall global-options syn-cookies` | Enable SYN cookies | `firewall global-options syn-cookies true` |
+| `firewall group address-group <name> address` | Address or prefix | `firewall group address-group <name> address 192.0.2.1/24` |
+| `firewall group interface-group <name> interface` | Interface name | `firewall group interface-group <name> interface text` |
+| `firewall group ipv6-address-group <name> address` | Address or prefix | `firewall group ipv6-address-group <name> address <value>` |
+| `firewall group port-group <name> port` | Port | `firewall group port-group <name> port 8080` |
+| `firewall ipv4 forward filter rule <id> action` | accept \| drop \| reject | `firewall ipv4 forward filter rule <id> action text` |
+| `firewall ipv4 forward filter rule <id> destination address` | Destination prefix | `firewall ipv4 forward filter rule <id> destination address 192.0.2.1/24` |
+| `firewall ipv4 forward filter rule <id> destination port` | Destination port | `firewall ipv4 forward filter rule <id> destination port 8080` |
+| `firewall ipv4 forward filter rule <id> destination port-group` | Port group name | `firewall ipv4 forward filter rule <id> destination port-group text` |
+| `firewall ipv4 forward filter rule <id> disable` | Disable this rule | `firewall ipv4 forward filter rule <id> disable true` |
+| `firewall ipv4 forward filter rule <id> inbound-interface` | Inbound interface name | `firewall ipv4 forward filter rule <id> inbound-interface text` |
+| `firewall ipv4 forward filter rule <id> log` | Log matching packets | `firewall ipv4 forward filter rule <id> log true` |
+| `firewall ipv4 forward filter rule <id> protocol` | tcp \| udp \| icmp \| any | `firewall ipv4 forward filter rule <id> protocol text` |
+| `firewall ipv4 forward filter rule <id> source address` | Source prefix | `firewall ipv4 forward filter rule <id> source address 192.0.2.1/24` |
+| `firewall ipv4 forward filter rule <id> source address-group` | Address group name | `firewall ipv4 forward filter rule <id> source address-group text` |
+| `firewall ipv4 forward filter rule <id> state` | new \| established \| related \| invalid | `firewall ipv4 forward filter rule <id> state text` |
+| `firewall ipv4 input filter rule <id> action` | accept \| drop \| reject | `firewall ipv4 input filter rule <id> action text` |
+| `firewall ipv4 input filter rule <id> destination address` | Destination prefix | `firewall ipv4 input filter rule <id> destination address 192.0.2.1/24` |
+| `firewall ipv4 input filter rule <id> destination port` | Destination port | `firewall ipv4 input filter rule <id> destination port 8080` |
+| `firewall ipv4 input filter rule <id> destination port-group` | Port group name | `firewall ipv4 input filter rule <id> destination port-group text` |
+| `firewall ipv4 input filter rule <id> disable` | Disable this rule | `firewall ipv4 input filter rule <id> disable true` |
+| `firewall ipv4 input filter rule <id> inbound-interface` | Inbound interface name | `firewall ipv4 input filter rule <id> inbound-interface text` |
+| `firewall ipv4 input filter rule <id> log` | Log matching packets | `firewall ipv4 input filter rule <id> log true` |
+| `firewall ipv4 input filter rule <id> protocol` | tcp \| udp \| icmp \| any | `firewall ipv4 input filter rule <id> protocol text` |
+| `firewall ipv4 input filter rule <id> source address` | Source prefix | `firewall ipv4 input filter rule <id> source address 192.0.2.1/24` |
+| `firewall ipv4 input filter rule <id> source address-group` | Address group name | `firewall ipv4 input filter rule <id> source address-group text` |
+| `firewall ipv4 input filter rule <id> state` | new \| established \| related \| invalid | `firewall ipv4 input filter rule <id> state text` |
+| `firewall ipv4 output filter rule <id> action` | accept \| drop \| reject | `firewall ipv4 output filter rule <id> action text` |
+| `firewall ipv4 output filter rule <id> destination address` | Destination prefix | `firewall ipv4 output filter rule <id> destination address 192.0.2.1/24` |
+| `firewall ipv4 output filter rule <id> destination port` | Destination port | `firewall ipv4 output filter rule <id> destination port 8080` |
+| `firewall ipv4 output filter rule <id> destination port-group` | Port group name | `firewall ipv4 output filter rule <id> destination port-group text` |
+| `firewall ipv4 output filter rule <id> disable` | Disable this rule | `firewall ipv4 output filter rule <id> disable true` |
+| `firewall ipv4 output filter rule <id> inbound-interface` | Inbound interface name | `firewall ipv4 output filter rule <id> inbound-interface text` |
+| `firewall ipv4 output filter rule <id> log` | Log matching packets | `firewall ipv4 output filter rule <id> log true` |
+| `firewall ipv4 output filter rule <id> protocol` | tcp \| udp \| icmp \| any | `firewall ipv4 output filter rule <id> protocol text` |
+| `firewall ipv4 output filter rule <id> source address` | Source prefix | `firewall ipv4 output filter rule <id> source address 192.0.2.1/24` |
+| `firewall ipv4 output filter rule <id> source address-group` | Address group name | `firewall ipv4 output filter rule <id> source address-group text` |
+| `firewall ipv4 output filter rule <id> state` | new \| established \| related \| invalid | `firewall ipv4 output filter rule <id> state text` |
+| `firewall ipv6 forward filter rule <id> action` | accept \| drop \| reject | `firewall ipv6 forward filter rule <id> action text` |
+| `firewall ipv6 forward filter rule <id> destination address` | Destination prefix | `firewall ipv6 forward filter rule <id> destination address <value>` |
+| `firewall ipv6 forward filter rule <id> destination port` | Destination port | `firewall ipv6 forward filter rule <id> destination port 8080` |
+| `firewall ipv6 forward filter rule <id> destination port-group` | Port group name | `firewall ipv6 forward filter rule <id> destination port-group text` |
+| `firewall ipv6 forward filter rule <id> disable` | Disable this rule | `firewall ipv6 forward filter rule <id> disable true` |
+| `firewall ipv6 forward filter rule <id> inbound-interface` | Inbound interface name | `firewall ipv6 forward filter rule <id> inbound-interface text` |
+| `firewall ipv6 forward filter rule <id> log` | Log matching packets | `firewall ipv6 forward filter rule <id> log true` |
+| `firewall ipv6 forward filter rule <id> protocol` | tcp \| udp \| icmp \| any | `firewall ipv6 forward filter rule <id> protocol text` |
+| `firewall ipv6 forward filter rule <id> source address` | Source prefix | `firewall ipv6 forward filter rule <id> source address <value>` |
+| `firewall ipv6 forward filter rule <id> source address-group` | Address group name | `firewall ipv6 forward filter rule <id> source address-group text` |
+| `firewall ipv6 forward filter rule <id> state` | new \| established \| related \| invalid | `firewall ipv6 forward filter rule <id> state text` |
+| `firewall ipv6 input filter rule <id> action` | accept \| drop \| reject | `firewall ipv6 input filter rule <id> action text` |
+| `firewall ipv6 input filter rule <id> destination address` | Destination prefix | `firewall ipv6 input filter rule <id> destination address <value>` |
+| `firewall ipv6 input filter rule <id> destination port` | Destination port | `firewall ipv6 input filter rule <id> destination port 8080` |
+| `firewall ipv6 input filter rule <id> destination port-group` | Port group name | `firewall ipv6 input filter rule <id> destination port-group text` |
+| `firewall ipv6 input filter rule <id> disable` | Disable this rule | `firewall ipv6 input filter rule <id> disable true` |
+| `firewall ipv6 input filter rule <id> inbound-interface` | Inbound interface name | `firewall ipv6 input filter rule <id> inbound-interface text` |
+| `firewall ipv6 input filter rule <id> log` | Log matching packets | `firewall ipv6 input filter rule <id> log true` |
+| `firewall ipv6 input filter rule <id> protocol` | tcp \| udp \| icmp \| any | `firewall ipv6 input filter rule <id> protocol text` |
+| `firewall ipv6 input filter rule <id> source address` | Source prefix | `firewall ipv6 input filter rule <id> source address <value>` |
+| `firewall ipv6 input filter rule <id> source address-group` | Address group name | `firewall ipv6 input filter rule <id> source address-group text` |
+| `firewall ipv6 input filter rule <id> state` | new \| established \| related \| invalid | `firewall ipv6 input filter rule <id> state text` |
+| `firewall ipv6 output filter rule <id> action` | accept \| drop \| reject | `firewall ipv6 output filter rule <id> action text` |
+| `firewall ipv6 output filter rule <id> destination address` | Destination prefix | `firewall ipv6 output filter rule <id> destination address <value>` |
+| `firewall ipv6 output filter rule <id> destination port` | Destination port | `firewall ipv6 output filter rule <id> destination port 8080` |
+| `firewall ipv6 output filter rule <id> destination port-group` | Port group name | `firewall ipv6 output filter rule <id> destination port-group text` |
+| `firewall ipv6 output filter rule <id> disable` | Disable this rule | `firewall ipv6 output filter rule <id> disable true` |
+| `firewall ipv6 output filter rule <id> inbound-interface` | Inbound interface name | `firewall ipv6 output filter rule <id> inbound-interface text` |
+| `firewall ipv6 output filter rule <id> log` | Log matching packets | `firewall ipv6 output filter rule <id> log true` |
+| `firewall ipv6 output filter rule <id> protocol` | tcp \| udp \| icmp \| any | `firewall ipv6 output filter rule <id> protocol text` |
+| `firewall ipv6 output filter rule <id> source address` | Source prefix | `firewall ipv6 output filter rule <id> source address <value>` |
+| `firewall ipv6 output filter rule <id> source address-group` | Address group name | `firewall ipv6 output filter rule <id> source address-group text` |
+| `firewall ipv6 output filter rule <id> state` | new \| established \| related \| invalid | `firewall ipv6 output filter rule <id> state text` |
 | `firewall rule <id> dest-port` | Destination port | `firewall rule <id> dest-port 8080` |
 | `firewall rule <id> name` | Rule name | `firewall rule <id> name text` |
 | `firewall rule <id> src` | Source zone (default *) | `firewall rule <id> src text` |

@@ -15,7 +15,7 @@
 | 顶层 | VyOS 1.5 内容 | vyoscli 现状 | 结论 |
 |---|---|---|---|
 | `interfaces` | 19 种接口 | 11 种（ethernet/bridge/wireguard/openvpn/tunnel/loopback/dummy/vxlan/wireless/lan/wan） | 🟡 缺 bonding、pppoe、macsec、geneve、vti、wwan 等 |
-| `firewall` | ipv4/ipv6/bridge/zone/group/global-options/flowtable | 只有 zone/forwarding/rule（14 节点） | ❌ 与 1.5 模型差距最大 |
+| `firewall` | ipv4/ipv6/bridge/zone/group/global-options/flowtable | ipv4/ipv6 input/forward/output filter rule + group（nft 表 `vyos_fw`）；zone/forwarding/rule 保留 | 🟡 方向规则与 group 已可用，缺 named rule-set/flowtable/bridge，global-options 仅存 JSON |
 | `nat` | nat44 全量、nat64、nat66、cgnat | source/destination 各一条极简规则 | 🟡 只够做 masquerade 和简单端口转发 |
 | `policy` | access-list/prefix-list/route/route-map/as-path/community/… | community-list、route-redirect | ❌ 缺大部分 |
 | `protocols` | 静态、BGP、OSPF、ISIS、RIP、BFD、MPLS、SR、PIM… | static、bgp 子集、route-map 子集 | 🟡 能跑简单 BGP/静态路由 |
@@ -31,7 +31,7 @@
 
 ## 分项差距
 
-### 1. firewall：建议优先补齐
+### 1. firewall：方向规则与 group 已落地（P0 进行中）
 
 VyOS 1.5 的防火墙是 **ipv4/ipv6 + 命名规则集 + group + zone** 的组合：
 

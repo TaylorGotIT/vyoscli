@@ -23,6 +23,8 @@ VALUE_TYPES = {
     "ipv4": "a.b.c.d",
     "ipv4net": "a.b.c.d/prefix",
     "ipv4_cidr": "a.b.c.d/prefix",
+    "ipv6": "2001:db8::1",
+    "ipv6net": "2001:db8::/64",
     "port": "1-65535",
     "integer": "<0-2^31>",
     "int": "<0-2^31>",
@@ -30,8 +32,8 @@ VALUE_TYPES = {
     "bool": "{true|false}",
 }
 
-_SCALAR_TYPES = {"ipv4", "ipv4net", "ipv4_cidr", "port", "integer", "int",
-                 "boolean", "bool", "host"}
+_SCALAR_TYPES = {"ipv4", "ipv4net", "ipv4_cidr", "ipv6", "ipv6net",
+                 "port", "integer", "int", "boolean", "bool", "host"}
 
 
 def validate_value(value_type: Optional[str], value: str) -> Optional[str]:
@@ -53,6 +55,16 @@ def validate_value(value_type: Optional[str], value: str) -> Optional[str]:
             ipaddress.IPv4Network(value, strict=False)
         except ValueError:
             return "not a valid IPv4 prefix (a.b.c.d/nn)"
+    elif vt == "ipv6":
+        try:
+            ipaddress.IPv6Address(value)
+        except ValueError:
+            return "not a valid IPv6 address"
+    elif vt == "ipv6net":
+        try:
+            ipaddress.IPv6Network(value, strict=False)
+        except ValueError:
+            return "not a valid IPv6 prefix (2001:db8::/64)"
     elif vt == "port":
         if not re.fullmatch(r"\d+", value):
             return "not a port number"

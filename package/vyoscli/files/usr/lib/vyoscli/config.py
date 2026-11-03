@@ -176,6 +176,86 @@ def _as_list(value: Any) -> List[Any]:
     return [value]
 
 
+def _fw_slug(name: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_]", "_", str(name))
+
+
+def render_firewall_nft(fw: Dict[str, Any]) -> str:
+    """Render the VyOS-style firewall tree into an nftables ruleset.
+
+    Rules live in a dedicated ``inet vyos_fw`` table at priority -10, i.e. they
+    run before OpenWrt's fw4 chains: they can drop/reject traffic early, while
+    ``accept`` simply lets the packet continue to fw4 (and its zone policy).
+    """
+    lines = ["table inet vyos_fw {"]
+    groups = fw.get("group") or {}
+
+    def group_set(kind: str, set_type: str, prefix: str, field: str) -> None:
+        for name, cfg in (groups.get(kind) or {}).items():
+            values = _as_list((cfg or {}).get(field))
+            if not values:
+                continue
+            elements = ", ".join(str(v) for v in values)
+            lines.append(f"  set {prefix}_{_fw_slug(name)} {{ type {set_type}; "
+                         f"elements = {{ {elements} }} }}")
+
+    group_set("address-group", "ipv4_addr", "addr4", "address")
+    group_set("ipv6-address-group", "ipv6_addr", "addr6", "address")
+    group_set("port-group", "inet_service", "port", "port")
+    group_set("interface-group", "ifname", "if", "interface")
+
+    verdicts = {"accept": "accept", "drop": "drop", "reject": "reject"}
+    chains: Dict[str, List[str]] = {"input": [], "forward": [], "output": []}
+    for family in ("ipv4", "ipv6"):
+        fam = fw.get(family) or {}
+        nfproto = "ipv4" if family == "ipv4" else "ipv6"
+        saddr = "ip saddr" if family == "ipv4" else "ip6 saddr"
+        daddr = "ip daddr" if family == "ipv4" else "ip6 daddr"
+        addr_prefix = "addr4" if family == "ipv4" else "addr6"
+        for direction in ("input", "forward", "output"):
+            rules = (((fam.get(direction) or {}).get("filter") or {})
+                     .get("rule") or {})
+            for num in sorted(rules, key=lambda n: int(n) if str(n).isdigit() else 0):
+                rule = rules[num] or {}
+                if not isinstance(rule, dict) or rule.get("disable"):
+                    continue
+                parts = [f"meta nfproto {nfproto}"]
+                src = rule.get("source") or {}
+                dst = rule.get("destination") or {}
+                if src.get("address"):
+                    parts.append(f"{saddr} {src['address']}")
+                elif src.get("address-group"):
+                    parts.append(f"{saddr} @{addr_prefix}_{_fw_slug(src['address-group'])}")
+                if dst.get("address"):
+                    parts.append(f"{daddr} {dst['address']}")
+                proto = str(rule.get("protocol") or "").lower()
+                port = dst.get("port")
+                if port:
+                    l4 = proto if proto in ("tcp", "udp") else "tcp"
+                    parts.append(f"{l4} dport {port}")
+                elif dst.get("port-group"):
+                    l4 = proto if proto in ("tcp", "udp") else "tcp"
+                    parts.append(f"{l4} dport @port_{_fw_slug(dst['port-group'])}")
+                if rule.get("state"):
+                    parts.append(f"ct state {rule['state']}")
+                if direction in ("input", "forward") and rule.get("inbound-interface"):
+                    parts.append(f'iifname "{rule["inbound-interface"]}"')
+                if rule.get("log"):
+                    parts.append(f'log prefix "vyos-{family}-{direction}-{num} "')
+                parts.append(verdicts.get(str(rule.get("action", "accept")).lower(),
+                                           "accept"))
+                chains[direction].append("    " + " ".join(parts))
+
+    for direction, body in chains.items():
+        lines.append(f"  chain {direction} {{ type filter hook {direction} "
+                     "priority -10; policy accept;")
+        lines.extend(body)
+        lines.append("  }")
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+
 class ConfigStore:
     def __init__(self, base_dir: str = "/etc/vyoscli") -> None:
         self.base_dir = base_dir
@@ -458,6 +538,7 @@ class ConfigStore:
             ("bgp", self._apply_bgp),
             ("policy", self._apply_policy),
             ("firewall", self._apply_firewall),
+            ("firewall15", self._apply_firewall15),
             ("nat", self._apply_nat),
             ("wireguard", self._apply_wireguard),
             ("openvpn", self._apply_openvpn),
@@ -987,6 +1068,39 @@ class ConfigStore:
         except Exception as e:  # noqa: BLE001
             notes.append(f"firewall apply failed: {e}")
         return notes
+
+    def _apply_firewall15(self, old, new):
+        """VyOS-1.5-style firewall (ipv4/ipv6 direction rules) -> nftables."""
+        old_fw = old.get("firewall") or {}
+        new_fw = new.get("firewall") or {}
+        keys = ("ipv4", "ipv6", "group", "global-options")
+        if all(old_fw.get(k) == new_fw.get(k) for k in keys):
+            return []
+        path = os.path.join(self.base_dir, "firewall.nft")
+        if not any(new_fw.get(k) for k in keys):
+            try:
+                subprocess.run(["nft", "delete", "table", "inet", "vyos_fw"],
+                               capture_output=True, text=True, timeout=10)
+            except (OSError, subprocess.SubprocessError):
+                pass
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            return ["firewall: VyOS-style rules removed"]
+        text = render_firewall_nft(new_fw)
+        os.makedirs(self.base_dir, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        try:
+            proc = subprocess.run(["nft", "-f", path], capture_output=True,
+                                  text=True, timeout=15)
+        except (OSError, subprocess.SubprocessError) as e:
+            return [f"firewall: nft unavailable ({e}); rules kept in {path}"]
+        if proc.returncode != 0:
+            return [f"firewall apply failed: {(proc.stderr or '').strip()[:200]}"]
+        count = text.count("meta nfproto")
+        return [f"firewall: applied {count} VyOS-style rule(s) via nft"]
 
     def _apply_nat(self, old, new):
         old_n = old.get("nat") or {}

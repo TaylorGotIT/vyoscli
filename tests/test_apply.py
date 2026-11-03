@@ -343,6 +343,34 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn(["uci", "delete", "wireless.vyos_wlan0"],
                       self.fake.uci_calls())
 
+    def test_vyos_firewall_rules_render_to_nft(self):
+        cfg(self.cli,
+            "set firewall group address-group BLOCKED address 203.0.113.0/24",
+            "set firewall ipv4 input filter rule 10 protocol tcp",
+            "set firewall ipv4 input filter rule 10 destination port 22",
+            "set firewall ipv4 input filter rule 10 action drop",
+            "set firewall ipv4 input filter rule 10 log true")
+        self.commit()
+        path = os.path.join(self.cli.store.base_dir, "firewall.nft")
+        text = open(path, encoding="utf-8").read()
+        self.assertIn("table inet vyos_fw", text)
+        self.assertIn("set addr4_BLOCKED", text)
+        self.assertIn("meta nfproto ipv4", text)
+        self.assertIn("tcp dport 22", text)
+        self.assertIn("log prefix", text)
+        self.assertIn("drop", text)
+        self.assertIn(["nft", "-f", path], self.fake.calls)
+
+    def test_removing_vyos_firewall_deletes_table(self):
+        cfg(self.cli, "set firewall ipv4 input filter rule 10 action drop")
+        self.commit()
+        cfg(self.cli, "delete firewall ipv4")
+        self.commit()
+        self.assertIn(["nft", "delete", "table", "inet", "vyos_fw"],
+                      self.fake.calls)
+        self.assertFalse(os.path.exists(
+            os.path.join(self.cli.store.base_dir, "firewall.nft")))
+
     def test_full_sync_skips_containers(self):
         cfg(self.cli, "set system host-name sync-test")
         self.commit()

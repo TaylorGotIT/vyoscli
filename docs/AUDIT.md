@@ -42,7 +42,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 变更 | 说明 |
 |---|---|
 | `GUIDE.md` → `docs/GUIDE.md`，`REQUIRED_PACKAGES.md` → `docs/DEPENDENCIES.md` | 文档集中到 `docs/` |
-| 新增 `tests/`（5 个文件、78 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
+| 新增 `tests/`（5 个文件、80 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
 | 新增 `.gitignore` | 忽略 `__pycache__`、`*.ipk`、`.audit/` 等 |
 | `git rm --cached package/vyoscli.zip` | 陈旧构建产物，已从仓库移除 |
 | `Makefile` 安装改用 `$(wildcard .../*.py)` | 以后加模块不用再改 Makefile |
@@ -103,6 +103,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 49 | 命令清单靠手写，和 353 节点配置树容易漂移 | 新增 `scripts/gen-command-reference.py`，从 `config_tree.py` 生成 `docs/COMMANDS.md`（223 条命令，每条含说明与可运行示例）；README 增加操作模式/配置模式/配置树速览与示例，并加测试校验参考文档与叶子数量一致 | `scripts/gen-command-reference.py` / `docs/COMMANDS.md` / `README.md` |
 | 50 | 缺少自动化：单测/文档一致性/打包都靠手工 | 新增 `.github/workflows/ci.yml`（单测 + `check-generated.sh` 校验 `docs/COMMANDS.md` + 无 SDK 打包）与本地脚本 `scripts/check-generated.sh`；README 增加 CI 说明 | `.github/workflows/ci.yml` / `scripts/check-generated.sh` |
 | 51 | 与 VyOS 1.5 的功能差距没有量化 | 新增 `docs/VYOS-GAP.md`：按 14 个顶层章节对比（接口/防火墙/NAT/策略/协议/服务/系统/VPN/HA/LB/PKI/QoS/容器/VRF），标注 ✅/🟡/❌，给出 P0–P2 路线与 OpenWrt 可行性（keepalived/haproxy/FRR/strongSwan 等包），并指出 `config_tree.py` 已成为事实源的技术债 | `docs/VYOS-GAP.md` |
+| 52 | firewall 只有 zone 模型，缺少 VyOS 1.5 的方向化规则 | 新增 `firewall ipv4/ipv6 input/forward/output filter rule <n>`（action/protocol/state/inbound-interface/source/destination/port/address-group/port-group/log/disable）与 `firewall group`，渲染到独立 nft 表 `vyos_fw`（priority -10，先于 fw4，accept 继续走 fw4）；真机验证 drop 9999 规则生效、删除后表消失 | `config_tree.py` / `config.py:_apply_firewall15` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示
