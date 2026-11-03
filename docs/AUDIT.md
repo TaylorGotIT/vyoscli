@@ -42,7 +42,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 变更 | 说明 |
 |---|---|
 | `GUIDE.md` → `docs/GUIDE.md`，`REQUIRED_PACKAGES.md` → `docs/DEPENDENCIES.md` | 文档集中到 `docs/` |
-| 新增 `tests/`（5 个文件、95 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
+| 新增 `tests/`（5 个文件、96 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
 | 新增 `.gitignore` | 忽略 `__pycache__`、`*.ipk`、`.audit/` 等 |
 | `git rm --cached package/vyoscli.zip` | 陈旧构建产物，已从仓库移除 |
 | `Makefile` 安装改用 `$(wildcard .../*.py)` | 以后加模块不用再改 Makefile |
@@ -114,6 +114,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 60 | 缺 IPv6 RA 配置 | 新增 `service router-advert interface`（prefix/managed-flag/default-lifetime/no-send-advert）；映射到 UCI `dhcp.<if>` 的 ra/dhcpv6/ra_management/ra_lifetime 并重启 odhcpd；应用前备份原值、删除时还原。真机验证 lan 上 RA 生效、删除后 ra=server 恢复且 drift 清零 | `config_tree.py` / `config.py:_apply_router_advert` |
 | 61 | 没有 API 管理面 | 新增 `service https`（port/listen-address/api-key）与 `vyoscli.api` 只读 HTTP API（/api/version、/api/configuration、/api/show?path=），Bearer 鉴权、进程 pidfile 管理；真机验证 200/401、/api/show 取值、删除后端口关闭。**TLS 未实现**（等 PKI）；另 `dhcp-relay` 仅有 isc 二进制且 67 端口与 dnsmasq 冲突，暂不做 | `api.py` / `config.py:_apply_https` |
 | 62 | 缺 VRRP/高可用 | 新增 `high-availability vrrp`（group：interface/vrid/address/priority/preempt/hello-source/peer-address/track；sync-group；global-parameters startup-delay），生成 `/etc/config/keepalived` 的 vrrp_instance/ipaddress/peer/vrrp_sync_group；同时给命令树加 repeatable 叶子支持（address 列表）。真机验证 VIP 192.0.2.250/24 在 br-lan 上进入 MASTER、删除后 VIP 移除 | `config_tree.py` / `config.py:_apply_vrrp` / `cli.py` / `schema.py` |
+| 63 | 没有证书/私钥存储，TLS/VPN 无凭据可用 | 新增 `pki`（ca/certificate/key-pair/dh），证书/私钥写入 JSON 并落盘到 `/etc/vyoscli/pki/<kind>/<name>.{crt,key,pub,pem}`，私钥 0600，删除配置时清理文件；真机验证文件生成/权限/删除。ACME 与 `generate pki` 未做，API 的 TLS 待有证书生成能力后再接 | `config_tree.py` / `config.py:_apply_pki` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示

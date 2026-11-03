@@ -656,6 +656,7 @@ class ConfigStore:
             ("interfaces", self._apply_interfaces),
             ("pppoe", self._apply_pppoe),
             ("vrrp", self._apply_vrrp),
+            ("pki", self._apply_pki),
             ("wireless", self._apply_wireless),
             ("interface-roles", self._apply_interface_roles),
             ("vrf", self._apply_vrf),
@@ -824,6 +825,84 @@ class ConfigStore:
             except subprocess.CalledProcessError:
                 pass
             notes.append(f"{ifname}: removed network.{ours}")
+
+    def _apply_pki(self, old, new):
+        old_p = old.get("pki") or {}
+        new_p = new.get("pki") or {}
+        if old_p == new_p:
+            return []
+        base = os.path.join(self.base_dir, "pki")
+        os.makedirs(base, exist_ok=True)
+        notes: List[str] = []
+        written = 0
+
+        def write_file(path: str, content, mode: int) -> None:
+            nonlocal written
+            if not content:
+                return
+            text = str(content)
+            if not text.endswith("\n"):
+                text += "\n"
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+            os.chmod(path, mode)
+            written += 1
+
+        def kind_dir(kind: str) -> str:
+            path = os.path.join(base, kind)
+            os.makedirs(path, exist_ok=True)
+            return path
+
+        for name, cfg in (new_p.get("ca") or {}).items():
+            if not isinstance(cfg, dict):
+                continue
+            d = kind_dir("ca")
+            write_file(os.path.join(d, f"{name}.crt"), cfg.get("certificate"),
+                       0o644)
+            write_file(os.path.join(d, f"{name}.crl"), cfg.get("crl"), 0o644)
+            write_file(os.path.join(d, f"{name}.key"),
+                       (cfg.get("private") or {}).get("key"), 0o600)
+        for name, cfg in (new_p.get("certificate") or {}).items():
+            if not isinstance(cfg, dict):
+                continue
+            d = kind_dir("certificate")
+            write_file(os.path.join(d, f"{name}.crt"), cfg.get("certificate"),
+                       0o644)
+            write_file(os.path.join(d, f"{name}.key"),
+                       (cfg.get("private") or {}).get("key"), 0o600)
+        for name, cfg in (new_p.get("key-pair") or {}).items():
+            if not isinstance(cfg, dict):
+                continue
+            d = kind_dir("key-pair")
+            write_file(os.path.join(d, f"{name}.key"),
+                       (cfg.get("private") or {}).get("key"), 0o600)
+            write_file(os.path.join(d, f"{name}.pub"),
+                       (cfg.get("public") or {}).get("key"), 0o644)
+        for name in (new_p.get("dh") or {}):
+            write_file(os.path.join(kind_dir("dh"), f"{name}.pem"),
+                       "# placeholder: upload DH parameters via certificate",
+                       0o600)
+        # Remove files whose names disappeared.
+        for kind, exts in (("ca", (".crt", ".crl", ".key")),
+                           ("certificate", (".crt", ".key")),
+                           ("key-pair", (".key", ".pub")),
+                           ("dh", (".pem",))):
+            current = set((new_p.get(kind) or {}))
+            directory = os.path.join(base, kind)
+            try:
+                entries = os.listdir(directory)
+            except OSError:
+                continue
+            for entry in entries:
+                stem, dot, ext = entry.partition(".")
+                if dot and f".{ext}" in exts and stem not in current:
+                    try:
+                        os.remove(os.path.join(directory, entry))
+                    except OSError:
+                        pass
+        if written:
+            notes.append(f"pki: wrote {written} file(s) under {base}")
+        return notes
 
     def _apply_vrrp(self, old, new):
         old_ha = old.get("high-availability") or {}

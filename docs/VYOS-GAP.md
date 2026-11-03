@@ -24,7 +24,7 @@
 | `vpn` | IPsec、L2TP、SSTP、OpenConnect、PPTP、DMVPN | IPsec 子集 | 🟡 缺大部分 |
 | `high-availability` | VRRP、sync-group、virtual-server | VRRP group（interface/vrid/address/priority/preempt/unicast）+ sync-group | 🟡 VRRP 已可用，virtual-server 未做 |
 | `load-balancing` | WAN 负载均衡、HAProxy | 无 | ❌ 完全缺失 |
-| `pki` | CA/证书/DH/ACME、generate/import | 无 | ❌ 完全缺失 |
+| `pki` | CA/证书/DH/ACME、generate/import | ca/certificate/key-pair/dh 存储到 `/etc/vyoscli/pki` | 🟡 存储已可用，缺 ACME 与 generate/import 操作命令 |
 | `traffic-policy` | 11 种 qdisc + 接口 ingress/egress | 只有 `traffic-policy shaper`（5 节点） | 🟡 名称和结构都与 VyOS 的 `qos` 不同 |
 | `container` | name/network/registry/health-check 等 | 9 节点极简 | 🟡 OpenWrt 默认无 podman，优先级低 |
 | `vrf` | name + table + 接口绑定 | name + table | ✅ 基本够用 |

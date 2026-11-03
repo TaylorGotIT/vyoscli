@@ -243,6 +243,20 @@
 | `nat source rule <id> translation address` | masquerade or an IPv4 address | `nat source rule <id> translation address text` |
 | `nat source rule <id> translation port` | Translated source port | `nat source rule <id> translation port 8080` |
 
+## set pki
+
+| 命令 | 说明 | 示例 |
+|---|---|---|
+| `pki ca <name> certificate` | CA certificate (PEM, single line) | `pki ca <name> certificate text` |
+| `pki ca <name> crl` | Certificate revocation list (PEM) | `pki ca <name> crl text` |
+| `pki ca <name> description` | Description | `pki ca <name> description text` |
+| `pki ca <name> private key` | CA private key (PEM, single line) | `pki ca <name> private key text` |
+| `pki certificate <name> certificate` | Certificate (PEM, single line) | `pki certificate <name> certificate text` |
+| `pki certificate <name> description` | Description | `pki certificate <name> description text` |
+| `pki certificate <name> private key` | Private key (PEM, single line) | `pki certificate <name> private key text` |
+| `pki key-pair <name> private key` | Private key (PEM, single line) | `pki key-pair <name> private key text` |
+| `pki key-pair <name> public key` | Public key (PEM, single line) | `pki key-pair <name> public key text` |
+
 ## set policy
 
 | 命令 | 说明 | 示例 |

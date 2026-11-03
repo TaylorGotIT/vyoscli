@@ -410,6 +410,31 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn("match ip address prefix-list PL", text)
         self.assertIn("set local-preference 200", text)
 
+    def test_pki_writes_and_removes_files(self):
+        cert = ("-----BEGIN CERTIFICATE-----"
+                "MIIBdemo-----END CERTIFICATE-----")
+        key = ("-----BEGIN PRIVATE KEY-----"
+               "demo-----END PRIVATE KEY-----")
+        cfg(self.cli,
+            f"set pki certificate srv certificate {cert}",
+            f"set pki certificate srv private key {key}",
+            f"set pki ca root certificate {cert}",
+            "set pki dh main")
+        self.commit()
+        base = os.path.join(self.cli.store.base_dir, "pki")
+        self.assertTrue(os.path.exists(
+            os.path.join(base, "certificate", "srv.crt")))
+        self.assertTrue(os.path.exists(
+            os.path.join(base, "certificate", "srv.key")))
+        self.assertTrue(os.path.exists(os.path.join(base, "ca", "root.crt")))
+        self.assertTrue(os.path.exists(os.path.join(base, "dh", "main.pem")))
+        cfg(self.cli, "delete pki certificate srv")
+        self.commit()
+        self.assertFalse(os.path.exists(
+            os.path.join(base, "certificate", "srv.crt")))
+        self.assertFalse(os.path.exists(
+            os.path.join(base, "certificate", "srv.key")))
+
     def test_vrrp_generates_keepalived_uci(self):
         cfg(self.cli,
             "set high-availability vrrp group G1 interface br-lan",
