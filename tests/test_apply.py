@@ -410,6 +410,33 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn("match ip address prefix-list PL", text)
         self.assertIn("set local-preference 200", text)
 
+    def test_nat66_renders_and_applies(self):
+        from vyoscli.config import render_nat_nft
+        text = render_nat_nft({
+            "destination": {"rule": {"10": {
+                "protocol": "tcp",
+                "destination": {"address": "2001:db8::/64", "port": 80},
+                "translation": {"address": "2001:db8::10", "port": 8080}}}}},
+            "ipv6")
+        self.assertIn("table inet vyos_nat66", text)
+        self.assertIn("meta nfproto ipv6", text)
+        self.assertIn("ip6 daddr 2001:db8::/64", text)
+        self.assertIn("dnat to [2001:db8::10]:8080", text)
+
+        cfg(self.cli,
+            "set nat66 destination rule 10 protocol tcp",
+            "set nat66 destination rule 10 destination port 18081",
+            "set nat66 destination rule 10 translation address 2001:db8::10",
+            "set nat66 destination rule 10 translation port 80")
+        self.commit()
+        path = os.path.join(self.cli.store.base_dir, "nat66.nft")
+        self.assertTrue(os.path.exists(path))
+        self.assertIn(["nft", "-f", path], self.fake.calls)
+        cfg(self.cli, "delete nat66 destination rule 10")
+        self.commit()
+        self.assertIn(["nft", "delete", "table", "inet", "vyos_nat66"],
+                      self.fake.calls)
+
     def test_qos_renders_and_applies_tc(self):
         from vyoscli.config import render_qos_commands
         cmds = render_qos_commands({

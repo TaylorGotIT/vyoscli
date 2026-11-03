@@ -16,7 +16,7 @@
 |---|---|---|---|
 | `interfaces` | 19 种接口 | 11 种（ethernet/bridge/wireguard/openvpn/tunnel/loopback/dummy/vxlan/wireless/lan/wan） | 🟡 缺 bonding、pppoe、macsec、geneve、vti、wwan 等 |
 | `firewall` | ipv4/ipv6/bridge/zone/group/global-options/flowtable | ipv4/ipv6 input/forward/output filter rule + group（nft 表 `vyos_fw`）；zone/forwarding/rule 保留 | 🟡 方向规则与 group 已可用，缺 named rule-set/flowtable/bridge，global-options 仅存 JSON |
-| `nat` | nat44 全量、nat64、nat66、cgnat | nat44 匹配/转换、静态 1:1、hairpin（nft `vyos_nat`） | 🟡 nat44 已完整，nat66/nat64/cgnat 未做 |
+| `nat` | nat44 全量、nat64、nat66、cgnat | nat44 完整 + nat66（nft `vyos_nat66`） | 🟡 nat64/cgnat 需 Jool/SIIT，OpenWrt 无对应模块 |
 | `policy` | access-list/prefix-list/route/route-map/as-path/community/… | community-list、access-list、prefix-list、as-path-list；route-map 扩展了 prefix-list/as-path/metric/tag/next-hop/origin | 🟡 主体已补，缺 local-route/extcommunity/large-community |
 | `protocols` | 静态、BGP、OSPF、ISIS、RIP、BFD、MPLS、SR、PIM… | static、bgp、ospf、rip、bfd、route-map | 🟡 BGP/OSPF/RIP/BFD 已可用，缺 ISIS/MPLS/SR/PIM |
 | `service` | 22 类服务 | 10 类（含 OpenWrt 特有：sqm/adguard/smartdns/kcp） | 🟡 缺 NTP/DNS/HTTPS API/SNMP/LLDP/DHCP-relay 等 |
@@ -85,7 +85,8 @@ set nat destination rule 10 protocol tcp
 已完成：source/destination 的地址、端口、协议匹配，`translation address`/`port`、
 `log`、`disable`、`hairpin`、静态 1:1（不带 port 的 dnat），渲染到
 `inet vyos_nat`（priority dstnat-10 / srcnat-10，先于 fw4 的 NAT）。
-仍未做：exclude、nat66/nat64/cgnat。
+nat66 已按同一模型实现（`ip6 saddr/daddr` + `dnat/snat to`，IPv6 目标自动加方括号）。
+仍未做：exclude、nat64/cgnat（需要 Jool/SIIT，OpenWrt 内核无对应模块）。
 
 ### 3. policy：路由策略几乎空白
 
@@ -201,7 +202,7 @@ network-emulator/cake 的完整参数与 class match 规则。
 
 ### P2：进阶/按需
 
-12. nat66/nat64/cgnat
+12. nat66（已完成）；nat64/cgnat 不可行（无 Jool/SIIT）
 13. load-balancing（HAProxy + WAN 多线）
 14. container 完整化（仅当目标设备能装 podman）
 15. bonding、macsec、geneve、vti、l2tpv3、wwan、virtual-ethernet

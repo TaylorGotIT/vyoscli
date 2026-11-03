@@ -267,24 +267,26 @@ def render_firewall_nft(fw: Dict[str, Any]) -> str:
 
 
 
-def render_nat_nft(nat: Dict[str, Any]) -> str:
+def render_nat_nft(nat: Dict[str, Any], family: str = "ipv4") -> str:
     """Render nat.source/destination rules into an inet vyos_nat table.
 
     The table sits at priority dstnat-10 / srcnat-10, i.e. before fw4's own
     NAT, so matched traffic uses these rules instead of the zone masquerade.
     """
-    lines = ["table inet vyos_nat {"]
+    table = "vyos_nat66" if family == "ipv6" else "vyos_nat"
+    lines = [f"table inet {table} {{"]
     prerouting: List[str] = []
     postrouting: List[str] = []
 
     def match_parts(rule: Dict[str, Any]) -> List[str]:
-        parts = ["meta nfproto ipv4"]
+        parts = [f"meta nfproto {family}"]
         src = rule.get("source") or {}
         dst = rule.get("destination") or {}
+        prefix = "ip6" if family == "ipv6" else "ip"
         if src.get("address"):
-            parts.append(f"ip saddr {src['address']}")
+            parts.append(f"{prefix} saddr {src['address']}")
         if dst.get("address"):
-            parts.append(f"ip daddr {dst['address']}")
+            parts.append(f"{prefix} daddr {dst['address']}")
         proto = str(rule.get("protocol") or "").lower()
         l4 = proto if proto in ("tcp", "udp") else "tcp"
         if src.get("port"):
@@ -296,6 +298,12 @@ def render_nat_nft(nat: Dict[str, Any]) -> str:
         if rule.get("out-interface"):
             parts.append(f'oifname "{rule["out-interface"]}"')
         return parts
+
+    def target_of(address: Any, port: Any) -> str:
+        text = str(address)
+        if port:
+            return f"[{text}]:{port}" if ":" in text else f"{text}:{port}"
+        return text
 
     def rules_of(holder: Dict[str, Any]) -> Dict[str, Any]:
         rules = (holder or {}).get("rule")
@@ -316,8 +324,7 @@ def render_nat_nft(nat: Dict[str, Any]) -> str:
         if not address or str(address).lower() == "masquerade":
             parts.append("masquerade")
         else:
-            target = str(address) + (f":{port}" if port else "")
-            parts.append(f"snat to {target}")
+            parts.append(f"snat to {target_of(address, port)}")
         postrouting.append("    " + " ".join(parts))
 
     for rid, rule in sorted(rules_of(nat.get("destination") or {}).items()):
@@ -335,7 +342,7 @@ def render_nat_nft(nat: Dict[str, Any]) -> str:
         base = match_parts(rule)
         if rule.get("log"):
             base.append(f'log prefix "vyos-nat-dst-{rid} "')
-        target = str(address) + (f":{port}" if port else "")
+        target = target_of(address, port)
         dnat = base + [f"dnat to {target}"]
         prerouting.append("    " + " ".join(dnat))
         if rule.get("hairpin"):
@@ -743,6 +750,7 @@ class ConfigStore:
             ("firewall", self._apply_firewall),
             ("firewall15", self._apply_firewall15),
             ("nat", self._apply_nat),
+            ("nat66", self._apply_nat66),
             ("wireguard", self._apply_wireguard),
             ("openvpn", self._apply_openvpn),
             ("tunnel", self._apply_tunnel),
@@ -1928,6 +1936,43 @@ class ConfigStore:
                 pass
         extra = f", {applied} sysctl(s)" if applied else ""
         return [f"firewall: applied {count} VyOS-style rule(s) via nft{extra}"]
+
+    def _apply_nat66(self, old, new):
+        old_n = old.get("nat66") or {}
+        new_n = new.get("nat66") or {}
+        if old_n == new_n:
+            return []
+        path = os.path.join(self.base_dir, "nat66.nft")
+
+        def has_rules(holder):
+            rules = (holder or {}).get("rule")
+            return bool(rules) if isinstance(rules, dict) else bool(holder)
+
+        if not (has_rules(new_n.get("source"))
+                or has_rules(new_n.get("destination"))):
+            try:
+                subprocess.run(["nft", "delete", "table", "inet", "vyos_nat66"],
+                               capture_output=True, text=True, timeout=10)
+            except (OSError, subprocess.SubprocessError):
+                pass
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            return ["nat66: rules removed"]
+        text = render_nat_nft(new_n, "ipv6")
+        os.makedirs(self.base_dir, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        try:
+            proc = subprocess.run(["nft", "-f", path], capture_output=True,
+                                  text=True, timeout=15)
+        except (OSError, subprocess.SubprocessError) as e:
+            return [f"nat66: nft unavailable ({e}); rules kept in {path}"]
+        if proc.returncode != 0:
+            return [f"nat66 apply failed: {(proc.stderr or '').strip()[:200]}"]
+        return ["nat66: applied " + str(text.count("dnat to") + text.count("masquerade"))
+                + " VyOS-style rule(s) via nft"]
 
     def _apply_nat(self, old, new):
         """VyOS-style NAT (source/destination) -> nft table inet vyos_nat."""

@@ -243,6 +243,32 @@
 | `nat source rule <id> translation address` | masquerade or an IPv4 address | `nat source rule <id> translation address text` |
 | `nat source rule <id> translation port` | Translated source port | `nat source rule <id> translation port 8080` |
 
+## set nat66
+
+| 命令 | 说明 | 示例 |
+|---|---|---|
+| `nat66 destination rule <id> destination address` | Destination prefix | `nat66 destination rule <id> destination address <value>` |
+| `nat66 destination rule <id> destination port` | Destination port | `nat66 destination rule <id> destination port 8080` |
+| `nat66 destination rule <id> disable` | Disable this rule | `nat66 destination rule <id> disable true` |
+| `nat66 destination rule <id> hairpin` | Also match internal clients | `nat66 destination rule <id> hairpin true` |
+| `nat66 destination rule <id> inbound-interface` | Incoming interface | `nat66 destination rule <id> inbound-interface text` |
+| `nat66 destination rule <id> log` | Log matching packets | `nat66 destination rule <id> log true` |
+| `nat66 destination rule <id> protocol` | tcp \| udp \| any | `nat66 destination rule <id> protocol text` |
+| `nat66 destination rule <id> source address` | Source prefix | `nat66 destination rule <id> source address <value>` |
+| `nat66 destination rule <id> source port` | Source port | `nat66 destination rule <id> source port 8080` |
+| `nat66 destination rule <id> translation address` | Internal IPv6 address | `nat66 destination rule <id> translation address <value>` |
+| `nat66 destination rule <id> translation port` | Translated destination port | `nat66 destination rule <id> translation port 8080` |
+| `nat66 source rule <id> destination address` | Destination prefix | `nat66 source rule <id> destination address <value>` |
+| `nat66 source rule <id> destination port` | Destination port | `nat66 source rule <id> destination port 8080` |
+| `nat66 source rule <id> disable` | Disable this rule | `nat66 source rule <id> disable true` |
+| `nat66 source rule <id> log` | Log matching packets | `nat66 source rule <id> log true` |
+| `nat66 source rule <id> out-interface` | Outgoing interface | `nat66 source rule <id> out-interface text` |
+| `nat66 source rule <id> protocol` | tcp \| udp \| any | `nat66 source rule <id> protocol text` |
+| `nat66 source rule <id> source address` | Source prefix | `nat66 source rule <id> source address <value>` |
+| `nat66 source rule <id> source port` | Source port | `nat66 source rule <id> source port 8080` |
+| `nat66 source rule <id> translation address` | masquerade or an IPv6 address | `nat66 source rule <id> translation address text` |
+| `nat66 source rule <id> translation port` | Translated source port | `nat66 source rule <id> translation port 8080` |
+
 ## set pki
 
 | 命令 | 说明 | 示例 |
