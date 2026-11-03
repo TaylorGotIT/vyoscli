@@ -897,30 +897,20 @@ def build_tree(store: Any) -> CommandTree:
         # zone <name>
         zone = Node(name="zone", help="Firewall zone")
         fw.add(zone)
-        zone_tpl = Node(name="*", help="Per-zone")
-        zone_tpl.add(Node(name="network", help="UCI network name bound to zone",
-                          value_type="str", action=_cfg_noop))
-        for d in ("input", "output", "forward"):
-            zone_tpl.add(Node(name=d, help=f"Default {d} policy: ACCEPT/DROP/REJECT",
-                              value_type="str", action=_cfg_noop))
+        zone_tpl = schema.template(schema.FIREWALL_ZONE, "Per-zone", _cfg_noop)
         zone.dynamic = lambda: []
         zone._dyn_template = zone_tpl  # type: ignore[attr-defined]
         # forwarding <name> src <zone> dest <zone>
         fwd = Node(name="forwarding", help="Inter-zone forwarding")
         fw.add(fwd)
-        fwd_tpl = Node(name="*", help="Per-forwarding")
-        fwd_tpl.add(Node(name="src", help="Source zone", value_type="str", action=_cfg_noop))
-        fwd_tpl.add(Node(name="dest", help="Destination zone", value_type="str", action=_cfg_noop))
+        fwd_tpl = schema.template(schema.FIREWALL_FORWARDING, "Per-forwarding",
+                                  _cfg_noop)
         fwd.dynamic = lambda: []
         fwd._dyn_template = fwd_tpl  # type: ignore[attr-defined]
         # rule <num> ...
         rule = Node(name="rule", help="Firewall rule (by order number)")
         fw.add(rule)
-        rule_tpl = Node(name="*", help="Per-rule")
-        rule_tpl.add(Node(name="name", help="Rule name", value_type="str", action=_cfg_noop))
-        rule_tpl.add(Node(name="src", help="Source zone (default *)", value_type="str", action=_cfg_noop))
-        rule_tpl.add(Node(name="dest-port", help="Destination port", value_type="port", action=_cfg_noop))
-        rule_tpl.add(Node(name="target", help="ACCEPT/DROP/REJECT", value_type="str", action=_cfg_noop))
+        rule_tpl = schema.template(schema.FIREWALL_RULE, "Per-rule", _cfg_noop)
         rule.dynamic = lambda: []
         rule._dyn_template = rule_tpl  # type: ignore[attr-defined]
 
@@ -931,24 +921,14 @@ def build_tree(store: Any) -> CommandTree:
         nat.add(sn)
         sn_rule = Node(name="rule", help="Source NAT rule")
         sn.add(sn_rule)
-        sn_tpl = Node(name="*", help="Per-rule")
-        sn_tpl.add(Node(name="out-interface", help="Outgoing interface (e.g. wan)",
-                        value_type="str", action=_cfg_noop))
-        sn_tpl.add(Node(name="translation", help="Translation type (masquerade)",
-                        value_type="str", action=_cfg_noop))
+        sn_tpl = schema.template(schema.NAT_SOURCE_RULE, "Per-rule", _cfg_noop)
         sn_rule._dyn_template = sn_tpl
         sn_rule.dynamic = lambda: []
         dn = Node(name="destination", help="Destination NAT / port forward")
         nat.add(dn)
         dn_rule = Node(name="rule", help="Destination NAT rule")
         dn.add(dn_rule)
-        dn_tpl = Node(name="*", help="Per-rule")
-        dn_tpl.add(Node(name="in-interface", help="Incoming interface (e.g. wan)",
-                        value_type="str", action=_cfg_noop))
-        dn_tpl.add(Node(name="port", help="External port",
-                        value_type="port", action=_cfg_noop))
-        dn_tpl.add(Node(name="to", help="Internal IP to forward to",
-                        value_type="ipv4", action=_cfg_noop))
+        dn_tpl = schema.template(schema.NAT_DEST_RULE, "Per-rule", _cfg_noop)
         dn_rule._dyn_template = dn_tpl
         dn_rule.dynamic = lambda: []
 

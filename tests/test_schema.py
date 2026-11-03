@@ -91,6 +91,11 @@ class SchemaTest(unittest.TestCase):
         "loopback": "interfaces loopback lo",
         "dummy": "interfaces dummy dum9",
         "vxlan": "interfaces vxlan vx9",
+        "firewall-zone": "firewall zone z9",
+        "firewall-forwarding": "firewall forwarding f9",
+        "firewall-rule": "firewall rule 900",
+        "nat-source": "nat source rule 90",
+        "nat-destination": "nat destination rule 90",
     }
 
     def test_every_template_spec_resolves(self):

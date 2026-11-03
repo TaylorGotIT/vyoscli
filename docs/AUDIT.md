@@ -97,6 +97,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 43 | `service` 下的简单叶子（ssh/adguard/dnsmasq/smartdns 标量/tcp-accelerate/sqm）同样是手写三份 | 迁移到 `schema.SERVICE`（26 条），删掉对应手写块；动态子节点（smartdns server/domain-set、crontab、kcp、console-server、dhcp-server）保持手写，真机验证 `set service ?` 与动态路径仍正常 | `schema.py` / `commands.py` |
 | 44 | bridge/tunnel/vxlan/loopback/dummy 的模板字段同样是手写 | 迁移到 `schema.TEMPLATES`（5 组、38 条），`schema.template()` 生成动态模板；bridge 的 vlan 子节点保持手写。真机验证 `set interfaces bridge ?` 与 tunnel 老键 `local-ip/remote-ip` 仍可用 | `schema.py` / `commands.py` |
 | 45 | 动态节点（bridge/vlan/peer…）在 `?`/Tab 下没有任何提示 | 没有候选时补 `<name>` 提示，并且不再对动态节点误报 `<Enter>` | `cli.py:_matches_with_help` |
+| 46 | firewall zone/forwarding/rule 与 nat source/destination rule 的模板字段同样手写 | 迁移到 `schema.TEMPLATES`（新增 5 组、15 条），`?` 真机验证 `firewall zone` / `firewall rule` / `nat destination rule` 的字段提示正常 | `schema.py` / `commands.py` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示

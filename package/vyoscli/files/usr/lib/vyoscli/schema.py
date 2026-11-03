@@ -137,12 +137,47 @@ VXLAN: Tuple[Spec, ...] = (
     Spec("address", "ipv4net", "Inner tunnel IPv4/prefix"),
 )
 
+FIREWALL_ZONE: Tuple[Spec, ...] = (
+    Spec("network", "str", "UCI network name bound to zone"),
+    Spec("input", "str", "Default input policy: ACCEPT/DROP/REJECT"),
+    Spec("output", "str", "Default output policy: ACCEPT/DROP/REJECT"),
+    Spec("forward", "str", "Default forward policy: ACCEPT/DROP/REJECT"),
+)
+
+FIREWALL_FORWARDING: Tuple[Spec, ...] = (
+    Spec("src", "str", "Source zone"),
+    Spec("dest", "str", "Destination zone"),
+)
+
+FIREWALL_RULE: Tuple[Spec, ...] = (
+    Spec("name", "str", "Rule name"),
+    Spec("src", "str", "Source zone (default *)"),
+    Spec("dest-port", "port", "Destination port"),
+    Spec("target", "str", "ACCEPT/DROP/REJECT"),
+)
+
+NAT_SOURCE_RULE: Tuple[Spec, ...] = (
+    Spec("out-interface", "str", "Outgoing interface (e.g. wan)"),
+    Spec("translation", "str", "Translation type (masquerade)"),
+)
+
+NAT_DEST_RULE: Tuple[Spec, ...] = (
+    Spec("in-interface", "str", "Incoming interface (e.g. wan)"),
+    Spec("port", "port", "External port"),
+    Spec("to", "ipv4", "Internal IP to forward to"),
+)
+
 TEMPLATES = {
     "bridge": BRIDGE,
     "tunnel": TUNNEL,
     "loopback": LOOPBACK,
     "dummy": DUMMY,
     "vxlan": VXLAN,
+    "firewall-zone": FIREWALL_ZONE,
+    "firewall-forwarding": FIREWALL_FORWARDING,
+    "firewall-rule": FIREWALL_RULE,
+    "nat-source": NAT_SOURCE_RULE,
+    "nat-destination": NAT_DEST_RULE,
 }
 
 GROUPS = {
