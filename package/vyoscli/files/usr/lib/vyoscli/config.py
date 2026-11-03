@@ -2404,6 +2404,18 @@ class ConfigStore:
         self._touched = {}
         notes = self._apply_all({}, copy.deepcopy(self.running), only=owners)
         self._record_applied()
+        if owners is not None:
+            # A "missing" section that the owning step did not recreate is no
+            # longer part of the desired config (e.g. the interface was removed
+            # from JSON by hand): stop reporting it as drift.
+            manifest = self._load_applied()
+            pruned = []
+            for section, state in drifted:
+                if state == "missing" and self._section_digest(section) == "absent":
+                    manifest.pop(section, None)
+                    pruned.append(section)
+            if pruned:
+                self._dump(self.applied_path, manifest)
         scope = "drift sections" if owners is not None else "full"
         out = f"Sync complete ({scope})."
         for n in notes:

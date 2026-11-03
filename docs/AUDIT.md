@@ -42,7 +42,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 变更 | 说明 |
 |---|---|
 | `GUIDE.md` → `docs/GUIDE.md`，`REQUIRED_PACKAGES.md` → `docs/DEPENDENCIES.md` | 文档集中到 `docs/` |
-| 新增 `tests/`（4 个文件、60 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
+| 新增 `tests/`（4 个文件、61 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
 | 新增 `.gitignore` | 忽略 `__pycache__`、`*.ipk`、`.audit/` 等 |
 | `git rm --cached package/vyoscli.zip` | 陈旧构建产物，已从仓库移除 |
 | `Makefile` 安装改用 `$(wildcard .../*.py)` | 以后加模块不用再改 Makefile |
@@ -79,7 +79,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 25 | 给已被 `lan/wan` 占用的设备再建 `vyos_<if>` | 真机 eth1（WAN）被追加了 LAN 地址 `192.168.1.1/24`。现在检测到 device 已被其它 section 占用就跳过并提示，不再制造重复接口 | `config.py:_apply_interfaces` |
 | 26 | JSON 与 UCI 之间没有任何漂移可见性 | 新增 `applied.json`（记录每次 commit 写过的 section 指纹）与 `show system drift`；手工改 UCI / 恢复备份 / 升级后能看出哪些 section 被改过 | `config.py:_record_applied` / `drift` |
 | 27 | 改 hostname 只写 UCI，`uci apply` 在 23.05 上不存在 | 真机验证内核主机名一直没变；改为 `uci apply`（24.10+）+ `/etc/init.d/system reload`，实测 `/proc/sys/kernel/hostname` 同步 | `config.py:_apply_hostname` |
-| 28 | 漂移只能看见、不能修复 | configure 模式 `sync`：按 `applied.json` 记录的 owner **只重放漂移段落**；无漂移直接返回，旧 manifest 首次升级时退化为全量。真机验证：改 hostname 后 `Sync complete (drift sections) / hostname -> OpenWrt`，未触发 network/firewall reload | `config.py:sync` / `_apply_steps` |
+| 28 | 漂移只能看见、不能修复 | configure 模式 `sync`：按 `applied.json` 记录的 owner **只重放漂移段落**；无漂移直接返回，旧 manifest 首次升级时退化为全量。真机验证：改 hostname 后 `Sync complete (drift sections) / hostname -> OpenWrt`，未触发 network/firewall reload；`missing` 且重放后仍未重建的 section 会从 manifest 中剪掉（例如手工删除的 wg 接口） | `config.py:sync` / `_apply_steps` |
 | 29 | `interfaces ethernet <if> address` 对已有 lan/wan 设备只能"跳过" | 引入 `_network_map()`：直连设备且 proto 为 static/none 时接管现有 section；DHCP/PPPoE 与桥端口明确拒绝并提示；同时统一了 `interfaces lan device` 与 `interfaces.role` 两种写法 | `config.py:_network_map` / `_apply_interfaces` / `_apply_interface_roles` |
 | 30 | WireGuard 把 `host:port` 整段写进 `endpoint_host`；删除接口不清理 UCI/内核设备 | 真机 wg 报 `Name does not resolve: [192.0.2.10:51999]:51820`，peer 建不出来；删除后 `network.wg*` 与 `wg*` 设备残留。已拆分 endpoint_host/port、按类型清 peer、`ip link del` | `config.py:_apply_wireguard` |
 | 31 | BGP 通过 UCI `frr.*` 下发，但该固件的 frr 包**没有 /etc/config/frr** | 配置永不生效。改为生成 `/etc/frr/frr.conf` + 打开 `daemons` 的 zebra/bgpd，真机 `vtysh -d bgpd -c "show bgp summary"` 验证 AS65001/邻居/network；community-list 需 `expanded` 语法 | `config.py:render_frr_conf` |

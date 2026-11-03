@@ -362,6 +362,19 @@ class CommitBackendTest(unittest.TestCase):
                 for c in new_calls),
             "targeted sync must not touch network config")
 
+    def test_sync_prunes_missing_sections(self):
+        cfg(self.cli, "set system host-name sync-test")
+        self.commit()
+        manifest = load_json(self.cli.store.applied_path)
+        manifest["network.ghost"] = {"owner": "interfaces", "digest": "x"}
+        self.cli.store._dump(self.cli.store.applied_path, manifest)
+        with mock.patch.object(self.cli.store, "_section_digest",
+                               return_value="absent"):
+            self.assertIn(("network.ghost", "missing"), self.cli.store.drift())
+            self.cli.store.sync()
+        remaining = load_json(self.cli.store.applied_path)
+        self.assertNotIn("network.ghost", remaining)
+
     def test_sync_without_drift_is_a_noop(self):
         cfg(self.cli, "set system host-name sync-test")
         self.commit()
