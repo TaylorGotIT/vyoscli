@@ -1639,7 +1639,10 @@ class ConfigStore:
                         hostname: str = "",
                         prefix_lists: Optional[Dict[str, Any]] = None,
                         as_path_lists: Optional[Dict[str, Any]] = None,
-                        access_lists: Optional[Dict[str, Any]] = None) -> List[str]:
+                        access_lists: Optional[Dict[str, Any]] = None,
+                        ospf: Optional[Dict[str, Any]] = None,
+                        rip: Optional[Dict[str, Any]] = None,
+                        bfd: Optional[Dict[str, Any]] = None) -> List[str]:
         """Render /etc/frr/frr.conf for the OpenWrt frr package (no UCI)."""
         lines = [
             "# managed by vyoscli",
@@ -1702,6 +1705,53 @@ class ConfigStore:
                                  f"{action} {regex}")
                 else:
                     lines.append(f"bgp community-list {num} {action}")
+        ospf = ospf or {}
+        if ospf:
+            lines.append("router ospf")
+            if ospf.get("router-id"):
+                lines.append(f" ospf router-id {ospf['router-id']}")
+            if ospf.get("log-adjacency-changes"):
+                lines.append(" log-adjacency-changes")
+            if ospf.get("default-information"):
+                lines.append(" default-information originate")
+            for area, cfg in (ospf.get("area") or {}).items():
+                if not isinstance(cfg, dict) or not cfg.get("network"):
+                    continue
+                lines.append(f" network {cfg['network']} area {area}")
+            for ifname, cfg in (ospf.get("interface") or {}).items():
+                if not isinstance(cfg, dict) or not cfg.get("area"):
+                    continue
+                lines.append(f" interface {ifname} area {cfg['area']}")
+                if cfg.get("cost"):
+                    lines.append(f" ip ospf cost {cfg['cost']}")
+                if cfg.get("priority"):
+                    lines.append(f" ip ospf priority {cfg['priority']}")
+                if cfg.get("passive"):
+                    lines.append(f" passive-interface {ifname}")
+            lines.append("!")
+        rip = rip or {}
+        if rip:
+            lines.append("router rip")
+            if rip.get("version"):
+                lines.append(f" version {rip['version']}")
+            if rip.get("network"):
+                lines.append(f" network {rip['network']}")
+            if rip.get("default-information"):
+                lines.append(" default-information originate")
+            lines.append("!")
+        bfd = bfd or {}
+        if bfd:
+            lines.append("bfd")
+            parts = []
+            if bfd.get("interval"):
+                parts.append(f"interval {bfd['interval']}")
+            if bfd.get("min-rx"):
+                parts.append(f"min-rx {bfd['min-rx']}")
+            if bfd.get("multiplier"):
+                parts.append(f"multiplier {bfd['multiplier']}")
+            if parts:
+                lines.append(" " + " ".join(parts))
+            lines.append("!")
         for num, body in (access_lists or {}).items():
             if not isinstance(body, dict):
                 continue
@@ -1775,7 +1825,9 @@ class ConfigStore:
         return lines
 
     @staticmethod
-    def _set_frr_daemons(enable_bgpd: bool) -> None:
+    def _set_frr_daemons(enable_bgpd: bool, enable_ospfd: bool = False,
+                         enable_ripd: bool = False,
+                         enable_bfd: bool = False) -> None:
         path = "/etc/frr/daemons"
         try:
             with open(path, encoding="utf-8") as f:
@@ -1791,6 +1843,9 @@ class ConfigStore:
 
         text = put(text, "zebra", "yes")
         text = put(text, "bgpd", "yes" if enable_bgpd else "no")
+        text = put(text, "ospfd", "yes" if enable_ospfd else "no")
+        text = put(text, "ripd", "yes" if enable_ripd else "no")
+        text = put(text, "bfdd", "yes" if enable_bfd else "no")
         with open(path, "w", encoding="utf-8") as f:
             f.write(text)
 
@@ -1799,6 +1854,11 @@ class ConfigStore:
         old_b = (old.get("protocols") or {}).get("bgp") or {}
         rmaps = (new.get("protocols") or {}).get("route-map") or {}
         old_rmaps = (old.get("protocols") or {}).get("route-map") or {}
+        new_protos = new.get("protocols") or {}
+        old_protos = old.get("protocols") or {}
+        ospf = new_protos.get("ospf") or {}
+        rip = new_protos.get("rip") or {}
+        bfd = new_protos.get("bfd") or {}
         pol = new.get("policy") or {}
         old_pol = old.get("policy") or {}
         comlists = pol.get("community-list") or {}
@@ -1811,7 +1871,10 @@ class ConfigStore:
         old_access = old_pol.get("access-list") or {}
         if (old_b == new_b and old_rmaps == rmaps
                 and old_comlists == comlists and old_prefix == prefix_lists
-                and old_as_path == as_path_lists and old_access == access_lists):
+                and old_as_path == as_path_lists and old_access == access_lists
+                and old_protos.get("ospf") == ospf
+                and old_protos.get("rip") == rip
+                and old_protos.get("bfd") == bfd):
             return []
         notes: List[str] = []
         if not os.path.isdir("/etc/frr") or shutil.which("vtysh") is None:
@@ -1821,13 +1884,17 @@ class ConfigStore:
             text = "\n".join(self.render_frr_conf(
                 new_b, rmaps, comlists, hostname,
                 prefix_lists=prefix_lists, as_path_lists=as_path_lists,
-                access_lists=access_lists)) + "\n"
+                access_lists=access_lists, ospf=ospf, rip=rip,
+                bfd=bfd)) + "\n"
             with open("/etc/frr/frr.conf", "w", encoding="utf-8") as f:
                 f.write(text)
             os.chmod("/etc/frr/frr.conf", 0o640)
-            self._set_frr_daemons(bool(new_b.get("local-as")))
-            subprocess.run(["/etc/init.d/frr", "restart"],
-                           capture_output=True, text=True, timeout=60)
+            self._set_frr_daemons(bool(new_b.get("local-as")),
+                                  bool(ospf), bool(rip), bool(bfd))
+            subprocess.run(["/etc/init.d/frr", "start"],
+                           capture_output=True, text=True, timeout=25)
+            subprocess.run(["vtysh", "-b"], capture_output=True,
+                           text=True, timeout=30)
             if new_b.get("local-as"):
                 notes.append(f"bgp: AS{new_b['local-as']}, "
                              f"{len(new_b.get('neighbor') or {})} peers")

@@ -370,6 +370,27 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn("drop", text)
         self.assertIn(["nft", "-f", path], self.fake.calls)
 
+    def test_frr_renders_ospf_rip_bfd(self):
+        lines = self.cli.store.render_frr_conf(
+            {}, {}, {}, "r1",
+            ospf={"router-id": "10.0.0.1", "default-information": True,
+                  "area": {"0": {"network": "10.0.0.0/8"}},
+                  "interface": {"eth1": {"area": "0", "cost": 10,
+                                         "passive": True}}},
+            rip={"version": 2, "network": "192.168.0.0/16"},
+            bfd={"interval": 300, "min-rx": 300, "multiplier": 3})
+        text = "\n".join(lines)
+        self.assertIn("router ospf", text)
+        self.assertIn(" ospf router-id 10.0.0.1", text)
+        self.assertIn(" network 10.0.0.0/8 area 0", text)
+        self.assertIn(" interface eth1 area 0", text)
+        self.assertIn(" ip ospf cost 10", text)
+        self.assertIn(" passive-interface eth1", text)
+        self.assertIn("router rip", text)
+        self.assertIn(" network 192.168.0.0/16", text)
+        self.assertIn("bfd", text)
+        self.assertIn(" interval 300 min-rx 300 multiplier 3", text)
+
     def test_frr_renders_policy_lists_and_matches(self):
         lines = self.cli.store.render_frr_conf(
             {"local-as": 65001}, {"RM": {"permit": {"10": {

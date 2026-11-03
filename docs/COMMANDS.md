@@ -253,6 +253,9 @@
 
 | 命令 | 说明 | 示例 |
 |---|---|---|
+| `protocols bfd interval` | Transmit interval (ms) | `protocols bfd interval 100` |
+| `protocols bfd min-rx` | Minimum receive interval (ms) | `protocols bfd min-rx 100` |
+| `protocols bfd multiplier` | Detection multiplier | `protocols bfd multiplier 100` |
 | `protocols bgp local-as` | Local AS number | `protocols bgp local-as 100` |
 | `protocols bgp neighbor <name> description` | Neighbor description | `protocols bgp neighbor <name> description text` |
 | `protocols bgp neighbor <name> remote-as` | Peer AS number | `protocols bgp neighbor <name> remote-as 100` |
@@ -264,6 +267,19 @@
 | `protocols bgp peer-group <name> soft-reconfiguration` | Soft reconfig inbound | `protocols bgp peer-group <name> soft-reconfiguration text` |
 | `protocols bgp peer-group <name> update-source` | Update source IP | `protocols bgp peer-group <name> update-source 192.0.2.1` |
 | `protocols bgp router-id` | BGP router-id | `protocols bgp router-id 10.0.0.1` |
+| `protocols ospf area <name> network` | Network to advertise in this area | `protocols ospf area <name> network 192.0.2.1/24` |
+| `protocols ospf area <name> type` | normal \| stub \| nssa | `protocols ospf area <name> type text` |
+| `protocols ospf default-information` | Originate a default route | `protocols ospf default-information true` |
+| `protocols ospf interface <name> area` | Area ID | `protocols ospf interface <name> area text` |
+| `protocols ospf interface <name> bfd` | Enable BFD on this interface | `protocols ospf interface <name> bfd true` |
+| `protocols ospf interface <name> cost` | Interface cost | `protocols ospf interface <name> cost 100` |
+| `protocols ospf interface <name> passive` | Do not form adjacencies on this interface | `protocols ospf interface <name> passive true` |
+| `protocols ospf interface <name> priority` | DR election priority | `protocols ospf interface <name> priority 100` |
+| `protocols ospf log-adjacency-changes` | Log adjacency changes | `protocols ospf log-adjacency-changes true` |
+| `protocols ospf router-id` | OSPF router-id | `protocols ospf router-id 10.0.0.1` |
+| `protocols rip default-information` | Originate a default route | `protocols rip default-information true` |
+| `protocols rip network` | Network to advertise | `protocols rip network 192.0.2.1/24` |
+| `protocols rip version` | RIP version (1 or 2) | `protocols rip version 100` |
 | `protocols route-map <name> permit <name> match as-path` | Match an AS path list | `protocols route-map <name> permit <name> match as-path text` |
 | `protocols route-map <name> permit <name> match community community-list` | Community-list number | `protocols route-map <name> permit <name> match community community-list text` |
 | `protocols route-map <name> permit <name> match metric` | Match route metric | `protocols route-map <name> permit <name> match metric 100` |
