@@ -623,6 +623,7 @@ class ConfigStore:
         return [
             ("hostname", self._apply_hostname),
             ("system-meta", self._apply_system_meta),
+            ("system-extra", self._apply_system_extra),
             ("name-servers", self._apply_name_servers),
             ("system-dns", self._apply_system_dns),
             ("login", self._apply_login),
@@ -1105,6 +1106,114 @@ class ConfigStore:
             notes.append("netifd reloaded")
         except Exception as e:  # noqa: BLE001
             notes.append(f"static route apply failed: {e}")
+        return notes
+
+    def _apply_system_extra(self, old, new):
+        old_sys = old.get("system") or {}
+        new_sys = new.get("system") or {}
+        keys = ("syslog", "conntrack", "sysctl", "watchdog")
+        if all(old_sys.get(k) == new_sys.get(k) for k in keys):
+            return []
+        notes: List[str] = []
+        syslog = new_sys.get("syslog") or {}
+        if syslog:
+            levels = {"emerg": 0, "alert": 1, "crit": 2, "err": 3, "error": 3,
+                      "warning": 4, "warn": 4, "notice": 5, "info": 6,
+                      "debug": 7, "all": 7}
+            local = syslog.get("local") or {}
+            console = syslog.get("console") or {}
+            level = local.get("level") or console.get("level")
+            uci_changed = False
+            if level and str(level).lower() in levels:
+                self._uci("set", "system.@system[0].conloglevel="
+                          + str(levels[str(level).lower()]))
+                uci_changed = True
+            remotes = syslog.get("remote") or {}
+            if remotes:
+                host = sorted(remotes)[0]
+                cfg = remotes[host] or {}
+                self._uci("set", "system.@system[0].log_remote=1")
+                self._uci("set", f"system.@system[0].log_ip={host}")
+                if cfg.get("port"):
+                    self._uci("set", f"system.@system[0].log_port={cfg['port']}")
+                if cfg.get("protocol"):
+                    self._uci("set", f"system.@system[0].log_proto={cfg['protocol']}")
+                uci_changed = True
+                if len(remotes) > 1:
+                    notes.append("syslog: busybox logd supports one remote "
+                                 f"server, using {host}")
+            if uci_changed:
+                self._uci("commit", "system")
+                subprocess.run(["/etc/init.d/log", "restart"],
+                               capture_output=True, text=True, timeout=15)
+                notes.append("syslog: applied to logd")
+            else:
+                notes.append("syslog: options stored (no logd mapping)")
+        conntrack = new_sys.get("conntrack") or {}
+        sysctls = []
+        if conntrack.get("table-size"):
+            sysctls.append(("net.netfilter.nf_conntrack_max",
+                            conntrack["table-size"]))
+        timeouts = conntrack.get("timeout") or {}
+        tcp = timeouts.get("tcp") or {}
+        for key, sysname in (("established", "established"), ("close", "close"),
+                             ("close-wait", "close_wait"),
+                             ("fin-wait", "fin_wait"),
+                             ("last-ack", "last_ack"),
+                             ("syn-recv", "syn_recv"),
+                             ("syn-sent", "syn_sent"),
+                             ("time-wait", "time_wait")):
+            if tcp.get(key):
+                sysctls.append((f"net.netfilter.nf_conntrack_tcp_timeout_{sysname}",
+                                tcp[key]))
+        udp = timeouts.get("udp") or {}
+        if udp.get("stream"):
+            sysctls.append(("net.netfilter.nf_conntrack_udp_timeout_stream",
+                            udp["stream"]))
+        if udp.get("other"):
+            sysctls.append(("net.netfilter.nf_conntrack_udp_timeout",
+                            udp["other"]))
+        icmp = (timeouts.get("icmp") or {}).get("timeout")
+        if icmp:
+            sysctls.append(("net.netfilter.nf_conntrack_icmp_timeout", icmp))
+        generic = (timeouts.get("generic") or {}).get("timeout")
+        if generic:
+            sysctls.append(("net.netfilter.nf_conntrack_generic_timeout",
+                            generic))
+        sysctl_section = new_sys.get("sysctl") or {}
+        params = (sysctl_section.get("parameter")
+                  if isinstance(sysctl_section.get("parameter"), dict)
+                  else sysctl_section)
+        for key, cfg in params.items():
+            if isinstance(cfg, dict) and cfg.get("value") is not None:
+                sysctls.append((key, cfg["value"]))
+        for key, value in sysctls:
+            try:
+                subprocess.run(["sysctl", "-w", f"{key}={value}"],
+                               capture_output=True, text=True, timeout=5)
+            except (OSError, subprocess.SubprocessError):
+                pass
+        if sysctls:
+            path = os.path.join(self.base_dir, "sysctl.conf")
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.writelines(f"{k}={v}\n" for k, v in sysctls)
+            except OSError:
+                pass
+            notes.append(f"system: applied {len(sysctls)} sysctl value(s)")
+        watchdog = new_sys.get("watchdog") or {}
+        if watchdog:
+            module = watchdog.get("module")
+            if module:
+                try:
+                    subprocess.run(["modprobe", str(module)],
+                                   capture_output=True, text=True, timeout=10)
+                except (OSError, subprocess.SubprocessError):
+                    pass
+            if os.path.exists("/dev/watchdog0") or os.path.exists("/dev/watchdog"):
+                notes.append("watchdog: device present (daemon handled by procd)")
+            else:
+                notes.append("watchdog: /dev/watchdog0 not present")
         return notes
 
     def _apply_firewall(self, old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:

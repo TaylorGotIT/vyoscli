@@ -318,6 +318,19 @@
 
 | 命令 | 说明 | 示例 |
 |---|---|---|
+| `system conntrack table-size` | Maximum conntrack entries | `system conntrack table-size 100` |
+| `system conntrack timeout generic timeout` | Generic timeout | `system conntrack timeout generic timeout 100` |
+| `system conntrack timeout icmp timeout` | ICMP timeout | `system conntrack timeout icmp timeout 100` |
+| `system conntrack timeout tcp close` | Timeout in seconds | `system conntrack timeout tcp close 100` |
+| `system conntrack timeout tcp close-wait` | Timeout in seconds | `system conntrack timeout tcp close-wait 100` |
+| `system conntrack timeout tcp established` | Timeout in seconds | `system conntrack timeout tcp established 100` |
+| `system conntrack timeout tcp fin-wait` | Timeout in seconds | `system conntrack timeout tcp fin-wait 100` |
+| `system conntrack timeout tcp last-ack` | Timeout in seconds | `system conntrack timeout tcp last-ack 100` |
+| `system conntrack timeout tcp syn-recv` | Timeout in seconds | `system conntrack timeout tcp syn-recv 100` |
+| `system conntrack timeout tcp syn-sent` | Timeout in seconds | `system conntrack timeout tcp syn-sent 100` |
+| `system conntrack timeout tcp time-wait` | Timeout in seconds | `system conntrack timeout tcp time-wait 100` |
+| `system conntrack timeout udp other` | Other timeout | `system conntrack timeout udp other 100` |
+| `system conntrack timeout udp stream` | Stream timeout | `system conntrack timeout udp stream 100` |
 | `system dns` | System resolver for router itself (/etc/resolv.conf) | `system dns 192.0.2.1` |
 | `system domain-search` | Domain search suffix (repeatable) | `system domain-search text` |
 | `system hardware model` | Hardware model | `system hardware model text` |
@@ -333,7 +346,22 @@
 | `system login user <username> full-name` | Full name | `system login user <username> full-name text` |
 | `system name-server` | Upstream DNS for dnsmasq (client queries) | `system name-server 192.0.2.1` |
 | `system ntp` | NTP server hostname (repeatable) | `system ntp ntp.aliyun.com` |
+| `system sysctl parameter <name> value` | Value to set | `system sysctl parameter <name> value text` |
+| `system syslog console facility` | Facility (all, daemon, kern, ...) | `system syslog console facility text` |
+| `system syslog console level` | Severity (emerg..debug, all) | `system syslog console level text` |
+| `system syslog global marker-interval` | Mark message interval (seconds) | `system syslog global marker-interval 100` |
+| `system syslog global preserve-fqdn` | Include FQDN in remote messages | `system syslog global preserve-fqdn true` |
+| `system syslog local facility` | Facility (all, daemon, kern, ...) | `system syslog local facility text` |
+| `system syslog local level` | Severity (emerg..debug, all) | `system syslog local level text` |
+| `system syslog remote <name> facility` | Facility (all, daemon, kern, ...) | `system syslog remote <name> facility text` |
+| `system syslog remote <name> level` | Severity (emerg..debug, all) | `system syslog remote <name> level text` |
+| `system syslog remote <name> port` | Destination port (default 514) | `system syslog remote <name> port 8080` |
+| `system syslog remote <name> protocol` | udp \| tcp | `system syslog remote <name> protocol text` |
 | `system timezone` | IANA timezone (e.g. Asia/Shanghai) | `system timezone Asia/Shanghai` |
+| `system watchdog module` | Kernel watchdog module (e.g. softdog) | `system watchdog module text` |
+| `system watchdog reboot-timeout` | Reboot timeout (seconds) | `system watchdog reboot-timeout 100` |
+| `system watchdog shutdown-timeout` | Shutdown timeout (seconds) | `system watchdog shutdown-timeout 100` |
+| `system watchdog timeout` | Runtime timeout (seconds) | `system watchdog timeout 100` |
 
 ## set traffic-policy
 

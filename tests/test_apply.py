@@ -370,6 +370,42 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn("drop", text)
         self.assertIn(["nft", "-f", path], self.fake.calls)
 
+    def test_syslog_remote_maps_to_logd(self):
+        cfg(self.cli,
+            "set system syslog remote 192.0.2.10 protocol tcp",
+            "set system syslog remote 192.0.2.10 port 5514",
+            "set system syslog local level info")
+        self.commit()
+        calls = self.fake.uci_calls()
+        self.assertIn(["uci", "set", "system.@system[0].log_remote=1"], calls)
+        self.assertIn(["uci", "set", "system.@system[0].log_ip=192.0.2.10"],
+                      calls)
+        self.assertIn(["uci", "set", "system.@system[0].log_port=5514"], calls)
+        self.assertIn(["uci", "set", "system.@system[0].conloglevel=6"], calls)
+        self.assertIn(["/etc/init.d/log", "restart"], self.fake.calls)
+
+    def test_conntrack_and_sysctl_values(self):
+        cfg(self.cli,
+            "set system conntrack table-size 65536",
+            "set system conntrack timeout tcp established 7440",
+            "set system sysctl parameter net.ipv4.ip_forward value 1")
+        self.commit()
+        self.assertIn(["sysctl", "-w", "net.netfilter.nf_conntrack_max=65536"],
+                      self.fake.calls)
+        self.assertIn(["sysctl", "-w",
+                       "net.netfilter.nf_conntrack_tcp_timeout_established=7440"],
+                      self.fake.calls)
+        self.assertIn(["sysctl", "-w", "net.ipv4.ip_forward=1"], self.fake.calls)
+        self.assertTrue(os.path.exists(
+            os.path.join(self.cli.store.base_dir, "sysctl.conf")))
+
+    def test_watchdog_loads_module(self):
+        cfg(self.cli,
+            "set system watchdog module softdog",
+            "set system watchdog timeout 30")
+        self.commit()
+        self.assertIn(["modprobe", "softdog"], self.fake.calls)
+
     def test_firewall_global_options_apply_sysctls_and_state(self):
         cfg(self.cli,
             "set firewall global-options syn-cookies true",

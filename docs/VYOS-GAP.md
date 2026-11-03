@@ -20,7 +20,7 @@
 | `policy` | access-list/prefix-list/route/route-map/as-path/community/… | community-list、route-redirect | ❌ 缺大部分 |
 | `protocols` | 静态、BGP、OSPF、ISIS、RIP、BFD、MPLS、SR、PIM… | static、bgp 子集、route-map 子集 | 🟡 能跑简单 BGP/静态路由 |
 | `service` | 22 类服务 | 10 类（含 OpenWrt 特有：sqm/adguard/smartdns/kcp） | 🟡 缺 NTP/DNS/HTTPS API/SNMP/LLDP/DHCP-relay 等 |
-| `system` | 21 类 | 9 类（hostname/DNS/时区/NTP/login/hardware…） | 🟡 缺 syslog/conntrack/sysctl/watchdog/task-scheduler 等 |
+| `system` | 21 类 | 13 类（+syslog/conntrack/sysctl/watchdog） | 🟡 syslog/conntrack/sysctl/watchdog 已落地；缺 task-scheduler/console/ip/ipv6/updates 等 |
 | `vpn` | IPsec、L2TP、SSTP、OpenConnect、PPTP、DMVPN | IPsec 子集 | 🟡 缺大部分 |
 | `high-availability` | VRRP、sync-group、virtual-server | 无 | ❌ 完全缺失 |
 | `load-balancing` | WAN 负载均衡、HAProxy | 无 | ❌ 完全缺失 |
@@ -143,9 +143,12 @@ VyOS 1.5 有 acceleration、conntrack、console、flow-accounting、frr、host-n
 ip、ipv6、lcd、login、name-server、option、proxy、sflow、syslog、sysctl、
 task-scheduler、time-zone、updates、watchdog、default-route。
 
-我们：host-name、name-server、dns、timezone、domain-search、ntp、language、
-hardware、login。**缺 syslog、conntrack、sysctl、watchdog、default-route、
-ip/ipv6 全局参数、updates**。其中 syslog/conntrack/sysctl 是日常运维刚需。
+我们已有：host-name、name-server、dns、timezone、domain-search、ntp、language、
+hardware、login，以及新增的 `system syslog`（local/console/remote）、
+`system conntrack`（table-size/timeout）、`system sysctl parameter`、
+`system watchdog`。`default-route` 按 VyOS 1.5 文档就是
+`protocols static route 0.0.0.0/0`（已支持）。仍缺 ip/ipv6 全局参数、updates、
+console、task-scheduler（暂用 `service crontab`）。
 
 ### 7. vpn：只有 IPsec 子集
 
