@@ -114,6 +114,29 @@ class SchemaTest(unittest.TestCase):
                     else:
                         self.assertEqual(stored, expected)
 
+    def test_command_reference_covers_every_leaf(self):
+        from vyoscli.config_tree import TREE
+        from vyoscli import commands  # noqa: F401  (ensures package imports)
+
+        def leaves(items):
+            for item in items:
+                kids = item.get("children") or []
+                if item.get("type") and not kids:
+                    yield item["name"]
+                else:
+                    yield from leaves(kids)
+
+        expected = sum(1 for _ in leaves(TREE))
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        path = os.path.join(repo, "docs", "COMMANDS.md")
+        rows = [line for line in open(path, encoding="utf-8")
+                if line.startswith("| `")]
+        self.assertEqual(len(rows), expected,
+                         "docs/COMMANDS.md is stale: re-run "
+                         "python3 scripts/gen-command-reference.py")
+        text = open(path, encoding="utf-8").read()
+        self.assertIn("interfaces ethernet <ifname> address", text)
+
     def test_repeatable_specs_match_default_lists(self):
         from vyoscli.config import DEFAULT_RUNNING
         for spec in schema.SYSTEM:
