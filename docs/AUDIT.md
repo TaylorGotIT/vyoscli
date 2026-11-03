@@ -42,7 +42,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 变更 | 说明 |
 |---|---|
 | `GUIDE.md` → `docs/GUIDE.md`，`REQUIRED_PACKAGES.md` → `docs/DEPENDENCIES.md` | 文档集中到 `docs/` |
-| 新增 `tests/`（5 个文件、92 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
+| 新增 `tests/`（5 个文件、94 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
 | 新增 `.gitignore` | 忽略 `__pycache__`、`*.ipk`、`.audit/` 等 |
 | `git rm --cached package/vyoscli.zip` | 陈旧构建产物，已从仓库移除 |
 | `Makefile` 安装改用 `$(wildcard .../*.py)` | 以后加模块不用再改 Makefile |
@@ -112,6 +112,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 58 | service 缺 NTP/LLDP 等基础服务 | 新增 `service ntp`（server 列表→`system.ntp.server`，重启 sysntpd）与 `service lldp`（interface 列表/description→UCI lldpd）；真机验证 ntp server 写入、lldpd 运行与描述、删除后清理，并从 JSON 全量 sync 恢复原 NTP | `config_tree.py` / `config.py:_apply_ntp` / `_apply_lldp` |
 | 59 | 缺 SNMP 管理面 | 新增 `service snmp`：community→com2sec/com2sec6/group(v1/v2c/usm)/access，contact/location→system，listen-address/port→agentaddress；真机验证 snmpd 监听 1610、UCI 生成与删除清理 | `config_tree.py` / `config.py:_apply_snmp` |
 | 60 | 缺 IPv6 RA 配置 | 新增 `service router-advert interface`（prefix/managed-flag/default-lifetime/no-send-advert）；映射到 UCI `dhcp.<if>` 的 ra/dhcpv6/ra_management/ra_lifetime 并重启 odhcpd；应用前备份原值、删除时还原。真机验证 lan 上 RA 生效、删除后 ra=server 恢复且 drift 清零 | `config_tree.py` / `config.py:_apply_router_advert` |
+| 61 | 没有 API 管理面 | 新增 `service https`（port/listen-address/api-key）与 `vyoscli.api` 只读 HTTP API（/api/version、/api/configuration、/api/show?path=），Bearer 鉴权、进程 pidfile 管理；真机验证 200/401、/api/show 取值、删除后端口关闭。**TLS 未实现**（等 PKI）；另 `dhcp-relay` 仅有 isc 二进制且 67 端口与 dnsmasq 冲突，暂不做 | `api.py` / `config.py:_apply_https` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示

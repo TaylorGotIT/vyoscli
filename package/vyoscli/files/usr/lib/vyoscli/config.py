@@ -28,6 +28,7 @@ import copy
 import shlex
 import shutil
 import subprocess
+import sys
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -629,6 +630,7 @@ class ConfigStore:
             ("ntp", self._apply_ntp),
             ("snmp", self._apply_snmp),
             ("router-advert", self._apply_router_advert),
+            ("https", self._apply_https),
             ("lldp", self._apply_lldp),
             ("name-servers", self._apply_name_servers),
             ("system-dns", self._apply_system_dns),
@@ -1328,6 +1330,44 @@ class ConfigStore:
         except Exception as e:  # noqa: BLE001
             notes.append(f"router-advert apply failed: {e}")
         return notes
+
+    def _apply_https(self, old, new):
+        old_h = (old.get("service") or {}).get("https") or {}
+        new_h = (new.get("service") or {}).get("https") or {}
+        if old_h == new_h:
+            return []
+        pidfile = os.path.join(self.base_dir, "https.pid")
+        try:
+            with open(pidfile, encoding="utf-8") as f:
+                old_pid = int(f.read().strip())
+            os.kill(old_pid, 15)
+        except (OSError, ValueError):
+            pass
+        try:
+            os.remove(pidfile)
+        except OSError:
+            pass
+        if not new_h or not new_h.get("port"):
+            return ["https: stopped"] if old_h else []
+        key = new_h.get("api-key")
+        if not key:
+            return ["https: api-key is required; server not started"]
+        bind = new_h.get("listen-address") or "127.0.0.1"
+        port = new_h["port"]
+        store = os.path.join(self.base_dir, "running.json")
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "vyoscli.api",
+             "--bind", str(bind), "--port", str(port),
+             "--key", str(key), "--store", store],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, start_new_session=True)
+        time.sleep(0.3)
+        if proc.poll() is not None:
+            return ["https: API failed to start (check python3)"]
+        with open(pidfile, "w", encoding="utf-8") as f:
+            f.write(str(proc.pid))
+        os.chmod(pidfile, 0o600)
+        return [f"https: read-only API on {bind}:{port}"]
 
     def _apply_ntp(self, old, new):
         old_ntp = (old.get("service") or {}).get("ntp") or {}

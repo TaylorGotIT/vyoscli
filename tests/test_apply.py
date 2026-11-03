@@ -410,6 +410,30 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn("match ip address prefix-list PL", text)
         self.assertIn("set local-preference 200", text)
 
+    def test_https_api_starts_with_key(self):
+        fake = mock.Mock()
+        fake.pid = 4242
+        fake.poll.return_value = None
+        with mock.patch.object(config_mod.subprocess, "Popen",
+                               return_value=fake) as popen:
+            cfg(self.cli,
+                "set service https port 18443",
+                "set service https listen-address 127.0.0.1",
+                "set service https api-key secret")
+            self.commit()
+        self.assertTrue(os.path.exists(
+            os.path.join(self.cli.store.base_dir, "https.pid")))
+        argv = popen.call_args[0][0]
+        self.assertIn("vyoscli.api", argv)
+        self.assertIn("18443", argv)
+        self.assertIn("secret", argv)
+
+    def test_https_requires_api_key(self):
+        with mock.patch.object(config_mod.subprocess, "Popen") as popen:
+            cfg(self.cli, "set service https port 18443")
+            self.commit()
+        popen.assert_not_called()
+
     def test_router_advert_maps_to_odhcpd(self):
         cfg(self.cli,
             "set service router-advert interface lan managed-flag true",
