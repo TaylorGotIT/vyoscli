@@ -410,6 +410,29 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn("match ip address prefix-list PL", text)
         self.assertIn("set local-preference 200", text)
 
+    def test_vti_and_geneve_create_links(self):
+        cfg(self.cli,
+            "set interfaces vti vti0 local-ip 192.0.2.1",
+            "set interfaces vti vti0 remote 192.0.2.2",
+            "set interfaces vti vti0 key 42",
+            "set interfaces vti vti0 address 10.99.0.1/30",
+            "set interfaces geneve gnv0 remote 192.0.2.3",
+            "set interfaces geneve gnv0 vni 42",
+            "set interfaces geneve gnv0 address 10.98.0.1/24")
+        self.commit()
+        calls = self.fake.calls
+        self.assertIn(["ip", "link", "add", "vti0", "type", "vti",
+                       "local", "192.0.2.1", "remote", "192.0.2.2",
+                       "key", "42"], calls)
+        self.assertIn(["ip", "addr", "replace", "10.99.0.1/30",
+                       "dev", "vti0"], calls)
+        self.assertIn(["ip", "link", "add", "gnv0", "type", "geneve",
+                       "id", "42", "remote", "192.0.2.3"], calls)
+        self.assertIn(["ip", "link", "set", "gnv0", "up"], calls)
+        cfg(self.cli, "delete interfaces vti vti0")
+        self.commit()
+        self.assertIn(["ip", "link", "del", "vti0"], self.fake.calls)
+
     def test_haproxy_renders_and_applies(self):
         from vyoscli.config import render_haproxy_cfg
         text = render_haproxy_cfg({

@@ -162,6 +162,12 @@
 | `interfaces ethernet <ifname> vif <vlan-id> address` | IPv4 address/prefix | `interfaces ethernet <ifname> vif <vlan-id> address 192.0.2.1/24` |
 | `interfaces ethernet <ifname> vif <vlan-id> description` | Interface description | `interfaces ethernet <ifname> vif <vlan-id> description text` |
 | `interfaces ethernet <ifname> vrf` | VRF instance name | `interfaces ethernet <ifname> vrf text` |
+| `interfaces geneve <name> address` | Inner IPv4/prefix | `interfaces geneve <name> address 192.0.2.1/24` |
+| `interfaces geneve <name> description` | Description | `interfaces geneve <name> description text` |
+| `interfaces geneve <name> disable` | Administratively disable | `interfaces geneve <name> disable true` |
+| `interfaces geneve <name> mtu` | MTU | `interfaces geneve <name> mtu 100` |
+| `interfaces geneve <name> remote` | Remote VTEP | `interfaces geneve <name> remote 192.0.2.1` |
+| `interfaces geneve <name> vni` | VXLAN/Geneve network identifier | `interfaces geneve <name> vni 100` |
 | `interfaces lan device` | Physical NIC for lan (e.g. eth0) | `interfaces lan device text` |
 | `interfaces loopback <lo> address` | IP address/prefix | `interfaces loopback <lo> address 192.0.2.1/24` |
 | `interfaces loopback <lo> description` | Description | `interfaces loopback <lo> description text` |
@@ -199,6 +205,13 @@
 | `interfaces tunnel <tun-name> source-address` | Source outer IP | `interfaces tunnel <tun-name> source-address 192.0.2.1` |
 | `interfaces tunnel <tun-name> source-interface` | Source interface | `interfaces tunnel <tun-name> source-interface text` |
 | `interfaces tunnel <tun-name> vrf` | VRF instance name | `interfaces tunnel <tun-name> vrf text` |
+| `interfaces vti <name> address` | Inner IPv4/prefix | `interfaces vti <name> address 192.0.2.1/24` |
+| `interfaces vti <name> description` | Description | `interfaces vti <name> description text` |
+| `interfaces vti <name> disable` | Administratively disable | `interfaces vti <name> disable true` |
+| `interfaces vti <name> key` | VTI key | `interfaces vti <name> key 100` |
+| `interfaces vti <name> local-ip` | Local outer address | `interfaces vti <name> local-ip 192.0.2.1` |
+| `interfaces vti <name> mtu` | MTU | `interfaces vti <name> mtu 100` |
+| `interfaces vti <name> remote` | Remote outer address | `interfaces vti <name> remote 192.0.2.1` |
 | `interfaces vxlan <vx-name> address` | Inner tunnel IPv4/prefix | `interfaces vxlan <vx-name> address 192.0.2.1/24` |
 | `interfaces vxlan <vx-name> local-ip` | Local outer IPv4 | `interfaces vxlan <vx-name> local-ip 192.0.2.1` |
 | `interfaces vxlan <vx-name> remote-ip` | Remote outer IPv4 | `interfaces vxlan <vx-name> remote-ip 192.0.2.1` |

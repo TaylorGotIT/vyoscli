@@ -14,7 +14,7 @@
 
 | 顶层 | VyOS 1.5 内容 | vyoscli 现状 | 结论 |
 |---|---|---|---|
-| `interfaces` | 19 种接口 | 11 种（ethernet/bridge/wireguard/openvpn/tunnel/loopback/dummy/vxlan/wireless/lan/wan） | 🟡 缺 bonding、pppoe、macsec、geneve、vti、wwan 等 |
+| `interfaces` | 19 种接口 | 14 种（+pppoe/vti/geneve；vti/geneve 依赖内核模块） | 🟡 缺 bonding、macsec、wwan；vti/geneve 在测试镜像无模块 |
 | `firewall` | ipv4/ipv6/bridge/zone/group/global-options/flowtable | ipv4/ipv6 input/forward/output filter rule + group（nft 表 `vyos_fw`）；zone/forwarding/rule 保留 | 🟡 方向规则与 group 已可用，缺 named rule-set/flowtable/bridge，global-options 仅存 JSON |
 | `nat` | nat44 全量、nat64、nat66、cgnat | nat44 完整 + nat66（nft `vyos_nat66`） | 🟡 nat64/cgnat 需 Jool/SIIT，OpenWrt 无对应模块 |
 | `policy` | access-list/prefix-list/route/route-map/as-path/community/… | community-list、access-list、prefix-list、as-path-list；route-map 扩展了 prefix-list/as-path/metric/tag/next-hop/origin | 🟡 主体已补，缺 local-route/extcommunity/large-community |

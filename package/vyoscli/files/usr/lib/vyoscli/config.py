@@ -781,6 +781,7 @@ class ConfigStore:
             ("login", self._apply_login),
             ("interfaces", self._apply_interfaces),
             ("pppoe", self._apply_pppoe),
+            ("virtual-ifaces", self._apply_virtual_ifaces),
             ("vrrp", self._apply_vrrp),
             ("pki", self._apply_pki),
             ("qos", self._apply_qos),
@@ -1180,6 +1181,66 @@ class ConfigStore:
             notes.append(f"vrrp: {len(groups)} group(s)")
         except Exception as e:  # noqa: BLE001
             notes.append(f"vrrp apply failed: {e}")
+        return notes
+
+    def _apply_virtual_ifaces(self, old, new):
+        old_if = old.get("interfaces") or {}
+        new_if = new.get("interfaces") or {}
+        notes: List[str] = []
+
+        def run(args, ignore=True):
+            try:
+                proc = subprocess.run(["ip"] + args, capture_output=True,
+                                      text=True, timeout=10)
+            except (OSError, subprocess.SubprocessError) as e:
+                return type("P", (), {"returncode": 1, "stderr": str(e)})()
+            return proc
+
+        changed = False
+        for kind in ("vti", "geneve"):
+            old_map = old_if.get(kind) or {}
+            new_map = new_if.get(kind) or {}
+            if old_map == new_map:
+                continue
+            changed = True
+            for gone in set(old_map) - set(new_map):
+                run(["link", "del", str(gone)])
+                notes.append(f"{kind}: removed {gone}")
+            for name, cfg in new_map.items():
+                if not isinstance(cfg, dict):
+                    continue
+                run(["link", "del", str(name)])
+                if kind == "vti":
+                    if not (cfg.get("local-ip") and cfg.get("remote")):
+                        notes.append(f"vti: {name} needs local-ip and remote")
+                        continue
+                    args = ["link", "add", str(name), "type", "vti",
+                            "local", str(cfg["local-ip"]),
+                            "remote", str(cfg["remote"])]
+                    if cfg.get("key"):
+                        args += ["key", str(cfg["key"])]
+                else:
+                    if not (cfg.get("remote") and cfg.get("vni")):
+                        notes.append(f"geneve: {name} needs remote and vni")
+                        continue
+                    args = ["link", "add", str(name), "type", "geneve",
+                            "id", str(cfg["vni"]),
+                            "remote", str(cfg["remote"])]
+                proc = run(args, ignore=False)
+                if proc is None or proc.returncode != 0:
+                    detail = (getattr(proc, "stderr", "") or "").strip()[:120]
+                    notes.append(f"{kind}: {name} create failed: {detail}")
+                    continue
+                if cfg.get("mtu"):
+                    run(["link", "set", str(name), "mtu", str(cfg["mtu"])])
+                if cfg.get("address"):
+                    run(["addr", "replace", str(cfg["address"]),
+                         "dev", str(name)])
+                run(["link", "set", str(name),
+                     "down" if cfg.get("disable") else "up"])
+                notes.append(f"{kind}: configured {name}")
+        if changed:
+            notes.append("virtual interfaces updated")
         return notes
 
     def _apply_pppoe(self, old, new):
