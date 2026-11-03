@@ -410,6 +410,27 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn("match ip address prefix-list PL", text)
         self.assertIn("set local-preference 200", text)
 
+    def test_service_ntp_and_lldp(self):
+        cfg(self.cli,
+            "set service ntp server pool.ntp.org",
+            "set service ntp server time.cloudflare.com",
+            "set service lldp interface eth0",
+            "set service lldp interface eth1",
+            "set service lldp description edge")
+        self.commit()
+        calls = self.fake.uci_calls()
+        self.assertIn(["uci", "add_list", "system.ntp.server=pool.ntp.org"],
+                      calls)
+        self.assertIn(["uci", "add_list",
+                       "system.ntp.server=time.cloudflare.com"], calls)
+        self.assertIn(["uci", "add_list", "lldpd.config.interface=eth0"], calls)
+        self.assertIn(["uci", "add_list", "lldpd.config.interface=eth1"], calls)
+        self.assertIn(["uci", "set",
+                       "lldpd.config.lldp_description=edge"], calls)
+        self.assertIn(["uci", "commit", "lldpd"], calls)
+        self.assertIn(["/etc/init.d/sysntpd", "restart"], self.fake.calls)
+        self.assertIn(["/etc/init.d/lldpd", "restart"], self.fake.calls)
+
     def test_pppoe_maps_to_netifd(self):
         cfg(self.cli,
             "set interfaces pppoe pppoe0 authentication username user@isp",

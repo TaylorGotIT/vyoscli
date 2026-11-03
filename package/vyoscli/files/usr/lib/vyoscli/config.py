@@ -110,6 +110,8 @@ DEFAULT_RUNNING: Dict[str, Any] = {
         "community-list": {},  # num -> {rule: {regex, description, action}},
     },
     "service": {
+        "ntp": {"server": []},
+        "lldp": {"interface": []},
         "smartdns": {
             "enabled": False,
             "port": 5333,
@@ -624,6 +626,8 @@ class ConfigStore:
             ("hostname", self._apply_hostname),
             ("system-meta", self._apply_system_meta),
             ("system-extra", self._apply_system_extra),
+            ("ntp", self._apply_ntp),
+            ("lldp", self._apply_lldp),
             ("name-servers", self._apply_name_servers),
             ("system-dns", self._apply_system_dns),
             ("login", self._apply_login),
@@ -1171,6 +1175,59 @@ class ConfigStore:
             notes.append("netifd reloaded")
         except Exception as e:  # noqa: BLE001
             notes.append(f"static route apply failed: {e}")
+        return notes
+
+    def _apply_ntp(self, old, new):
+        old_ntp = (old.get("service") or {}).get("ntp") or {}
+        new_ntp = (new.get("service") or {}).get("ntp") or {}
+        if old_ntp == new_ntp:
+            return []
+        servers = _as_list(new_ntp.get("server"))
+        if not servers:
+            return []
+        notes: List[str] = []
+        try:
+            self._uci("set", "system.ntp.enabled=1")
+            try:
+                self._uci("delete", "system.ntp.server")
+            except subprocess.CalledProcessError:
+                pass
+            for server in servers:
+                self._uci("add_list", f"system.ntp.server={server}")
+            self._uci("commit", "system")
+            subprocess.run(["/etc/init.d/sysntpd", "restart"],
+                           capture_output=True, text=True, timeout=15)
+            notes.append(f"ntp: {len(servers)} server(s)")
+            if new_ntp.get("listen-address"):
+                notes.append("ntp: listen-address not supported by sysntpd")
+        except Exception as e:  # noqa: BLE001
+            notes.append(f"ntp apply failed: {e}")
+        return notes
+
+    def _apply_lldp(self, old, new):
+        old_l = (old.get("service") or {}).get("lldp") or {}
+        new_l = (new.get("service") or {}).get("lldp") or {}
+        if old_l == new_l:
+            return []
+        notes: List[str] = []
+        try:
+            self._uci("set", "lldpd.config=config")
+            try:
+                self._uci("delete", "lldpd.config.interface")
+            except subprocess.CalledProcessError:
+                pass
+            for ifname in _as_list(new_l.get("interface")):
+                self._uci("add_list", f"lldpd.config.interface={ifname}")
+            if new_l.get("description"):
+                self._uci("set",
+                          f"lldpd.config.lldp_description={new_l['description']}")
+            self._uci("commit", "lldpd")
+            subprocess.run(["/etc/init.d/lldpd", "restart"],
+                           capture_output=True, text=True, timeout=15)
+            notes.append(f"lldp: {len(_as_list(new_l.get('interface')))} "
+                         "interface(s)")
+        except Exception as e:  # noqa: BLE001
+            notes.append(f"lldp apply failed: {e}")
         return notes
 
     def _apply_system_extra(self, old, new):

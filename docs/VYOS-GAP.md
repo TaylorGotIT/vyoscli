@@ -121,10 +121,10 @@ passive/default-information）、`rip`（version/network/default-information）�
 | `service ssh` | ✅ | dropbear |
 | `service dhcp-server` | ✅ | dnsmasq |
 | `service dns`（forwarding） | 🟡 | 用 dnsmasq/smartdns 代替，未按 VyOS 结构 |
-| `service ntp` | 🟡 | 目前挂在 `system ntp` |
+| `service ntp` | ✅ | 写入 `system.ntp.server` 并重启 sysntpd |
 | `service https`（API） | ❌ | 无 REST/GraphQL API |
 | `service snmp` | ❌ | snmpd 可用 |
-| `service lldp` | ❌ | lldpd 可用 |
+| `service lldp` | ✅ | UCI lldpd interface/description，已真机验证 |
 | `service dhcp-relay` | ❌ | |
 | `service router-advert` | ❌ | odhcpd/radvd 可用 |
 | `service console-server` | ✅ | 已验证 per-device dropbear |

@@ -337,6 +337,11 @@
 | `service kcp <tunnel> mode` | c/client or s/server | `service kcp <tunnel> mode c` |
 | `service kcp <tunnel> remote-ip` | Remote IP | `service kcp <tunnel> remote-ip 192.0.2.1` |
 | `service kcp <tunnel> remote-port` | Remote port | `service kcp <tunnel> remote-port 8080` |
+| `service lldp description` | Description sent in LLDP frames | `service lldp description text` |
+| `service lldp interface` | Interface to advertise on | `service lldp interface text` |
+| `service lldp snmp` | Enable the SNMP subagent | `service lldp snmp true` |
+| `service ntp listen-address` | Bind address (unsupported by sysntpd) | `service ntp listen-address 192.0.2.1` |
+| `service ntp server` | NTP server hostname or address | `service ntp server ntp.aliyun.com` |
 | `service smartdns address <domain> ip` | Answer IP | `service smartdns address <domain> ip 192.0.2.1` |
 | `service smartdns disable` | Disable smartdns | `service smartdns disable true` |
 | `service smartdns domain-rule <name> domain-set` | Which domain-set to match | `service smartdns domain-rule <name> domain-set text` |
