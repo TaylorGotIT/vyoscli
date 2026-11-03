@@ -42,7 +42,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 变更 | 说明 |
 |---|---|
 | `GUIDE.md` → `docs/GUIDE.md`，`REQUIRED_PACKAGES.md` → `docs/DEPENDENCIES.md` | 文档集中到 `docs/` |
-| 新增 `tests/`（6 个文件、105 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
+| 新增 `tests/`（6 个文件、106 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
 | 新增 `.gitignore` | 忽略 `__pycache__`、`*.ipk`、`.audit/` 等 |
 | `git rm --cached package/vyoscli.zip` | 陈旧构建产物，已从仓库移除 |
 | `Makefile` 安装改用 `$(wildcard .../*.py)` | 以后加模块不用再改 Makefile |
@@ -122,6 +122,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 68 | 缺 NetFlow 流量统计 | 新增 `system flow-accounting`（interface 列表 + netflow server），每个接口生成一个 softflowd UCI 实例（host_port/export_version/pid_file），重启 softflowd；sFlow 提示 softflowd 不支持。真机验证 vyos_fa_0 生成、进程带 `-i br-lan -n 127.0.0.1:2055` 运行、删除后进程消失 | `config_tree.py` / `config.py:_apply_flow_accounting` |
 | 69 | `config_tree.py` 是"一次性生成"的数据，注释却写着勿手改，源缺失 | 把树数据移到 authored 源 `schema/config-tree.json`，新增 `scripts/build-config-tree.py`（校验重复名/类型/dyn 模板/type+children 冲突并生成 `config_tree.py`）；`check-generated.sh` 同时校验两件生成物，新增 `tests/test_tree_source.py` 校验树与源一致 | `schema/config-tree.json` / `scripts/build-config-tree.py` |
 | 70 | API 只有明文 HTTP；单行 PEM 也不是合法证书格式 | `service https` 新增 `certificate <pki 名称>`，`api.py` 支持 `--cert/--tls-key` 并包 SSL socket；pki 写文件时把单行 PEM 按 64 列换行（`_format_pem`）。真机验证 HTTPS 200/鉴权、端口关闭、证书文件清理。另：bonding 内核无 `bonding.ko`，`ip link add type bond` 报 Unknown device type，记录为不可行 | `api.py` / `config.py:_apply_https` / `_format_pem` |
+| 71 | 缺 OpenConnect 服务端 | 新增 `vpn openconnect`（port/network/max-clients/dpd/user），映射到 OpenWrt ocserv UCI（enable/port/auth=plain/ipaddr/netmask + ocservusers），重启/停止 ocserv；真机验证 TLSv1.3 握手、监听 18443、删除后进程与端口清理 | `schema/config-tree.json` / `config.py:_apply_openconnect` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示

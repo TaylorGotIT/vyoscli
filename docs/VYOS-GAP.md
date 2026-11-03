@@ -21,7 +21,7 @@
 | `protocols` | 静态、BGP、OSPF、ISIS、RIP、BFD、MPLS、SR、PIM… | static、bgp、ospf、rip、bfd、route-map | 🟡 BGP/OSPF/RIP/BFD 已可用，缺 ISIS/MPLS/SR/PIM |
 | `service` | 22 类服务 | 10 类（含 OpenWrt 特有：sqm/adguard/smartdns/kcp） | 🟡 缺 NTP/DNS/HTTPS API/SNMP/LLDP/DHCP-relay 等 |
 | `system` | 21 类 | 14 类（+flow-accounting） | 🟡 flow-accounting/netflow 已落地；缺 task-scheduler/console/ip/ipv6/updates 等 |
-| `vpn` | IPsec、L2TP、SSTP、OpenConnect、PPTP、DMVPN | IPsec 子集 | 🟡 缺大部分 |
+| `vpn` | IPsec、L2TP、SSTP、OpenConnect、PPTP、DMVPN | IPsec 子集 + OpenConnect(ocserv) | 🟡 OpenConnect 已落地；L2TP/SSTP 无服务端包 |
 | `high-availability` | VRRP、sync-group、virtual-server | VRRP group（interface/vrid/address/priority/preempt/unicast）+ sync-group | 🟡 VRRP 已可用，virtual-server 未做 |
 | `load-balancing` | WAN 负载均衡、HAProxy | HAProxy frontend/backend/server | 🟡 HAProxy 已可用，WAN 多线负载未做 |
 | `pki` | CA/证书/DH/ACME、generate/import | ca/certificate/key-pair/dh 存储到 `/etc/vyoscli/pki` | 🟡 存储已可用，缺 ACME 与 generate/import 操作命令 |
@@ -157,8 +157,8 @@ VyOS 1.5：ipsec（ike/esp/site-to-site/remote-access/vti）、l2tp、sstp、
 openconnect、pptp、dmvpn、rsa-keys。
 
 我们：ipsec ike-group/esp-group/site-to-site peer/tunnel/remote-access，
-且证书模式、VTI、NAT 穿透参数不完整；L2TP/SSTP/OpenConnect 全缺。
-OpenWrt 上 strongSwan、xl2tpd、openconnect、pptp 都有包，可按需补。
+以及 `vpn openconnect`（ocserv：端口/地址池/用户，UCI 驱动，TLSv1.3 已验证）。
+L2TP/SSTP 服务端在 OpenWrt 上没有 accel-ppp/SSTP server 包，标记不可行。
 
 ### 8. 完全缺失的顶层
 

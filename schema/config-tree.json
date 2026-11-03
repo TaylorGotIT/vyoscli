@@ -3289,6 +3289,50 @@
       ]
      }
     ]
+   },
+   {
+    "name": "openconnect",
+    "help": "OpenConnect (ocserv) VPN server",
+    "children": [
+     {
+      "name": "port",
+      "help": "TLS port (default 4443)",
+      "type": "port"
+     },
+     {
+      "name": "network",
+      "help": "Client address pool (a.b.c.d/nn)",
+      "type": "ipv4net"
+     },
+     {
+      "name": "max-clients",
+      "help": "Maximum clients",
+      "type": "int"
+     },
+     {
+      "name": "dpd",
+      "help": "Dead peer detection (s)",
+      "type": "int"
+     },
+     {
+      "name": "user",
+      "help": "VPN user",
+      "dyn": true,
+      "tpl_help": "Username",
+      "children": [
+       {
+        "name": "password",
+        "help": "Password",
+        "type": "str"
+       },
+       {
+        "name": "group",
+        "help": "Group",
+        "type": "str"
+       }
+      ]
+     }
+    ]
    }
   ]
  },

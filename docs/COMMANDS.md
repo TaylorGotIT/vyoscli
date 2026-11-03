@@ -579,6 +579,12 @@
 | `vpn ipsec site-to-site peer <ip> secret` | PSK secret | `vpn ipsec site-to-site peer <ip> secret text` |
 | `vpn ipsec site-to-site peer <ip> tunnel <tun-name> local-prefix` | Local subnet | `vpn ipsec site-to-site peer <ip> tunnel <tun-name> local-prefix 203.0.113.0/24` |
 | `vpn ipsec site-to-site peer <ip> tunnel <tun-name> remote-prefix` | Remote subnet | `vpn ipsec site-to-site peer <ip> tunnel <tun-name> remote-prefix 203.0.113.0/24` |
+| `vpn openconnect dpd` | Dead peer detection (s) | `vpn openconnect dpd 100` |
+| `vpn openconnect max-clients` | Maximum clients | `vpn openconnect max-clients 100` |
+| `vpn openconnect network` | Client address pool (a.b.c.d/nn) | `vpn openconnect network 192.0.2.1/24` |
+| `vpn openconnect port` | TLS port (default 4443) | `vpn openconnect port 8080` |
+| `vpn openconnect user <username> group` | Group | `vpn openconnect user <username> group text` |
+| `vpn openconnect user <username> password` | Password | `vpn openconnect user <username> password text` |
 
 ## set vrf
 

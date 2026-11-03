@@ -410,6 +410,29 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn("match ip address prefix-list PL", text)
         self.assertIn("set local-preference 200", text)
 
+    def test_openconnect_configures_ocserv(self):
+        cfg(self.cli,
+            "set vpn openconnect port 18443",
+            "set vpn openconnect network 10.99.0.0/24",
+            "set vpn openconnect max-clients 8",
+            "set vpn openconnect user demo password secret")
+        self.commit()
+        calls = self.fake.uci_calls()
+        self.assertIn(["uci", "set", "ocserv.config.enable=1"], calls)
+        self.assertIn(["uci", "set", "ocserv.config.port=18443"], calls)
+        self.assertIn(["uci", "set", "ocserv.config.auth=plain"], calls)
+        self.assertIn(["uci", "set", "ocserv.config.ipaddr=10.99.0.0"], calls)
+        self.assertIn(["uci", "set", "ocserv.config.netmask=255.255.255.0"],
+                      calls)
+        self.assertIn(["uci", "set", "ocserv.vyos_oc_demo=ocservusers"], calls)
+        self.assertIn(["uci", "set", "ocserv.vyos_oc_demo.password=secret"],
+                      calls)
+        self.assertIn(["/etc/init.d/ocserv", "restart"], self.fake.calls)
+        cfg(self.cli, "delete vpn openconnect")
+        self.commit()
+        self.assertIn(["uci", "set", "ocserv.config.enable=0"],
+                      self.fake.uci_calls())
+
     def test_flow_accounting_starts_softflowd(self):
         cfg(self.cli,
             "set system flow-accounting interface br-lan",

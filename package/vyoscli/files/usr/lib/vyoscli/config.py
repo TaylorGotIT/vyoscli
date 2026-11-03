@@ -798,6 +798,7 @@ class ConfigStore:
             ("pppoe", self._apply_pppoe),
             ("virtual-ifaces", self._apply_virtual_ifaces),
             ("vrrp", self._apply_vrrp),
+            ("openconnect", self._apply_openconnect),
             ("pki", self._apply_pki),
             ("https", self._apply_https),
             ("flow-accounting", self._apply_flow_accounting),
@@ -1162,6 +1163,63 @@ class ConfigStore:
                         pass
         if written:
             notes.append(f"pki: wrote {written} file(s) under {base}")
+        return notes
+
+    def _apply_openconnect(self, old, new):
+        old_v = (old.get("vpn") or {}).get("openconnect") or {}
+        new_v = (new.get("vpn") or {}).get("openconnect") or {}
+        if old_v == new_v:
+            return []
+        notes: List[str] = []
+        try:
+            out = self._uci("show", "ocserv").stdout
+            for line in out.splitlines():
+                if line.startswith("ocserv.vyos_oc_"):
+                    sec = line.split(".")[1].split("=")[0]
+                    try:
+                        self._uci("delete", f"ocserv.{sec}")
+                    except subprocess.CalledProcessError:
+                        pass
+            if not new_v:
+                self._uci("set", "ocserv.config.enable=0")
+                self._uci("commit", "ocserv")
+                subprocess.run(["/etc/init.d/ocserv", "stop"],
+                               capture_output=True, text=True, timeout=30)
+                return ["openconnect: disabled"]
+            self._uci("set", "ocserv.config=ocserv")
+            self._uci("set", "ocserv.config.enable=1")
+            self._uci("set", f"ocserv.config.port={new_v.get('port') or 4443}")
+            self._uci("set", "ocserv.config.auth=plain")
+            network = new_v.get("network")
+            if network:
+                net = ipaddress.ip_network(str(network), strict=False)
+                self._uci("set", f"ocserv.config.ipaddr={net.network_address}")
+                self._uci("set", f"ocserv.config.netmask={net.netmask}")
+            if new_v.get("max-clients"):
+                self._uci("set",
+                          f"ocserv.config.max_clients={new_v['max-clients']}")
+            if new_v.get("dpd"):
+                self._uci("set", f"ocserv.config.dpd={new_v['dpd']}")
+            users = new_v.get("user") or {}
+            for username, cfg in users.items():
+                if not isinstance(cfg, dict):
+                    continue
+                sec = "vyos_oc_" + re.sub(r"[^A-Za-z0-9_]", "_", str(username))
+                self._uci("set", f"ocserv.{sec}=ocservusers")
+                self._uci("set", f"ocserv.{sec}.name={username}")
+                self._uci("set", f"ocserv.{sec}.group={cfg.get('group') or '*'}")
+                self._uci("set", f"ocserv.{sec}.password={cfg.get('password') or ''}")
+            self._uci("commit", "ocserv")
+            try:
+                os.chmod("/etc/config/ocserv", 0o600)
+            except OSError:
+                pass
+            subprocess.run(["/etc/init.d/ocserv", "restart"],
+                           capture_output=True, text=True, timeout=30)
+            notes.append(f"openconnect: port {new_v.get('port') or 4443}, "
+                         f"{len(users)} user(s)")
+        except Exception as e:  # noqa: BLE001
+            notes.append(f"openconnect apply failed: {e}")
         return notes
 
     def _apply_vrrp(self, old, new):
