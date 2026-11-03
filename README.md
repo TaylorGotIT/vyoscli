@@ -26,7 +26,8 @@ package/vyoscli/
 scripts/
 ├── build-ipk.sh                  # SDK 内一键编译
 ├── make-ipk.py                   # 无 SDK 快速打包（设备测试）
-└── gen-command-reference.py      # 从 config_tree.py 生成 docs/COMMANDS.md
+├── gen-command-reference.py      # 从 config_tree.py 生成 docs/COMMANDS.md
+└── check-generated.sh            # 校验生成文档是否最新（CI 用）
 tests/                            # unittest（CLI / apply / schema，无第三方依赖）
 docs/
 ├── COMMANDS.md                   # 完整命令参考（自动生成，223 条）
@@ -228,6 +229,22 @@ python3 -m unittest discover -s tests -v
 
 生成配置树/命令参考后记得跑一遍测试；`docs/COMMANDS.md` 可用
 `python3 scripts/gen-command-reference.py` 重新生成。
+
+### CI
+
+`.github/workflows/ci.yml` 在每次 push / PR 上执行：
+
+1. 全量单测；
+2. `./scripts/check-generated.sh`——重新生成 `docs/COMMANDS.md`，若与仓库内容有差异则失败；
+3. `python3 scripts/make-ipk.py --minimal-deps` 做一次无 SDK 的打包冒烟。
+
+本地等价检查：
+
+```bash
+python3 -m unittest discover -s tests
+./scripts/check-generated.sh
+python3 scripts/make-ipk.py --minimal-deps
+```
 
 ## 已知限制
 

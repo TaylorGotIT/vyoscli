@@ -101,6 +101,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 47 | `commands.py` 里约 700 行手写配置树，字段/help 三份冗余 | 整棵配置树改为生成数据：`config_tree.py`（353 个节点、49 个动态模板，JSON 内嵌）+ `schema.build_tree()` 构建；`commands.py` 从 1120 行降到 329 行。先用脚本导出旧树做基线，重建后 354 条记录逐项一致；真机抽查 DHCP/route-map/ipsec/wireguard/bgp/community-list 深路径均正常。动态节点 Tab 候选改为通用 `<name>` 提示（不再列现有实例名） | `config_tree.py` / `schema.py` / `commands.py` |
 | 48 | 全量生成后动态节点的 Tab 候选退化为 `<name>` | `build_tree(store=...)` 把动态节点的配置路径传入，候选改为从 `candidate` 取现有实例名（`eth0/eth1/br9/…`）；节点只在其祖先路径可解析时生效。另修合成节点与动态候选重复（walk 缓存的 `_synthetic` 节点不再出现在补全里） | `schema.py:build_tree` / `cli.py` / `tree.py` |
 | 49 | 命令清单靠手写，和 353 节点配置树容易漂移 | 新增 `scripts/gen-command-reference.py`，从 `config_tree.py` 生成 `docs/COMMANDS.md`（223 条命令，每条含说明与可运行示例）；README 增加操作模式/配置模式/配置树速览与示例，并加测试校验参考文档与叶子数量一致 | `scripts/gen-command-reference.py` / `docs/COMMANDS.md` / `README.md` |
+| 50 | 缺少自动化：单测/文档一致性/打包都靠手工 | 新增 `.github/workflows/ci.yml`（单测 + `check-generated.sh` 校验 `docs/COMMANDS.md` + 无 SDK 打包）与本地脚本 `scripts/check-generated.sh`；README 增加 CI 说明 | `.github/workflows/ci.yml` / `scripts/check-generated.sh` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示
