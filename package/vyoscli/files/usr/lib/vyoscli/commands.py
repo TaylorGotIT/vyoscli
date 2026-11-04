@@ -207,15 +207,13 @@ def build_tree(store: Any) -> CommandTree:
     # show version / interface
     tree.op("show version", help="Show system version", action=_op_show_version)
     tree.op("show dependencies", help="Check required packages", action=_op_show_dependencies)
-    tree.op("show interface", help="Show interface summary",
+    tree.op("show interfaces", help="Show interface summary",
             action=_op_show_interfaces)
     # show interface ethernet <ifname>
     from .op_show import _op_show_interface_detail
-    show_if = tree.op_root.children["show"].children["interface"]
+    show_if = tree.op_root.children["show"].children["interfaces"]
     eth_node = Node(name="ethernet", help="Show ethernet interface detail",
-                    dynamic=lambda: _list_ethernet_ifaces())
-    eth_node.add(Node(name="<ifname>", help="Interface name",
-                      value_type="string", action=_op_show_interface_detail))
+                    value_type="string", action=_op_show_interface_detail)
     show_if.add(eth_node)
     tree.op("show history", help="Show command history", action=_op_show_history)
     tree.op("show log", help="Show system log (logread)", action=_op_show_log)

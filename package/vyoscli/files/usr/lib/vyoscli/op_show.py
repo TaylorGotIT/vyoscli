@@ -119,30 +119,33 @@ def _op_show_configuration_json(ctx: Any, value: Any) -> str:
 
 def _op_show_interfaces(ctx: Any, value: Any) -> str:
     import subprocess
-    eth_cfg = ctx.store.get(["interfaces", "ethernet"], candidate=False) or {}
-    br_cfg = ctx.store.get(["interfaces", "bridge"], candidate=False) or {}
-    desc_map = {}
-    for cfg in (eth_cfg, br_cfg):
-        for name, c in cfg.items():
-            if isinstance(c, dict) and c.get("description"):
-                desc_map[name] = c["description"]
 
-    # get link info (mac, mtu, state)
+    # Configured interfaces come from the running config; kernel-only
+    # pseudo devices (gre0, gretap0, dummy0, tunl0, ...) must not show up.
+    ifaces = ctx.store.get(["interfaces"], candidate=False) or {}
+    configured = {}
+    for items in ifaces.values():
+        if not isinstance(items, dict):
+            continue
+        for name, cfg in items.items():
+            if not isinstance(cfg, dict):
+                continue
+            addrs = cfg.get("address")
+            if isinstance(addrs, str):
+                addrs = [addrs]
+            configured[name] = (cfg.get("description") or "", addrs or [])
+
     try:
-        r = subprocess.run(["ip", "-o", "link"], capture_output=True, text=True, timeout=5)
-        link_out = r.stdout
+        link_out = subprocess.run(["ip", "-o", "link"], capture_output=True,
+                                  text=True, timeout=5).stdout
     except Exception:
         link_out = ""
-
-    # parse link info
     link_map = {}
     for line in link_out.splitlines():
         parts = line.split()
         if len(parts) < 4:
             continue
-        iface = parts[1].rstrip(":")
-        # flags "<BROADCAST,MULTICAST,UP,LOWER_UP>" carry the admin state,
-        # the "state" token carries the link state.
+        iface = parts[1].rstrip(":").split("@", 1)[0]
         flags = ""
         if "<" in line and ">" in line:
             flags = line.split("<", 1)[1].split(">", 1)[0]
@@ -150,15 +153,13 @@ def _op_show_interfaces(ctx: Any, value: Any) -> str:
         oper = "D"
         for i, p in enumerate(parts):
             if p == "state" and i + 1 < len(parts):
-                oper = "u" if parts[i + 1] == "UP" else "D"
+                oper = "u" if parts[i + 1] in ("UP", "UNKNOWN") else "D"
                 break
-        # get mac (ether)
         mac = "--"
         for i, p in enumerate(parts):
             if p == "link/ether":
                 mac = parts[i + 1]
                 break
-        # get mtu
         mtu = "1500"
         for i, p in enumerate(parts):
             if p == "mtu":
@@ -166,62 +167,67 @@ def _op_show_interfaces(ctx: Any, value: Any) -> str:
                 break
         link_map[iface] = (mac, mtu, f"{admin}/{oper}")
 
-    # get addr info
     try:
-        r = subprocess.run(["ip", "-o", "addr"], capture_output=True, text=True, timeout=5)
-        addr_out = r.stdout
+        addr_out = subprocess.run(["ip", "-o", "addr"], capture_output=True,
+                                  text=True, timeout=5).stdout
     except Exception:
         addr_out = ""
-
-    # parse addr info
     addr_map = {}
     for line in addr_out.splitlines():
         parts = line.split()
         if len(parts) < 4:
             continue
-        iface = parts[1]
+        iface = parts[1].split("@", 1)[0]
         for i, p in enumerate(parts):
             if p in ("inet", "inet6"):
-                if iface not in addr_map:
-                    addr_map[iface] = []
-                addr_map[iface].append(parts[i + 1])
+                addr_map.setdefault(iface, []).append(parts[i + 1])
                 break
 
-    # build rows
+    kernel_noise = {
+        "gre0", "gretap0", "erspan0", "ip6gre0", "ip6gretap0", "ip6tnl0",
+        "sit0", "tunl0", "ip_vti0", "ip6_vti0", "dummy0", "teql0",
+        "ifb0", "ifb1", "nlmon0", "lo_unused",
+    }
+    physical_prefixes = ("eth", "br-", "wlan", "bat", "usb", "wwan", "ppp")
+
+    names = list(configured)
+    for name in link_map:
+        if name in configured or name in kernel_noise:
+            continue
+        if name == "lo" or name.startswith(physical_prefixes):
+            names.append(name)
+
     rows = []
-    for iface in link_map:
-        mac, mtu, state = link_map[iface]
-        addrs = addr_map.get(iface, [])
-        addr = addrs[0] if addrs else "--"
-        rows.append((iface, addr, mac, mtu, state, desc_map.get(iface, "")))
+    for name in names:
+        _mac, _mtu, state = link_map.get(name, ("--", "--", "D/D"))
+        addrs = addr_map.get(name) or configured.get(name, ("", []))[1]
+        addr = addrs[0] if addrs else "-"
+        desc = configured.get(name, ("", []))[0]
+        rows.append((name, addr, state, desc))
 
-    # sort: lo first, then eth, then others
-    rows.sort(key=lambda x: (0 if x[0] == "lo" else (1 if x[0].startswith("eth") else 2), x[0]))
+    rows.sort(key=lambda x: (
+        0 if x[0] == "lo" else
+        1 if x[0].startswith("eth") else
+        2 if x[0].startswith("br-") else 3,
+        x[0]))
 
-    # column widths
-    name_w = max(len(r[0]) for r in rows) if rows else 10
-    name_w = max(name_w, 10)
-    addr_w = max(len(r[1]) for r in rows) if rows else 15
-    addr_w = max(addr_w, 18)
-    mac_w = 17
-    mtu_w = 6
+    name_w = max([len(r[0]) for r in rows] + [len("Interface")])
+    addr_w = max([len(r[1]) for r in rows] + [len("IP Address")])
 
     lines = [
         "Codes: S - State, L - Link, u - Up, D - Down, A - Admin Down",
         "Interface".ljust(name_w + 2) +
         "IP Address".ljust(addr_w + 2) +
-        "MAC".ljust(mac_w + 2) +
-        "MTU".ljust(mtu_w + 2) +
-        "S/L    Description",
-        "-" * (name_w + addr_w + mac_w + mtu_w + 30),
+        "S/L".ljust(5) + "Description",
+        "---------".ljust(name_w + 2) +
+        "----------".ljust(addr_w + 2) +
+        "---".ljust(5) + "-----------",
     ]
-    for iface, addr, mac, mtu, state, desc in rows:
+    for iface, addr, state, desc in rows:
         lines.append(
             iface.ljust(name_w + 2) +
             addr.ljust(addr_w + 2) +
-            mac.ljust(mac_w + 2) +
-            mtu.ljust(mtu_w + 2) +
-            f"{state}   ".ljust(6) +
+            state.ljust(5) +
             desc
         )
     return "\n".join(lines)
