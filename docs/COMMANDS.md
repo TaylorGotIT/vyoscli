@@ -258,6 +258,11 @@
 | `load-balancing haproxy service <name> listen-address` | Bind address | `load-balancing haproxy service <name> listen-address 192.0.2.1` |
 | `load-balancing haproxy service <name> mode` | tcp \| http | `load-balancing haproxy service <name> mode text` |
 | `load-balancing haproxy service <name> port` | Bind port | `load-balancing haproxy service <name> port 8080` |
+| `load-balancing wan interface <name> track-ip` | Health-check address | `load-balancing wan interface <name> track-ip 192.0.2.1` |
+| `load-balancing wan interface <name> weight` | Load-balancing weight | `load-balancing wan interface <name> weight 100` |
+| `load-balancing wan rule <id> destination` | Destination prefix | `load-balancing wan rule <id> destination 192.0.2.1/24` |
+| `load-balancing wan rule <id> interface` | Preferred interface | `load-balancing wan rule <id> interface text` |
+| `load-balancing wan rule <id> source` | Source prefix | `load-balancing wan rule <id> source 192.0.2.1/24` |
 
 ## set nat
 

@@ -451,6 +451,15 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn(["uci", "delete", "softflowd.vyos_fa_0"],
                       self.fake.uci_calls())
 
+    def test_wan_lb_refuses_without_mwan3(self):
+        cfg(self.cli,
+            "set load-balancing wan interface eth1 weight 2",
+            "set load-balancing wan interface eth1 track-ip 1.1.1.1")
+        out = self.commit()
+        self.assertIn("mwan3 is not installed", out)
+        self.assertFalse(any(cmd and cmd[0] == "mwan3"
+                             for cmd in self.fake.calls))
+
     def test_dhcp_relay_writes_config(self):
         cfg(self.cli,
             "set service dhcp-relay server 192.0.2.10",

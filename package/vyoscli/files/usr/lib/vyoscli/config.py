@@ -808,6 +808,7 @@ class ConfigStore:
             ("flow-accounting", self._apply_flow_accounting),
             ("qos", self._apply_qos),
             ("haproxy", self._apply_haproxy),
+            ("wan-lb", self._apply_wan_lb),
             ("wireless", self._apply_wireless),
             ("interface-roles", self._apply_interface_roles),
             ("vrf", self._apply_vrf),
@@ -977,6 +978,71 @@ class ConfigStore:
             except subprocess.CalledProcessError:
                 pass
             notes.append(f"{ifname}: removed network.{ours}")
+
+    def _apply_wan_lb(self, old, new):
+        old_w = (old.get("load-balancing") or {}).get("wan") or {}
+        new_w = (new.get("load-balancing") or {}).get("wan") or {}
+        if old_w == new_w:
+            return []
+        if not os.path.exists("/etc/init.d/mwan3"):
+            return ["wan-lb: mwan3 is not installed; nothing applied"]
+        backup = os.path.join(self.base_dir, "backup", "mwan3.orig")
+        os.makedirs(os.path.dirname(backup), exist_ok=True)
+        if os.path.exists("/etc/config/mwan3") and not os.path.exists(backup):
+            shutil.copy2("/etc/config/mwan3", backup)
+        try:
+            out = self._uci("show", "mwan3").stdout
+            for line in out.splitlines():
+                if line.startswith("mwan3.vyos_wan_"):
+                    sec = line.split(".")[1].split("=")[0]
+                    try:
+                        self._uci("delete", f"mwan3.{sec}")
+                    except subprocess.CalledProcessError:
+                        pass
+            if not new_w:
+                if os.path.exists(backup):
+                    shutil.copy2(backup, "/etc/config/mwan3")
+                subprocess.run(["/etc/init.d/mwan3", "stop"],
+                               capture_output=True, text=True, timeout=20)
+                return ["wan-lb: stopped"]
+            interfaces = new_w.get("interface") or {}
+            members = []
+            for index, (ifname, cfg) in enumerate(sorted(interfaces.items())):
+                cfg = cfg if isinstance(cfg, dict) else {}
+                sec = "vyos_wan_if_" + re.sub(r"[^A-Za-z0-9_]", "_", str(ifname))
+                self._uci("set", f"mwan3.{sec}=interface")
+                self._uci("set", f"mwan3.{sec}.enabled=1")
+                self._uci("set", f"mwan3.{sec}.family=ipv4")
+                self._uci("set", f"mwan3.{sec}.track_ip="
+                          f"{cfg.get('track-ip') or '1.1.1.1'}")
+                self._uci("set", f"mwan3.{sec}.reliability=1")
+                self._uci("set", f"mwan3.{sec}.count=1")
+                self._uci("set", f"mwan3.{sec}.timeout=3")
+                self._uci("set", f"mwan3.{sec}.interval=5")
+                self._uci("set", f"mwan3.{sec}.down=3")
+                self._uci("set", f"mwan3.{sec}.up=5")
+                member = f"vyos_wan_m_{index}"
+                self._uci("set", f"mwan3.{member}=member")
+                self._uci("set", f"mwan3.{member}.interface={ifname}")
+                self._uci("set", f"mwan3.{member}.metric={index + 1}")
+                self._uci("set", f"mwan3.{member}.weight="
+                          f"{cfg.get('weight') or 1}")
+                members.append(member)
+            policy = "vyos_wan_policy"
+            self._uci("set", f"mwan3.{policy}=policy")
+            for member in members:
+                self._uci("add_list", f"mwan3.{policy}.use_member={member}")
+            rule = "vyos_wan_rule"
+            self._uci("set", f"mwan3.{rule}=rule")
+            self._uci("set", f"mwan3.{rule}.dest_ip=0.0.0.0/0")
+            self._uci("set", f"mwan3.{rule}.proto=all")
+            self._uci("set", f"mwan3.{rule}.use_policy={policy}")
+            self._uci("commit", "mwan3")
+            subprocess.run(["/etc/init.d/mwan3", "restart"],
+                           capture_output=True, text=True, timeout=30)
+            return [f"wan-lb: {len(members)} interface(s) via mwan3"]
+        except Exception as e:  # noqa: BLE001
+            return [f"wan-lb apply failed: {e}"]
 
     def _apply_haproxy(self, old, new):
         old_lb = (old.get("load-balancing") or {}).get("haproxy") or {}

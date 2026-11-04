@@ -4172,6 +4172,53 @@ TREE = json.loads(r'''[
 ]
 }
 ]
+},
+{
+"name": "wan",
+"help": "Multi-WAN load balancing (mwan3)",
+"children": [
+{
+"name": "interface",
+"help": "WAN interface",
+"dyn": true,
+"tpl_help": "Interface",
+"children": [
+{
+"name": "weight",
+"help": "Load-balancing weight",
+"type": "int"
+},
+{
+"name": "track-ip",
+"help": "Health-check address",
+"type": "ipv4"
+}
+]
+},
+{
+"name": "rule",
+"help": "Traffic rule",
+"dyn": true,
+"tpl_help": "Rule number",
+"children": [
+{
+"name": "source",
+"help": "Source prefix",
+"type": "ipv4net"
+},
+{
+"name": "destination",
+"help": "Destination prefix",
+"type": "ipv4net"
+},
+{
+"name": "interface",
+"help": "Preferred interface",
+"type": "str"
+}
+]
+}
+]
 }
 ]
 }
