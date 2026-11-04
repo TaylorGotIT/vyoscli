@@ -3428,6 +3428,50 @@ TREE = json.loads(r'''[
 ]
 }
 ]
+},
+{
+"name": "l2tp",
+"help": "L2TP server (xl2tpd LNS)",
+"children": [
+{
+"name": "port",
+"help": "UDP port (default 1701)",
+"type": "port"
+},
+{
+"name": "local-ip",
+"help": "Local tunnel address",
+"type": "ipv4"
+},
+{
+"name": "pool-start",
+"help": "Client pool start",
+"type": "ipv4"
+},
+{
+"name": "pool-end",
+"help": "Client pool end",
+"type": "ipv4"
+},
+{
+"name": "name-server",
+"help": "DNS pushed to clients",
+"type": "ipv4"
+},
+{
+"name": "user",
+"help": "L2TP user",
+"dyn": true,
+"tpl_help": "Username",
+"children": [
+{
+"name": "password",
+"help": "Password",
+"type": "str"
+}
+]
+}
+]
 }
 ]
 },

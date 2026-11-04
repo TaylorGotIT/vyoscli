@@ -451,6 +451,19 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn(["uci", "delete", "softflowd.vyos_fa_0"],
                       self.fake.uci_calls())
 
+    def test_l2tp_writes_xl2tpd_config(self):
+        cfg(self.cli,
+            "set vpn l2tp port 1701",
+            "set vpn l2tp local-ip 10.90.0.1",
+            "set vpn l2tp pool-start 10.90.0.100",
+            "set vpn l2tp pool-end 10.90.0.200",
+            "set vpn l2tp user demo password secret")
+        self.commit()
+        self.assertIn(["/etc/init.d/xl2tpd", "restart"], self.fake.calls)
+        cfg(self.cli, "delete vpn l2tp")
+        self.commit()
+        self.assertIn(["/etc/init.d/xl2tpd", "stop"], self.fake.calls)
+
     def test_macsec_creates_link(self):
         cfg(self.cli,
             "set interfaces macsec macsec0 source-interface dum0",

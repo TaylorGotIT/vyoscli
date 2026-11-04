@@ -21,7 +21,7 @@
 | `protocols` | 静态、BGP、OSPF、ISIS、RIP、BFD、MPLS、SR、PIM… | static、bgp、ospf、rip、bfd、route-map | 🟡 BGP/OSPF/RIP/BFD 已可用，缺 ISIS/MPLS/SR/PIM |
 | `service` | 22 类服务 | 10 类（含 OpenWrt 特有：sqm/adguard/smartdns/kcp） | 🟡 缺 NTP/DNS/HTTPS API/SNMP/LLDP/DHCP-relay 等 |
 | `system` | 21 类 | 14 类（+flow-accounting） | 🟡 flow-accounting/netflow 已落地；缺 task-scheduler/console/ip/ipv6/updates 等 |
-| `vpn` | IPsec、L2TP、SSTP、OpenConnect、PPTP、DMVPN | IPsec 子集 + OpenConnect(ocserv) | 🟡 OpenConnect 已落地；L2TP/SSTP 无服务端包 |
+| `vpn` | IPsec、L2TP、SSTP、OpenConnect、PPTP、DMVPN | IPsec 子集 + OpenConnect(ocserv) + L2TP(xl2tpd) | 🟡 仅 SSTP 服务端缺包 |
 | `high-availability` | VRRP、sync-group、virtual-server | VRRP group（interface/vrid/address/priority/preempt/unicast）+ sync-group | 🟡 VRRP 已可用，virtual-server 未做 |
 | `load-balancing` | WAN 负载均衡、HAProxy | HAProxy frontend/backend/server | 🟡 HAProxy 已可用，WAN 多线负载未做 |
 | `pki` | CA/证书/DH/ACME、generate/import | ca/certificate/key-pair/dh 存储到 `/etc/vyoscli/pki` | 🟡 存储已可用，缺 ACME 与 generate/import 操作命令 |
@@ -260,7 +260,7 @@ network-emulator/cake 的完整参数与 class match 规则。
 
 | 项 | 原因 |
 |---|---|
-| L2TP | `xl2tpd` 包可用（LNS），待实现 |
+| L2TP | 已实现并真机验证（xl2tpd LNS，UDP 1701 监听） |
 | SSTP 服务端 | 镜像只有 sstp-client，无 server 包 |
 | dhcp-relay | 只有裸 isc-dhcp-relay 二进制，67 端口与 dnsmasq 冲突 |
 | wwan | 无蜂窝硬件 |

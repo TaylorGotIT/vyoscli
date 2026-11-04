@@ -801,6 +801,7 @@ class ConfigStore:
             ("macsec", self._apply_macsec),
             ("vrrp", self._apply_vrrp),
             ("openconnect", self._apply_openconnect),
+            ("l2tp", self._apply_l2tp),
             ("pki", self._apply_pki),
             ("https", self._apply_https),
             ("flow-accounting", self._apply_flow_accounting),
@@ -1165,6 +1166,91 @@ class ConfigStore:
                         pass
         if written:
             notes.append(f"pki: wrote {written} file(s) under {base}")
+        return notes
+
+    def _apply_l2tp(self, old, new):
+        old_v = (old.get("vpn") or {}).get("l2tp") or {}
+        new_v = (new.get("vpn") or {}).get("l2tp") or {}
+        if old_v == new_v:
+            return []
+        backup = os.path.join(self.base_dir, "backup", "l2tp")
+        os.makedirs(backup, exist_ok=True)
+        etc = "/etc" if os.path.isdir("/etc") else self.base_dir
+        files = {
+            "conf": os.path.join(etc, "xl2tpd", "xl2tpd.conf"),
+            "options": os.path.join(etc, "ppp", "options.xl2tpd"),
+            "chap": os.path.join(etc, "ppp", "chap-secrets"),
+        }
+        os.makedirs(os.path.join(etc, "xl2tpd"), exist_ok=True)
+        os.makedirs(os.path.join(etc, "ppp"), exist_ok=True)
+        for key, path in files.items():
+            saved = os.path.join(backup, os.path.basename(path) + ".orig")
+            if os.path.exists(path) and not os.path.exists(saved):
+                shutil.copy2(path, saved)
+        notes: List[str] = []
+        try:
+            if not new_v:
+                for key, path in files.items():
+                    saved = os.path.join(backup,
+                                         os.path.basename(path) + ".orig")
+                    if os.path.exists(saved):
+                        shutil.copy2(saved, path)
+                subprocess.run(["/etc/init.d/xl2tpd", "stop"],
+                               capture_output=True, text=True, timeout=20)
+                return ["l2tp: disabled, original config restored"]
+            port = new_v.get("port") or 1701
+            local_ip = new_v.get("local-ip") or "10.90.0.1"
+            start = new_v.get("pool-start") or "10.90.0.100"
+            end = new_v.get("pool-end") or "10.90.0.200"
+            dns = new_v.get("name-server") or "8.8.8.8"
+            conf = [
+                "[global]",
+                f"port = {port}",
+                "auth file = /etc/xl2tpd/xl2tp-secrets",
+                "access control = no",
+                "",
+                "[lns default]",
+                f"ip range = {start}-{end}",
+                f"local ip = {local_ip}",
+                "require authentication = yes",
+                "refuse pap = yes",
+                "require chap = yes",
+                "name = l2tpd",
+                "pppoptfile = /etc/ppp/options.xl2tpd",
+                "length bit = yes",
+            ]
+            with open(files["conf"], "w", encoding="utf-8") as f:
+                f.write("\n".join(conf) + "\n")
+            options = [
+                "require-mschap-v2",
+                f"ms-dns {dns}",
+                "asyncmap 0",
+                "auth",
+                "lock",
+                "hide-password",
+                "modem",
+                "name l2tpd",
+                "proxyarp",
+                "lcp-echo-interval 30",
+                "lcp-echo-failure 4",
+            ]
+            with open(files["options"], "w", encoding="utf-8") as f:
+                f.write("\n".join(options) + "\n")
+            users = new_v.get("user") or {}
+            chap = ["# managed by vyoscli"]
+            for username, cfg in users.items():
+                if isinstance(cfg, dict):
+                    chap.append(f"{username} l2tpd {cfg.get('password') or ''} *")
+            with open(files["chap"], "w", encoding="utf-8") as f:
+                f.write("\n".join(chap) + "\n")
+            os.chmod(files["chap"], 0o600)
+            os.chmod(files["options"], 0o600)
+            subprocess.run(["/etc/init.d/xl2tpd", "restart"],
+                           capture_output=True, text=True, timeout=20)
+            notes.append(f"l2tp: port {port}, pool {start}-{end}, "
+                         f"{len(users)} user(s)")
+        except Exception as e:  # noqa: BLE001
+            notes.append(f"l2tp apply failed: {e}")
         return notes
 
     def _apply_openconnect(self, old, new):
