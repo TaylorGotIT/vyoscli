@@ -451,6 +451,25 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn(["uci", "delete", "softflowd.vyos_fa_0"],
                       self.fake.uci_calls())
 
+    def test_macsec_creates_link(self):
+        cfg(self.cli,
+            "set interfaces macsec macsec0 source-interface dum0",
+            "set interfaces macsec macsec0 cipher gcm-aes-128",
+            "set interfaces macsec macsec0 key 00112233445566778899aabbccddeeff",
+            "set interfaces macsec macsec0 address 10.96.0.1/24")
+        self.commit()
+        calls = self.fake.calls
+        self.assertIn(["ip", "link", "add", "link", "dum0", "macsec0",
+                       "type", "macsec", "cipher", "gcm-aes-128"], calls)
+        self.assertIn(["ip", "macsec", "add", "macsec0", "tx", "sa", "0",
+                       "pn", "1", "on", "key", "00",
+                       "00112233445566778899aabbccddeeff"], calls)
+        self.assertIn(["ip", "addr", "replace", "10.96.0.1/24", "dev",
+                       "macsec0"], calls)
+        cfg(self.cli, "delete interfaces macsec macsec0")
+        self.commit()
+        self.assertIn(["ip", "link", "del", "macsec0"], self.fake.calls)
+
     def test_bonding_creates_and_enslaves(self):
         cfg(self.cli,
             "set interfaces bonding bond0 mode 802.3ad",

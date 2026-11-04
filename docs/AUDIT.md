@@ -42,7 +42,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 变更 | 说明 |
 |---|---|
 | `GUIDE.md` → `docs/GUIDE.md`，`REQUIRED_PACKAGES.md` → `docs/DEPENDENCIES.md` | 文档集中到 `docs/` |
-| 新增 `tests/`（6 个文件、107 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
+| 新增 `tests/`（6 个文件、108 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
 | 新增 `.gitignore` | 忽略 `__pycache__`、`*.ipk`、`.audit/` 等 |
 | `git rm --cached package/vyoscli.zip` | 陈旧构建产物，已从仓库移除 |
 | `Makefile` 安装改用 `$(wildcard .../*.py)` | 以后加模块不用再改 Makefile |
@@ -125,6 +125,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 71 | 缺 OpenConnect 服务端 | 新增 `vpn openconnect`（port/network/max-clients/dpd/user），映射到 OpenWrt ocserv UCI（enable/port/auth=plain/ipaddr/netmask + ocservusers），重启/停止 ocserv；真机验证 TLSv1.3 握手、监听 18443、删除后进程与端口清理 | `schema/config-tree.json` / `config.py:_apply_openconnect` |
 | 72 | 迭代收尾 | P0/P1/P2 可落地项已实现（106 个用例），剩余项均为镜像限制或操作策略阻塞：L2TP/SSTP、dhcp-relay、bonding/macsec/wwan、VTI/Geneve、MPLS/SR、nat64/cgnat、WAN 多线、policy 真机验证。详见 docs/VYOS-GAP.md 最终状态 | — |
 | 73 | bonding 未实现，VTI/Geneve 因缺模块被误判不可行 | 安装 `kmod-bonding`/`kmod-geneve`/`kmod-macsec`/`kmod-ip-vti` 后：VTI/Geneve 真机验证通过（vti0/gnv0 地址链路正常）；新增 `interfaces bonding`（mode/hash-policy/member/address/mtu/disable），成员先 down 再 enslave，bond0 + dum0/dum1 真机验证 802.3ad 与地址。policy 验证仍被面板策略拒绝 | `schema/config-tree.json` / `config.py:_apply_bonding` |
+| 74 | 缺 MACsec | 新增 `interfaces macsec`（source-interface/cipher/key/address/mtu/disable），`ip link add ... type macsec` + `ip macsec add tx sa`；真机验证 macsec0@dum0、GCM-AES-128、地址 10.96.0.1/24，删除后链路消失（内核把 key 显示为掩码） | `schema/config-tree.json` / `config.py:_apply_macsec` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示

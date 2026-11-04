@@ -178,6 +178,13 @@
 | `interfaces lan device` | Physical NIC for lan (e.g. eth0) | `interfaces lan device text` |
 | `interfaces loopback <lo> address` | IP address/prefix | `interfaces loopback <lo> address 192.0.2.1/24` |
 | `interfaces loopback <lo> description` | Description | `interfaces loopback <lo> description text` |
+| `interfaces macsec <name> address` | IPv4 address/prefix | `interfaces macsec <name> address 192.0.2.1/24` |
+| `interfaces macsec <name> cipher` | gcm-aes-128 \| gcm-aes-256 | `interfaces macsec <name> cipher text` |
+| `interfaces macsec <name> description` | Description | `interfaces macsec <name> description text` |
+| `interfaces macsec <name> disable` | Administratively disable | `interfaces macsec <name> disable true` |
+| `interfaces macsec <name> key` | TX SAK (16/32 hex bytes) | `interfaces macsec <name> key text` |
+| `interfaces macsec <name> mtu` | MTU | `interfaces macsec <name> mtu 100` |
+| `interfaces macsec <name> source-interface` | Underlying interface | `interfaces macsec <name> source-interface text` |
 | `interfaces openvpn <vtun-name> ca` | CA cert path | `interfaces openvpn <vtun-name> ca text` |
 | `interfaces openvpn <vtun-name> cert` | Server cert path | `interfaces openvpn <vtun-name> cert text` |
 | `interfaces openvpn <vtun-name> dev` | tun\|tap | `interfaces openvpn <vtun-name> dev text` |

@@ -798,6 +798,7 @@ class ConfigStore:
             ("pppoe", self._apply_pppoe),
             ("virtual-ifaces", self._apply_virtual_ifaces),
             ("bonding", self._apply_bonding),
+            ("macsec", self._apply_macsec),
             ("vrrp", self._apply_vrrp),
             ("openconnect", self._apply_openconnect),
             ("pki", self._apply_pki),
@@ -1304,6 +1305,54 @@ class ConfigStore:
             notes.append(f"vrrp: {len(groups)} group(s)")
         except Exception as e:  # noqa: BLE001
             notes.append(f"vrrp apply failed: {e}")
+        return notes
+
+    def _apply_macsec(self, old, new):
+        old_if = old.get("interfaces") or {}
+        new_if = new.get("interfaces") or {}
+        old_m = old_if.get("macsec") or {}
+        new_m = new_if.get("macsec") or {}
+        if old_m == new_m:
+            return []
+        notes: List[str] = []
+
+        def run(args):
+            try:
+                return subprocess.run(["ip"] + args, capture_output=True,
+                                      text=True, timeout=10)
+            except (OSError, subprocess.SubprocessError):
+                return None
+
+        for gone in set(old_m) - set(new_m):
+            run(["link", "del", str(gone)])
+            notes.append(f"macsec: removed {gone}")
+        for name, cfg in new_m.items():
+            if not isinstance(cfg, dict):
+                continue
+            source = cfg.get("source-interface")
+            if not source:
+                notes.append(f"macsec: {name} needs source-interface")
+                continue
+            run(["link", "del", str(name)])
+            args = ["link", "add", "link", str(source), str(name),
+                    "type", "macsec"]
+            if cfg.get("cipher"):
+                args += ["cipher", str(cfg["cipher"])]
+            proc = run(args)
+            if proc is None or proc.returncode != 0:
+                detail = (getattr(proc, "stderr", "") or "").strip()[:120]
+                notes.append(f"macsec: {name} create failed: {detail}")
+                continue
+            if cfg.get("key"):
+                run(["macsec", "add", str(name), "tx", "sa", "0", "pn", "1",
+                     "on", "key", "00", str(cfg["key"])])
+            if cfg.get("mtu"):
+                run(["link", "set", str(name), "mtu", str(cfg["mtu"])])
+            if cfg.get("address"):
+                run(["addr", "replace", str(cfg["address"]), "dev", str(name)])
+            run(["link", "set", str(name),
+                 "down" if cfg.get("disable") else "up"])
+            notes.append(f"macsec: configured {name} on {source}")
         return notes
 
     def _apply_bonding(self, old, new):

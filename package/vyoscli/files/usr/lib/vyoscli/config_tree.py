@@ -1462,6 +1462,49 @@ TREE = json.loads(r'''[
 "type": "bool"
 }
 ]
+},
+{
+"name": "macsec",
+"help": "MACsec (802.1AE) interface",
+"dyn": true,
+"tpl_help": "MACsec name",
+"children": [
+{
+"name": "source-interface",
+"help": "Underlying interface",
+"type": "str"
+},
+{
+"name": "address",
+"help": "IPv4 address/prefix",
+"type": "ipv4net"
+},
+{
+"name": "cipher",
+"help": "gcm-aes-128 | gcm-aes-256",
+"type": "str"
+},
+{
+"name": "key",
+"help": "TX SAK (16/32 hex bytes)",
+"type": "str"
+},
+{
+"name": "mtu",
+"help": "MTU",
+"type": "int"
+},
+{
+"name": "description",
+"help": "Description",
+"type": "str"
+},
+{
+"name": "disable",
+"help": "Administratively disable",
+"type": "bool"
+}
+]
 }
 ]
 },
