@@ -129,6 +129,13 @@
 
 | 命令 | 说明 | 示例 |
 |---|---|---|
+| `interfaces bonding <name> address` | IPv4 address/prefix | `interfaces bonding <name> address 192.0.2.1/24` |
+| `interfaces bonding <name> description` | Description | `interfaces bonding <name> description text` |
+| `interfaces bonding <name> disable` | Administratively disable | `interfaces bonding <name> disable true` |
+| `interfaces bonding <name> hash-policy` | xmit hash policy (layer2+3, layer3+4) | `interfaces bonding <name> hash-policy text` |
+| `interfaces bonding <name> member` | Member interface | `interfaces bonding <name> member text` |
+| `interfaces bonding <name> mode` | 802.3ad \| active-backup \| balance-rr \| ... | `interfaces bonding <name> mode text` |
+| `interfaces bonding <name> mtu` | MTU | `interfaces bonding <name> mtu 100` |
 | `interfaces bridge <br-name> address` | IP address/prefix | `interfaces bridge <br-name> address 192.0.2.1/24` |
 | `interfaces bridge <br-name> aging` | MAC aging interval (default 300) | `interfaces bridge <br-name> aging 100` |
 | `interfaces bridge <br-name> description` | Description | `interfaces bridge <br-name> description text` |

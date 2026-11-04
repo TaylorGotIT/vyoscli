@@ -451,6 +451,26 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn(["uci", "delete", "softflowd.vyos_fa_0"],
                       self.fake.uci_calls())
 
+    def test_bonding_creates_and_enslaves(self):
+        cfg(self.cli,
+            "set interfaces bonding bond0 mode 802.3ad",
+            "set interfaces bonding bond0 member dum0",
+            "set interfaces bonding bond0 member dum1",
+            "set interfaces bonding bond0 address 10.97.0.1/24")
+        self.commit()
+        calls = self.fake.calls
+        self.assertIn(["ip", "link", "add", "bond0", "type", "bond",
+                       "mode", "802.3ad"], calls)
+        self.assertIn(["ip", "link", "set", "dev", "dum0", "master", "bond0"],
+                      calls)
+        self.assertIn(["ip", "link", "set", "dev", "dum1", "master", "bond0"],
+                      calls)
+        self.assertIn(["ip", "addr", "replace", "10.97.0.1/24", "dev",
+                       "bond0"], calls)
+        cfg(self.cli, "delete interfaces bonding bond0")
+        self.commit()
+        self.assertIn(["ip", "link", "del", "bond0"], self.fake.calls)
+
     def test_vti_and_geneve_create_links(self):
         cfg(self.cli,
             "set interfaces vti vti0 local-ip 192.0.2.1",

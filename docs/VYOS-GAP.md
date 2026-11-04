@@ -14,7 +14,7 @@
 
 | 顶层 | VyOS 1.5 内容 | vyoscli 现状 | 结论 |
 |---|---|---|---|
-| `interfaces` | 19 种接口 | 14 种（+pppoe/vti/geneve） | 🟡 缺 bonding、macsec、wwan；vti/geneve/bonding 在测试镜像无内核模块 |
+| `interfaces` | 19 种接口 | 15 种（+pppoe/vti/geneve/bonding） | 🟡 缺 macsec、wwan；安装 kmod 后 vti/geneve/bonding 已真机验证 |
 | `firewall` | ipv4/ipv6/bridge/zone/group/global-options/flowtable | ipv4/ipv6 input/forward/output filter rule + group（nft 表 `vyos_fw`）；zone/forwarding/rule 保留 | 🟡 方向规则与 group 已可用，缺 named rule-set/flowtable/bridge，global-options 仅存 JSON |
 | `nat` | nat44 全量、nat64、nat66、cgnat | nat44 完整 + nat66（nft `vyos_nat66`） | 🟡 nat64/cgnat 需 Jool/SIIT，OpenWrt 无对应模块 |
 | `policy` | access-list/prefix-list/route/route-map/as-path/community/… | community-list、access-list、prefix-list、as-path-list；route-map 扩展了 prefix-list/as-path/metric/tag/next-hop/origin | 🟡 主体已补，缺 local-route/extcommunity/large-community |
@@ -260,10 +260,11 @@ network-emulator/cake 的完整参数与 class match 规则。
 
 | 项 | 原因 |
 |---|---|
-| L2TP / SSTP 服务端 | OpenWrt 镜像无 accel-ppp / SSTP server 包 |
+| L2TP | `xl2tpd` 包可用（LNS），待实现 |
+| SSTP 服务端 | 镜像只有 sstp-client，无 server 包 |
 | dhcp-relay | 只有裸 isc-dhcp-relay 二进制，67 端口与 dnsmasq 冲突 |
 | bonding / macsec / wwan | 内核无 bonding/macsec 模块、无 wwan 硬件 |
-| VTI / Geneve | 代码就绪，镜像内核无 vti/geneve 模块 |
+| VTI / Geneve | 安装 `kmod-ip-vti`/`kmod-geneve` 后已真机验证（地址、链路正常） |
 | MPLS / SR、nat64 / cgnat | 内核/包不支持（无 Jool/SIIT、无 MPLS 栈） |
 | WAN 多线负载 | mwan3 与 VyOS 语义差异较大，且会接管路由/防火墙，按需再评估 |
 | policy 真机验证 | SSH 操作策略拒绝执行验证命令，未重试 |

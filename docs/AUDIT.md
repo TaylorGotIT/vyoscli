@@ -42,7 +42,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 变更 | 说明 |
 |---|---|
 | `GUIDE.md` → `docs/GUIDE.md`，`REQUIRED_PACKAGES.md` → `docs/DEPENDENCIES.md` | 文档集中到 `docs/` |
-| 新增 `tests/`（6 个文件、106 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
+| 新增 `tests/`（6 个文件、107 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
 | 新增 `.gitignore` | 忽略 `__pycache__`、`*.ipk`、`.audit/` 等 |
 | `git rm --cached package/vyoscli.zip` | 陈旧构建产物，已从仓库移除 |
 | `Makefile` 安装改用 `$(wildcard .../*.py)` | 以后加模块不用再改 Makefile |
@@ -124,6 +124,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 70 | API 只有明文 HTTP；单行 PEM 也不是合法证书格式 | `service https` 新增 `certificate <pki 名称>`，`api.py` 支持 `--cert/--tls-key` 并包 SSL socket；pki 写文件时把单行 PEM 按 64 列换行（`_format_pem`）。真机验证 HTTPS 200/鉴权、端口关闭、证书文件清理。另：bonding 内核无 `bonding.ko`，`ip link add type bond` 报 Unknown device type，记录为不可行 | `api.py` / `config.py:_apply_https` / `_format_pem` |
 | 71 | 缺 OpenConnect 服务端 | 新增 `vpn openconnect`（port/network/max-clients/dpd/user），映射到 OpenWrt ocserv UCI（enable/port/auth=plain/ipaddr/netmask + ocservusers），重启/停止 ocserv；真机验证 TLSv1.3 握手、监听 18443、删除后进程与端口清理 | `schema/config-tree.json` / `config.py:_apply_openconnect` |
 | 72 | 迭代收尾 | P0/P1/P2 可落地项已实现（106 个用例），剩余项均为镜像限制或操作策略阻塞：L2TP/SSTP、dhcp-relay、bonding/macsec/wwan、VTI/Geneve、MPLS/SR、nat64/cgnat、WAN 多线、policy 真机验证。详见 docs/VYOS-GAP.md 最终状态 | — |
+| 73 | bonding 未实现，VTI/Geneve 因缺模块被误判不可行 | 安装 `kmod-bonding`/`kmod-geneve`/`kmod-macsec`/`kmod-ip-vti` 后：VTI/Geneve 真机验证通过（vti0/gnv0 地址链路正常）；新增 `interfaces bonding`（mode/hash-policy/member/address/mtu/disable），成员先 down 再 enslave，bond0 + dum0/dum1 真机验证 802.3ad 与地址。policy 验证仍被面板策略拒绝 | `schema/config-tree.json` / `config.py:_apply_bonding` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），
 后者把 dict 当列表遍历，已删除重复实现；`__main__` 的 rollback 子进程、`save()` 提示

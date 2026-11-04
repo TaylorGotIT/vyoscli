@@ -1410,6 +1410,50 @@
       "type": "bool"
      }
     ]
+   },
+   {
+    "name": "bonding",
+    "help": "Bonded interface (LACP/active-backup)",
+    "dyn": true,
+    "tpl_help": "Bond name",
+    "children": [
+     {
+      "name": "mode",
+      "help": "802.3ad | active-backup | balance-rr | ...",
+      "type": "str"
+     },
+     {
+      "name": "hash-policy",
+      "help": "xmit hash policy (layer2+3, layer3+4)",
+      "type": "str"
+     },
+     {
+      "name": "member",
+      "help": "Member interface",
+      "type": "str",
+      "repeatable": true
+     },
+     {
+      "name": "address",
+      "help": "IPv4 address/prefix",
+      "type": "ipv4net"
+     },
+     {
+      "name": "mtu",
+      "help": "MTU",
+      "type": "int"
+     },
+     {
+      "name": "description",
+      "help": "Description",
+      "type": "str"
+     },
+     {
+      "name": "disable",
+      "help": "Administratively disable",
+      "type": "bool"
+     }
+    ]
    }
   ]
  },

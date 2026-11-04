@@ -797,6 +797,7 @@ class ConfigStore:
             ("interfaces", self._apply_interfaces),
             ("pppoe", self._apply_pppoe),
             ("virtual-ifaces", self._apply_virtual_ifaces),
+            ("bonding", self._apply_bonding),
             ("vrrp", self._apply_vrrp),
             ("openconnect", self._apply_openconnect),
             ("pki", self._apply_pki),
@@ -1303,6 +1304,57 @@ class ConfigStore:
             notes.append(f"vrrp: {len(groups)} group(s)")
         except Exception as e:  # noqa: BLE001
             notes.append(f"vrrp apply failed: {e}")
+        return notes
+
+    def _apply_bonding(self, old, new):
+        old_if = old.get("interfaces") or {}
+        new_if = new.get("interfaces") or {}
+        old_b = old_if.get("bonding") or {}
+        new_b = new_if.get("bonding") or {}
+        if old_b == new_b:
+            return []
+        notes: List[str] = []
+
+        def run(args):
+            try:
+                return subprocess.run(["ip"] + args, capture_output=True,
+                                      text=True, timeout=10)
+            except (OSError, subprocess.SubprocessError):
+                return None
+
+        for gone in set(old_b) - set(new_b):
+            run(["link", "del", str(gone)])
+            notes.append(f"bonding: removed {gone}")
+        for name, cfg in new_b.items():
+            if not isinstance(cfg, dict):
+                continue
+            run(["link", "del", str(name)])
+            mode = str(cfg.get("mode") or "802.3ad")
+            proc = run(["link", "add", str(name), "type", "bond", "mode", mode])
+            if proc is None or proc.returncode != 0:
+                detail = (getattr(proc, "stderr", "") or "").strip()[:120]
+                notes.append(f"bonding: {name} create failed: {detail}")
+                continue
+            if cfg.get("hash-policy"):
+                run(["link", "set", "dev", str(name), "type", "bond",
+                     "xmit_hash_policy", str(cfg["hash-policy"])])
+            for member in _as_list(cfg.get("member")):
+                # Linux refuses to enslave an interface while it is up.
+                run(["link", "set", "dev", str(member), "down"])
+                proc = run(["link", "set", "dev", str(member),
+                            "master", str(name)])
+                if proc is None or proc.returncode != 0:
+                    detail = (getattr(proc, "stderr", "") or "").strip()[:120]
+                    notes.append(f"bonding: {member} enslave failed: {detail}")
+                else:
+                    notes.append(f"bonding: {member} -> {name}")
+            if cfg.get("mtu"):
+                run(["link", "set", str(name), "mtu", str(cfg["mtu"])])
+            if cfg.get("address"):
+                run(["addr", "replace", str(cfg["address"]), "dev", str(name)])
+            run(["link", "set", str(name),
+                 "down" if cfg.get("disable") else "up"])
+            notes.append(f"bonding: configured {name} ({mode})")
         return notes
 
     def _apply_virtual_ifaces(self, old, new):
