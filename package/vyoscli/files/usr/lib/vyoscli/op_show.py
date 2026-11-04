@@ -242,10 +242,19 @@ def _op_show_interface_detail(ctx: Any, value: Any) -> str:
         out = r.stdout.strip()
         if not out:
             return f"Interface {value} not found."
-        # add stats
+        # append only the statistics section; the full ip -s link output
+        # repeats the interface header/addresses already shown above.
         try:
-            s = subprocess.run(["ip", "-s", "link", "show", value], capture_output=True, text=True, timeout=5)
-            out += "\n\n" + s.stdout.strip()
+            s = subprocess.run(["ip", "-s", "-s", "link", "show", value],
+                               capture_output=True, text=True, timeout=5)
+            lines = s.stdout.splitlines()
+            stats = ""
+            for idx, line in enumerate(lines):
+                if line.strip().startswith("RX:"):
+                    stats = "\n".join(lines[idx:]).rstrip()
+                    break
+            if stats:
+                out += "\n\n" + stats
         except Exception:
             pass
         return out

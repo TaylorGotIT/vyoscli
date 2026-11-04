@@ -42,7 +42,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 变更 | 说明 |
 |---|---|
 | `GUIDE.md` → `docs/GUIDE.md`，`REQUIRED_PACKAGES.md` → `docs/DEPENDENCIES.md` | 文档集中到 `docs/` |
-| 新增 `tests/`（6 个文件、111 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
+| 新增 `tests/`（7 个文件、116 个用例） | 替代根目录 15 个 `smoke_test*.py`（已删除） |
 | 新增 `.gitignore` | 忽略 `__pycache__`、`*.ipk`、`.audit/` 等 |
 | `git rm --cached package/vyoscli.zip` | 陈旧构建产物，已从仓库移除 |
 | `Makefile` 安装改用 `$(wildcard .../*.py)` | 以后加模块不用再改 Makefile |
@@ -129,6 +129,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 75 | 缺 L2TP 服务端 | 新增 `vpn l2tp`（port/local-ip/pool-start/end/name-server/user），生成 xl2tpd.conf、options.xl2tpd、chap-secrets（0600），首次改写前备份原文件，禁用时还原并停止 xl2tpd；真机验证 UDP 1701 监听、删除后端口关闭且原配置恢复 | `schema/config-tree.json` / `config.py:_apply_l2tp` |
 | 76 | 缺 DHCP relay | 新增 `service dhcp-relay`（server/interface/upstream-interface），生成 `/etc/dhcp-fwd.conf` 并启动 dhcp-fwd；真机验证 0.0.0.0:67 监听、删除后进程退出；测试时临时 `dhcp.lan.ignore=1` 让出 67，随后恢复 dnsmasq 并确认 dhcp-range 重新生成、No drift | `schema/config-tree.json` / `config.py:_apply_dhcp_relay` |
 | 77 | WAN 多线负载未做 | 新增 `load-balancing wan`（interface weight/track-ip、rule），映射到 mwan3 的 interface/member/policy/rule；未安装 mwan3 时安全拒绝、不改任何状态（真机验证提示 + 无 mwan3 改动）。真正启用需安装 mwan3 并接受其接管路由/防火墙的风险 | `schema/config-tree.json` / `config.py:_apply_wan_lb` |
+| 79 | show interface 输出含内核伪接口、详情重复；无 Tab 候选；help 提示是 name/value；SSH 无源 ACL | `show interfaces` 改为 VyOS 表格（Interface/IP Address/S/L/Description），只列配置接口+物理口并过滤 gre0/dummy0/tunl0 与 @NONE；详情只追加 RX/TX 统计；新增 `_completion` 支持，`show interfaces ethernet <TAB>` 列出网卡；值提示改为 `<x.x.x.x/xx>` 等 VyOS 占位符，动态节点按上下文显示 `<ifname>/<br-name>`；`service ssh access-control allow|deny address` 渲染 nft `inet vyos_ssh`（allow 在 deny 前）。真机验证 ACL 规则与删除清理 | `cli.py` / `op_show.py` / `commands.py` / `config.py:_apply_ssh_acl` |
 | 78 | WAN 多线映射错误且 mwan3 不可用 | 安装 mwan3 后修正映射：设备名（eth1）先解析为 OpenWrt 网络接口名（wan），再写 mwan3.interface/member/policy/rule；真机验证 WAN/SSH 未中断，但 `mwan3 status` 中 wan 虽 online，所有 policy（含默认 balanced）均为 `unreachable`，WAN LB 不可用。已删除配置、停止 mwan3、清理 mwan3.* 漂移项；mwan3 包保留但未启用 | `config.py:_apply_wan_lb` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），

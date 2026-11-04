@@ -212,8 +212,9 @@ def build_tree(store: Any) -> CommandTree:
     # show interface ethernet <ifname>
     from .op_show import _op_show_interface_detail
     show_if = tree.op_root.children["show"].children["interfaces"]
-    eth_node = Node(name="ethernet", help="Show ethernet interface detail",
+    eth_node = Node(name="ethernet", help="Ethernet interface name",
                     value_type="string", action=_op_show_interface_detail)
+    eth_node._completion = _list_ethernet_ifaces  # type: ignore[attr-defined]
     show_if.add(eth_node)
     tree.op("show history", help="Show command history", action=_op_show_history)
     tree.op("show log", help="Show system log (logread)", action=_op_show_log)

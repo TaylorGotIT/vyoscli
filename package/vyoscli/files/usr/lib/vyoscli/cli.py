@@ -27,6 +27,29 @@ except ImportError:  # Windows / minimal python3 without readline
 
 from .config import ConfigStore
 from .tree import CommandTree, Node, VALUE_TYPES, coerce_value, validate_value
+
+DYNAMIC_PLACEHOLDERS = {
+    "ethernet": "<ifname>", "bridge": "<br-name>",
+    "dummy": "<dum-name>", "tunnel": "<tun-name>",
+    "vxlan": "<vx-name>", "wireguard": "<wg-if>",
+    "pppoe": "<pppoe-if>", "bonding": "<bond-name>",
+    "macsec": "<macsec-name>", "vti": "<vti-name>",
+    "geneve": "<geneve-name>", "wireless": "<wlan-if>",
+    "openvpn": "<vtun-name>", "rule": "<rule-number>",
+    "user": "<username>", "group": "<group-name>",
+    "peer": "<peer>", "server": "<server-name>",
+    "backend": "<backend-name>", "service": "<service-name>",
+    "container": "<name>", "zone": "<zone-name>",
+    "area": "<area-id>", "interface": "<interface-name>",
+    "community": "<community>", "domain-set": "<name>",
+    "domain-rule": "<name>", "address": "<domain>",
+    "vif": "<vlan-id>", "crontab": "<job>", "kcp": "<tunnel>",
+    "console-server": "<device>", "shared-network-name": "<network>",
+    "subnet": "<cidr>", "range": "<id>", "static-mapping": "<name>",
+    "environment": "<VAR>", "name": "<name>", "shaper": "<policy>",
+    "limiter": "<policy>", "fq-codel": "<policy>", "cake": "<policy>",
+}
+
 from . import commands as builtin
 
 
@@ -117,7 +140,7 @@ class Cli:
         return filtered[state]
 
     def _matches_with_help(self, tokens: List[str]) -> List[tuple]:
-        """Return [(name, help), ...] for the next token in current context."""
+        """VyOS-style candidates for the next token: name -> help."""
         if not tokens:
             return []
         if self.ctx.mode == "op":
@@ -126,7 +149,7 @@ class Cli:
         else:
             root = self.tree.cfg_root
             head = tokens[:-1]
-            # Inside `edit`, the buffer has no node path: "set host-name x"
+            # Inside edit, the buffer has no node path: "set host-name x"
             # must be resolved as "set <cfg_path> host-name x".
             if (self.ctx.cfg_path and head
                     and head[0] in ("set", "delete", "edit", "next")):
@@ -138,6 +161,12 @@ class Cli:
             if getattr(child, "_synthetic", False):
                 continue  # listed by the dynamic candidates below
             out.append((child_name, child.help or ""))
+
+        completer = getattr(node, "_completion", None)
+        if callable(completer):
+            for name in completer():
+                out.append((name, node.help or ""))
+
         if node.dynamic is not None and callable(node.dynamic):
             tpl = getattr(node, "_dyn_template", None)
             tpl_help = (tpl.help if tpl is not None else "") or "(dynamic)"
@@ -145,13 +174,15 @@ class Cli:
             for dyn in candidates:
                 out.append((dyn, tpl_help))
             if not candidates:
-                # e.g. `set interfaces bridge ?` before any bridge exists
-                out.append(("<name>", tpl_help))
-        if node.value_type and not node.children:
+                out.append((DYNAMIC_PLACEHOLDERS.get(node.name, "<name>"),
+                            tpl_help))
+
+        if node.value_type and not node.children and not callable(completer):
             hint = VALUE_TYPES.get(node.value_type, "<value>")
-            out.append((hint, "value"))
-        # If current node is already a runnable leaf, suggest <Enter>.
-        if (node.action is not None and not node.children
+            out.append((hint, node.help or "value"))
+
+        if (self.ctx.mode == "op" and node.action is not None
+                and not node.children and not node.value_type
                 and node.dynamic is None):
             out.append(("<Enter>", "Execute the current command"))
         return out

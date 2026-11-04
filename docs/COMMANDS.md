@@ -506,6 +506,8 @@
 | `service sqm interface` | WAN interface | `service sqm interface text` |
 | `service sqm qdisc` | cake / fq_codel | `service sqm qdisc cake` |
 | `service sqm upload` | Upload bandwidth kbps | `service sqm upload 100` |
+| `service ssh access-control allow address` | Source prefix | `service ssh access-control allow address 192.0.2.1/24` |
+| `service ssh access-control deny address` | Source prefix | `service ssh access-control deny address 192.0.2.1/24` |
 | `service ssh disable` | Disable SSH server | `service ssh disable true` |
 | `service ssh listen-address` | Bind address (default 0.0.0.0) | `service ssh listen-address 192.0.2.1` |
 | `service ssh password-auth` | Allow password login (true/false) | `service ssh password-auth true` |

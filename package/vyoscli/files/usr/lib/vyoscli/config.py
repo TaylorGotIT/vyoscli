@@ -826,6 +826,7 @@ class ConfigStore:
             ("ipsec", self._apply_ipsec),
             ("dhcp", self._apply_dhcp),
             ("ssh", self._apply_ssh),
+            ("ssh-acl", self._apply_ssh_acl),
             ("adguard", self._apply_adguard),
             ("dnsmasq", self._apply_dnsmasq),
             ("smartdns", self._apply_smartdns),
@@ -3476,6 +3477,48 @@ class ConfigStore:
         except Exception as e:  # noqa: BLE001
             notes.append(f"dhcp apply failed: {e}")
         return notes
+
+    def _apply_ssh_acl(self, old, new):
+        old_acl = (((old.get("service") or {}).get("ssh") or {})
+                   .get("access-control") or {})
+        new_acl = (((new.get("service") or {}).get("ssh") or {})
+                   .get("access-control") or {})
+        if old_acl == new_acl:
+            return []
+        path = os.path.join(self.base_dir, "ssh-acl.nft")
+        if not (new_acl.get("allow") or new_acl.get("deny")):
+            try:
+                subprocess.run(["nft", "delete", "table", "inet", "vyos_ssh"],
+                               capture_output=True, text=True, timeout=10)
+            except (OSError, subprocess.SubprocessError):
+                pass
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            return ["ssh-acl: removed"]
+        ssh = (new.get("service") or {}).get("ssh") or {}
+        port = ssh.get("port") or 22
+        lines = ["table inet vyos_ssh {",
+                 "  chain input { type filter hook input priority -20; "
+                 "policy accept;"]
+        for addr in _as_list((new_acl.get("allow") or {}).get("address")):
+            lines.append(f"    tcp dport {port} ip saddr {addr} accept")
+        for addr in _as_list((new_acl.get("deny") or {}).get("address")):
+            lines.append(f"    tcp dport {port} ip saddr {addr} drop")
+        lines += ["  }", "}"]
+        text = "\n".join(lines) + "\n"
+        os.makedirs(self.base_dir, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        try:
+            proc = subprocess.run(["nft", "-f", path], capture_output=True,
+                                  text=True, timeout=15)
+        except (OSError, subprocess.SubprocessError) as e:
+            return [f"ssh-acl: nft unavailable ({e})"]
+        if proc.returncode != 0:
+            return [f"ssh-acl apply failed: {(proc.stderr or '').strip()[:160]}"]
+        return [f"ssh-acl: {text.count('accept') + text.count('drop')} rule(s)"]
 
     def _apply_ssh(self, old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
         old_s = (old.get("service") or {}).get("ssh") or {}

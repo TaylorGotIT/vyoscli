@@ -451,6 +451,23 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn(["uci", "delete", "softflowd.vyos_fa_0"],
                       self.fake.uci_calls())
 
+    def test_ssh_acl_renders_nft(self):
+        cfg(self.cli,
+            "set service ssh port 22",
+            "set service ssh access-control allow address 198.51.100.10/32",
+            "set service ssh access-control deny address 203.0.113.0/24")
+        self.commit()
+        path = os.path.join(self.cli.store.base_dir, "ssh-acl.nft")
+        text = open(path, encoding="utf-8").read()
+        self.assertIn("tcp dport 22 ip saddr 198.51.100.10/32 accept", text)
+        self.assertIn("tcp dport 22 ip saddr 203.0.113.0/24 drop", text)
+        self.assertLess(text.index("198.51.100.10"), text.index("203.0.113.0"))
+        self.assertIn(["nft", "-f", path], self.fake.calls)
+        cfg(self.cli, "delete service ssh access-control")
+        self.commit()
+        self.assertIn(["nft", "delete", "table", "inet", "vyos_ssh"],
+                      self.fake.calls)
+
     def test_wan_lb_refuses_without_mwan3(self):
         cfg(self.cli,
             "set load-balancing wan interface eth1 weight 2",

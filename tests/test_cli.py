@@ -229,7 +229,8 @@ class CompletionTest(unittest.TestCase):
     def test_leaf_completion_has_value_hint(self):
         self.cli.ctx.cfg_path = []
         pairs = dict(completions(self.cli, "set interfaces ethernet eth0 address "))
-        self.assertEqual(pairs.get("a.b.c.d/prefix"), "value")
+        self.assertIn("<x.x.x.x/xx>", pairs)
+        self.assertEqual(pairs["<x.x.x.x/xx>"], "IPv4 address/prefix")
 
 
 class EntrypointTest(unittest.TestCase):

@@ -2611,6 +2611,36 @@ TREE = json.loads(r'''[
 "name": "root-login",
 "help": "Allow root SSH login (true/false)",
 "type": "bool"
+},
+{
+"name": "access-control",
+"help": "Restrict SSH sources (deny wins unless allowed)",
+"children": [
+{
+"name": "allow",
+"help": "Exempt sources from deny",
+"children": [
+{
+"name": "address",
+"help": "Source prefix",
+"type": "ipv4net",
+"repeatable": true
+}
+]
+},
+{
+"name": "deny",
+"help": "Block SSH from sources",
+"children": [
+{
+"name": "address",
+"help": "Source prefix",
+"type": "ipv4net",
+"repeatable": true
+}
+]
+}
+]
 }
 ]
 },

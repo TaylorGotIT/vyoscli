@@ -193,7 +193,7 @@ root@OpenWrt# set firewall rule 900 ?
 | `protocols route-map` | `set protocols route-map RM1 permit 10 set local-preference 200` |
 | `policy` | `set policy community-list 10 rule 10 regex 65001:*`<br>`set policy route-redirect proxy rule 10 dport 80` |
 | `vpn ipsec` | `set vpn ipsec ike-group G1 proposal 10 encryption aes256`<br>`set vpn ipsec site-to-site peer 203.0.113.5 secret ***` |
-| `service ssh` | `set service ssh port 2222`<br>`set service ssh root-login true` |
+| `service ssh` | `set service ssh port 2222`<br>`set service ssh root-login true`<br>`set service ssh access-control deny address 203.0.113.0/24` |
 | `service dhcp-server` | `set service dhcp-server shared-network-name LAN subnet 192.168.50.0/24 default-router 192.168.50.1` |
 | `service dnsmasq/smartdns/adguard` | `set service dnsmasq port 53`<br>`set service smartdns server aliyun ip 223.5.5.5` |
 | `service crontab` | `set service crontab backup schedule '0 3 * * *'`<br>`set service crontab backup script /etc/vyoscli/scripts/backup.sh` |
