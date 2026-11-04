@@ -23,7 +23,7 @@
 | `system` | 21 类 | 14 类（+flow-accounting） | 🟡 flow-accounting/netflow 已落地；缺 task-scheduler/console/ip/ipv6/updates 等 |
 | `vpn` | IPsec、L2TP、SSTP、OpenConnect、PPTP、DMVPN | IPsec 子集 + OpenConnect(ocserv) + L2TP(xl2tpd) | 🟡 仅 SSTP 服务端缺包 |
 | `high-availability` | VRRP、sync-group、virtual-server | VRRP group（interface/vrid/address/priority/preempt/unicast）+ sync-group | 🟡 VRRP 已可用，virtual-server 未做 |
-| `load-balancing` | WAN 负载均衡、HAProxy | HAProxy + `wan`（mwan3 驱动，未装 mwan3 时安全拒绝） | 🟡 WAN 多线需安装 mwan3 并接受路由接管 |
+| `load-balancing` | WAN 负载均衡、HAProxy | HAProxy + `wan`（mwan3 映射） | 🟡 mwan3 在本镜像策略全部 unreachable，WAN LB 实际不可用 |
 | `pki` | CA/证书/DH/ACME、generate/import | ca/certificate/key-pair/dh 存储到 `/etc/vyoscli/pki` | 🟡 存储已可用，缺 ACME 与 generate/import 操作命令 |
 | `traffic-policy` | 11 种 qdisc + 接口 ingress/egress | 新 `qos`：shaper/limiter/fq-codel/cake + interface ingress/egress | 🟡 常见 qdisc 已可用，缺 fair-queue/priority/random-detect/network-emulator 与复杂 match |
 | `container` | name/network/registry/health-check 等 | 9 节点极简 | 🟡 OpenWrt 默认无 podman，优先级低 |
@@ -266,5 +266,5 @@ network-emulator/cake 的完整参数与 class match 规则。
 | wwan | 无蜂窝硬件 |
 | VTI / Geneve | 安装 `kmod-ip-vti`/`kmod-geneve` 后已真机验证（地址、链路正常） |
 | MPLS / SR、nat64 / cgnat | 内核/包不支持（无 Jool/SIIT、无 MPLS 栈） |
-| WAN 多线负载 | 代码已接入 mwan3 映射，但未在设备启用（会接管路由/防火墙，需确认） |
+| WAN 多线负载 | 已安装 mwan3 并尝试：WAN/SSH 未中断，但 mwan3 把所有 policy（含默认 balanced）判为 unreachable，功能不可用；已停止 mwan3 并回滚配置 |
 | policy 真机验证 | SSH 操作策略拒绝执行验证命令，未重试 |

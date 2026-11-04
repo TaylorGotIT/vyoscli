@@ -1005,16 +1005,32 @@ class ConfigStore:
                 subprocess.run(["/etc/init.d/mwan3", "stop"],
                                capture_output=True, text=True, timeout=20)
                 return ["wan-lb: stopped"]
+            def logical_name(ifname):
+                if self._uci_get(f"network.{ifname}") is not None:
+                    return str(ifname)
+                try:
+                    out = self._uci("show", "network").stdout
+                except Exception:
+                    out = ""
+                for line in out.splitlines():
+                    lhs, _, value = line.partition("=")
+                    if (lhs.endswith(".device")
+                            and value.strip("'\"") == str(ifname)):
+                        return lhs.split(".")[1]
+                return str(ifname)
+
             interfaces = new_w.get("interface") or {}
             members = []
             for index, (ifname, cfg) in enumerate(sorted(interfaces.items())):
                 cfg = cfg if isinstance(cfg, dict) else {}
-                sec = "vyos_wan_if_" + re.sub(r"[^A-Za-z0-9_]", "_", str(ifname))
+                logical = logical_name(ifname)
+                sec = logical
                 self._uci("set", f"mwan3.{sec}=interface")
                 self._uci("set", f"mwan3.{sec}.enabled=1")
                 self._uci("set", f"mwan3.{sec}.family=ipv4")
                 self._uci("set", f"mwan3.{sec}.track_ip="
                           f"{cfg.get('track-ip') or '1.1.1.1'}")
+                self._uci("set", f"mwan3.{sec}.track_method=ping")
                 self._uci("set", f"mwan3.{sec}.reliability=1")
                 self._uci("set", f"mwan3.{sec}.count=1")
                 self._uci("set", f"mwan3.{sec}.timeout=3")
@@ -1023,7 +1039,7 @@ class ConfigStore:
                 self._uci("set", f"mwan3.{sec}.up=5")
                 member = f"vyos_wan_m_{index}"
                 self._uci("set", f"mwan3.{member}=member")
-                self._uci("set", f"mwan3.{member}.interface={ifname}")
+                self._uci("set", f"mwan3.{member}.interface={logical}")
                 self._uci("set", f"mwan3.{member}.metric={index + 1}")
                 self._uci("set", f"mwan3.{member}.weight="
                           f"{cfg.get('weight') or 1}")
