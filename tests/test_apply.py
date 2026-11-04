@@ -451,6 +451,17 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn(["uci", "delete", "softflowd.vyos_fa_0"],
                       self.fake.uci_calls())
 
+    def test_dhcp_relay_writes_config(self):
+        cfg(self.cli,
+            "set service dhcp-relay server 192.0.2.10",
+            "set service dhcp-relay interface br-lan",
+            "set service dhcp-relay upstream-interface br-wan")
+        self.commit()
+        calls = self.fake.calls
+        self.assertTrue(any(cmd[:2] == ["dhcp-fwd", "-c"] for cmd in calls))
+        cfg(self.cli, "delete service dhcp-relay")
+        self.commit()
+
     def test_l2tp_writes_xl2tpd_config(self):
         cfg(self.cli,
             "set vpn l2tp port 1701",

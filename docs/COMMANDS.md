@@ -442,6 +442,9 @@
 | `service crontab <job> description` | Free-text description | `service crontab <job> description text` |
 | `service crontab <job> schedule` | Cron schedule: 'm h dom mon dow' | `service crontab <job> schedule 0 3 * * *` |
 | `service crontab <job> script` | Script path (recommended: /etc/vyoscli/scripts/<name>.sh) | `service crontab <job> script text` |
+| `service dhcp-relay interface` | Client-facing interface | `service dhcp-relay interface text` |
+| `service dhcp-relay server` | DHCP server address | `service dhcp-relay server 192.0.2.1` |
+| `service dhcp-relay upstream-interface` | Server-facing interface | `service dhcp-relay upstream-interface text` |
 | `service dhcp-server shared-network-name <shared-name> interface` | UCI network to serve (default: auto-detect from subnet) | `service dhcp-server shared-network-name <shared-name> interface text` |
 | `service dhcp-server shared-network-name <shared-name> subnet <cidr> default-router` | Default gateway | `service dhcp-server shared-network-name <shared-name> subnet <cidr> default-router 192.0.2.1` |
 | `service dhcp-server shared-network-name <shared-name> subnet <cidr> domain-name` | Domain name | `service dhcp-server shared-network-name <shared-name> subnet <cidr> domain-name text` |

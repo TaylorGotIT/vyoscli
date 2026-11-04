@@ -126,7 +126,7 @@ passive/default-information）、`rip`（version/network/default-information）�
 | `service https`（API） | ✅ | 只读 API（HTTP/HTTPS），Bearer 鉴权；`certificate <pki 名称>` 启用 TLS |
 | `service snmp` | ✅ | community → UCI com2sec/group/access，已真机验证监听 1610 |
 | `service lldp` | ✅ | UCI lldpd interface/description，已真机验证 |
-| `service dhcp-relay` | ❌ | |
+| `service dhcp-relay` | ✅ | dhcp-forwarder，真机验证监听 67（需让出 dnsmasq DHCP） |
 | `service router-advert` | ✅ | interface → UCI dhcp ra/dhcpv6/ra_management/ra_lifetime，带备份/还原 |
 | `service console-server` | ✅ | 已验证 per-device dropbear |
 | `service task-scheduler` | 🟡 | 我们用 `service crontab` |
@@ -262,7 +262,7 @@ network-emulator/cake 的完整参数与 class match 规则。
 |---|---|
 | L2TP | 已实现并真机验证（xl2tpd LNS，UDP 1701 监听） |
 | SSTP 服务端 | 镜像只有 sstp-client，无 server 包 |
-| dhcp-relay | 只有裸 isc-dhcp-relay 二进制，67 端口与 dnsmasq 冲突 |
+| dhcp-relay | 已实现（dhcp-forwarder），测试时需暂时停用 dnsmasq DHCP |
 | wwan | 无蜂窝硬件 |
 | VTI / Geneve | 安装 `kmod-ip-vti`/`kmod-geneve` 后已真机验证（地址、链路正常） |
 | MPLS / SR、nat64 / cgnat | 内核/包不支持（无 Jool/SIIT、无 MPLS 栈） |

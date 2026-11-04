@@ -802,6 +802,7 @@ class ConfigStore:
             ("vrrp", self._apply_vrrp),
             ("openconnect", self._apply_openconnect),
             ("l2tp", self._apply_l2tp),
+            ("dhcp-relay", self._apply_dhcp_relay),
             ("pki", self._apply_pki),
             ("https", self._apply_https),
             ("flow-accounting", self._apply_flow_accounting),
@@ -1252,6 +1253,70 @@ class ConfigStore:
         except Exception as e:  # noqa: BLE001
             notes.append(f"l2tp apply failed: {e}")
         return notes
+
+    def _apply_dhcp_relay(self, old, new):
+        old_r = (old.get("service") or {}).get("dhcp-relay") or {}
+        new_r = (new.get("service") or {}).get("dhcp-relay") or {}
+        if old_r == new_r:
+            return []
+        conf = "/etc/dhcp-fwd.conf"
+        backup = os.path.join(self.base_dir, "backup", "dhcp-fwd.conf.orig")
+        os.makedirs(os.path.dirname(backup), exist_ok=True)
+        if os.path.exists(conf) and not os.path.exists(backup):
+            shutil.copy2(conf, backup)
+        pidfile = "/var/run/dhcp-fwd.pid"
+
+        def stop():
+            try:
+                with open(pidfile, encoding="utf-8") as f:
+                    pid = int(f.read().strip())
+                os.kill(pid, 15)
+            except (OSError, ValueError):
+                pass
+            for path in (pidfile,):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+
+        stop()
+        if not new_r:
+            if os.path.exists(backup):
+                shutil.copy2(backup, conf)
+            return ["dhcp-relay: stopped"]
+        servers = _as_list(new_r.get("server"))
+        interfaces = _as_list(new_r.get("interface"))
+        upstreams = _as_list(new_r.get("upstream-interface"))
+        if not servers or not interfaces or not upstreams:
+            return ["dhcp-relay: need server, interface and upstream-interface"]
+        os.makedirs("/var/lib/dhcp-fwd", exist_ok=True)
+        lines = [
+            "user dhcp-fwd",
+            "group dhcp-fwd",
+            "chroot /var/lib/dhcp-fwd",
+            "logfile /var/log/dhcp-fwd.log",
+            "pidfile " + pidfile,
+            "",
+        ]
+        for ifname in interfaces:
+            lines.append(f"if {ifname} true false true")
+        for ifname in upstreams:
+            lines.append(f"if {ifname} false true true")
+        lines.append("")
+        for server in servers:
+            lines.append(f"server ip {server}")
+        with open(conf, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        try:
+            proc = subprocess.run(["dhcp-fwd", "-c", conf],
+                                  capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError) as e:
+            return [f"dhcp-relay: start failed ({e})"]
+        if proc.returncode != 0:
+            return [f"dhcp-relay: start failed: "
+                    f"{(proc.stderr or '').strip()[:160]}"]
+        return [f"dhcp-relay: {len(servers)} server(s), "
+                f"{len(interfaces)} client iface(s)"]
 
     def _apply_openconnect(self, old, new):
         old_v = (old.get("vpn") or {}).get("openconnect") or {}

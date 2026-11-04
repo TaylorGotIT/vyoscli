@@ -2770,6 +2770,30 @@ TREE = json.loads(r'''[
 "type": "str"
 }
 ]
+},
+{
+"name": "dhcp-relay",
+"help": "DHCP relay (dhcp-forwarder)",
+"children": [
+{
+"name": "server",
+"help": "DHCP server address",
+"type": "ipv4",
+"repeatable": true
+},
+{
+"name": "interface",
+"help": "Client-facing interface",
+"type": "str",
+"repeatable": true
+},
+{
+"name": "upstream-interface",
+"help": "Server-facing interface",
+"type": "str",
+"repeatable": true
+}
+]
 }
 ]
 },
