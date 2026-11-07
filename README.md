@@ -1,5 +1,7 @@
 # vyoscli — 类 VyOS 的 OpenWrt CLI
 
+> **本项目由 DeepSeek Harness 协助完成。**
+
 用 Python 实现的 VyOS 风格命令行，以 opkg 包安装到 OpenWrt。
 保留 VyOS 的核心交互模型：**操作模式 / 配置模式**分离、
 **candidate → commit → running** 事务、`commit confirmed` 自动回滚、
