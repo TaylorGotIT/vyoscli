@@ -4517,12 +4517,24 @@ class ConfigStore:
                 if old_c.get(name) == cfg:
                     continue  # unchanged, leave running
                 # Force recreate on any change.
+                for module in ("xt_addrtype", "xt_MASQUERADE", "xt_conntrack"):
+                    subprocess.run(["modprobe", module], capture_output=True,
+                                   text=True, timeout=10)
                 subprocess.run(["podman", "rm", "-f", name],
                                capture_output=True, text=True, timeout=30)
                 cmd = ["podman", "run", "-d", "--name", name,
                        f"--restart={cfg.get('restart', 'always')}"]
                 if cfg.get("network"):
-                    cmd += ["--network", cfg["network"]]
+                    net = str(cfg["network"])
+                    if net not in ("host", "none", "slirp4netns"):
+                        probe = subprocess.run(
+                            ["podman", "network", "inspect", net],
+                            capture_output=True, text=True, timeout=20)
+                        if probe.returncode != 0:
+                            subprocess.run(
+                                ["podman", "network", "create", net],
+                                capture_output=True, text=True, timeout=30)
+                    cmd += ["--network", net]
                 for p in _as_list(cfg.get("port")):
                     cmd += ["-p", p]
                 for v in _as_list(cfg.get("volume")):

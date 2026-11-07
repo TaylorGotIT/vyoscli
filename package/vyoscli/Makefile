@@ -22,7 +22,7 @@ define Package/vyoscli
   CATEGORY:=Utilities
   TITLE:=VyOS-style CLI for OpenWrt
   URL:=https://github.com/yourname/vyoscli
-  DEPENDS:=+python3 +python3-readline +ip-full +smartdns +adguardhome +frr +kmod-tcp-bbr +kmod-tcp-hybla +kmod-wireguard +wireguard-tools +openvpn-openssl +strongswan +conserver +podman +kmod-gre +kmod-ipip +kmod-vxlan +frr-ospfd +frr-ripd +frr-bfdd +lldpd +shadow-useradd +shadow-chpasswd +strongswan-ipsec +strongswan-charon +strongswan-mod-aes +strongswan-mod-sha2
+  DEPENDS:=+python3 +python3-readline +ip-full +smartdns +adguardhome +frr +kmod-tcp-bbr +kmod-tcp-hybla +kmod-wireguard +wireguard-tools +openvpn-openssl +strongswan +conserver +podman +kmod-gre +kmod-ipip +kmod-vxlan +frr-ospfd +frr-ripd +frr-bfdd +lldpd +shadow-useradd +shadow-chpasswd +strongswan-ipsec +strongswan-charon +strongswan-mod-aes +strongswan-mod-sha2 +iptables-nft +ip6tables-nft +kmod-ipt-nat +iptables-mod-nat-extra +kmod-ipt-conntrack +iptables-mod-conntrack-extra +kmod-ipt-extra +iptables-mod-extra
   PKGARCH:=all
 endef
 
