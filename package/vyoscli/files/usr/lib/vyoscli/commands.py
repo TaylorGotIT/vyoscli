@@ -53,6 +53,8 @@ from .op_show import (
     _op_show_policy_local_route,
     _op_show_login_user,
     _op_show_login,
+    _op_ping_tcp,
+    _op_ping_udp,
     _op_show_system_cpu,
     _op_show_system_image,
     _op_show_system_image_storage,
@@ -286,6 +288,10 @@ def build_tree(store: Any) -> CommandTree:
     tree.op_root.children["show"].add(show_sys)
 
     tree.op("ping", help="Ping a host", value_type="host", action=_op_ping)
+    tree.op("ping tcp", help="TCP port check: ping tcp <ip> <port>",
+            action=_op_ping_tcp)
+    tree.op("ping udp", help="UDP port check: ping udp <ip> <port>",
+            action=_op_ping_udp)
 
     # show ip route [static|connected|summary]
     show_ip = Node(name="ip", help="IP information")

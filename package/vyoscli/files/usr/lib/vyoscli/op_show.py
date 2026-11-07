@@ -918,6 +918,65 @@ def _range_text(values) -> str:
     return ",".join(parts)
 
 
+def _parse_host_port(value: str):
+    parts = (value or "").split()
+    if len(parts) < 2:
+        return None, None, "usage: ping {proto} <ip> <port>"
+    try:
+        return parts[0], int(parts[1]), ""
+    except ValueError:
+        return None, None, "port must be a number"
+
+
+def _op_ping_tcp(ctx: Any, value: str) -> str:
+    import socket
+    import time
+    host, port, err = _parse_host_port(value)
+    if err:
+        return err.replace("{proto}", "tcp")
+    start = time.perf_counter()
+    try:
+        with socket.create_connection((host, port), timeout=2):
+            pass
+        elapsed = (time.perf_counter() - start) * 1000
+        return f"Connected to {host}:{port}: time={elapsed:.1f} ms"
+    except ConnectionRefusedError:
+        return f"tcp {host}:{port}: connection refused (port closed)"
+    except socket.timeout:
+        return f"tcp {host}:{port}: timeout (filtered)"
+    except OSError as e:  # noqa: BLE001
+        return f"tcp {host}:{port}: {e}"
+
+
+def _op_ping_udp(ctx: Any, value: str) -> str:
+    import socket
+    import time
+    host, port, err = _parse_host_port(value)
+    if err:
+        return err.replace("{proto}", "udp")
+    start = time.perf_counter()
+    try:
+        info = socket.getaddrinfo(host, port, type=socket.SOCK_DGRAM)[0]
+        family, socktype, proto, _canon, addr = info
+        sock = socket.socket(family, socktype, proto)
+        sock.settimeout(2)
+        try:
+            sock.connect(addr)
+            sock.send(b"\x00")
+            data = sock.recv(1024)
+            elapsed = (time.perf_counter() - start) * 1000
+            return (f"udp {host}:{port}: reply {len(data)} byte(s), "
+                    f"time={elapsed:.1f} ms")
+        except ConnectionRefusedError:
+            return f"udp {host}:{port}: port closed (ICMP unreachable)"
+        except socket.timeout:
+            return f"udp {host}:{port}: no response (open|filtered)"
+        finally:
+            sock.close()
+    except OSError as e:  # noqa: BLE001
+        return f"udp {host}:{port}: {e}"
+
+
 def _op_show_system_cpu(ctx: Any, value: Any) -> str:
     vendor = model = ""
     procs = []
