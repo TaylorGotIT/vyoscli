@@ -271,6 +271,7 @@ def build_tree(store: Any) -> CommandTree:
                       action=_op_show_bgp_summary))
     show_bgp.add(Node(name="table", help="Show BGP table",
                       action=_op_show_bgp))
+    show_bgp.action = _op_show_bgp
     show_ip.add(show_bgp)
     tree.op_root.children["show"].add(show_ip)
 
