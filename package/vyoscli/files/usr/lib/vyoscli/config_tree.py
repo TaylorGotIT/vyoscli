@@ -2387,7 +2387,7 @@ TREE = json.loads(r'''[
 "name": "shared-network-name",
 "help": "Shared network name",
 "dyn": true,
-"tpl_help": "",
+"tpl_help": "Shared network name (e.g. lan)",
 "children": [
 {
 "name": "interface",
@@ -2398,7 +2398,7 @@ TREE = json.loads(r'''[
 "name": "subnet",
 "help": "Subnet CIDR (e.g. 192.168.1.0/24)",
 "dyn": true,
-"tpl_help": "",
+"tpl_help": "Subnet prefix (x.x.x.x/xx)",
 "children": [
 {
 "name": "default-router",
@@ -2429,7 +2429,7 @@ TREE = json.loads(r'''[
 "name": "range",
 "help": "DHCP address range",
 "dyn": true,
-"tpl_help": "",
+"tpl_help": "Range name",
 "children": [
 {
 "name": "start",
@@ -2447,7 +2447,7 @@ TREE = json.loads(r'''[
 "name": "static-mapping",
 "help": "Static MAC-IP binding",
 "dyn": true,
-"tpl_help": "",
+"tpl_help": "Static mapping name",
 "children": [
 {
 "name": "ip-address",

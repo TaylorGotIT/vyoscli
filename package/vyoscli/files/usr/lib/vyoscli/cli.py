@@ -55,6 +55,56 @@ def _page_height() -> int:
         return 23
 
 
+def _value_hint(node) -> str:
+    """Context-aware placeholder for free-text leaves."""
+    name = (node.name or "").lower()
+    help_text = (node.help or "").lower()
+    if "interface" in name or "interface" in help_text:
+        return "<ifname>"
+    if "zone" in name or "zone" in help_text:
+        return "<zone>"
+    if "mac" in name:
+        return "<mac>"
+    if "address-group" in name or "port-group" in name:
+        return "<group>"
+    if "image" in name:
+        return "<image:tag>"
+    if "volume" in name:
+        return "<host:container>"
+    if "port" in name and ("mapping" in help_text or "host:" in help_text):
+        return "<host:container>"
+    if "regex" in name:
+        return "<regex>"
+    if "key" in name:
+        return "<key>"
+    if "file" in name or "path" in name:
+        return "<path>"
+    if "domain" in name:
+        return "<domain>"
+    return VALUE_TYPES.get(node.value_type, "<value>")
+
+
+def _enum_choices(help_text: str) -> list:
+    """Extract a|b|c choices from a node help string, VyOS style."""
+    text = (help_text or "").strip()
+    if "|" not in text and "/" not in text:
+        return []
+    if ":" in text:
+        text = text.split(":", 1)[1]
+    raw = text.replace("|", " ").replace("/", " ").replace(",", " ").split()
+    values = []
+    for item in raw:
+        item = item.strip("[]{}()")
+        if not item or item == "...":
+            continue
+        if not all(ch.isalnum() or ch in ".:_-" for ch in item):
+            continue
+        values.append(item)
+    if 2 <= len(values) <= 12:
+        return values
+    return []
+
+
 DYNAMIC_PLACEHOLDERS = {
     "ethernet": "<ifname>", "bridge": "<br-name>",
     "dummy": "<dum-name>", "tunnel": "<tun-name>",
@@ -75,6 +125,22 @@ DYNAMIC_PLACEHOLDERS = {
     "subnet": "<cidr>", "range": "<id>", "static-mapping": "<name>",
     "environment": "<VAR>", "name": "<name>", "shaper": "<policy>",
     "limiter": "<policy>", "fq-codel": "<policy>", "cake": "<policy>",
+    "forwarding": "<forwarding-name>", "address-group": "<group>",
+    "ipv6-address-group": "<group>", "port-group": "<group>",
+    "interface-group": "<group>", "vlan": "<vlan-id>",
+    "loopback": "<lo-name>", "community-list": "<list-number>",
+    "route-redirect": "<policy>", "access-list": "<list>",
+    "prefix-list": "<list>", "as-path-list": "<list>",
+    "neighbor": "<peer-ip>", "peer-group": "<peer-group>",
+    "route-map": "<route-map>", "permit": "<rule-number>",
+    "route": "<x.x.x.x/xx>", "table": "<table-id>",
+    "mtr": "<task-name>", "public-keys": "<key-id>",
+    "remote": "<server>", "parameter": "<name>",
+    "esp-group": "<group>", "proposal": "<number>",
+    "ike-group": "<group>", "sync-group": "<group>",
+    "ca": "<ca-name>", "certificate": "<cert-name>",
+    "key-pair": "<key-name>", "dh": "<dh-name>",
+    "class": "<class-id>",
 }
 
 from . import commands as builtin
@@ -220,7 +286,14 @@ class Cli:
                             tpl_help))
 
         if node.value_type and not node.children and not callable(completer):
-            hint = VALUE_TYPES.get(node.value_type, "<value>")
+            choices = (_enum_choices(node.help)
+                       if node.value_type in ("str", "string") else [])
+            if choices:
+                hint = "<" + "|".join(choices) + ">"
+            elif node.value_type in ("str", "string"):
+                hint = _value_hint(node)
+            else:
+                hint = VALUE_TYPES.get(node.value_type, "<value>")
             out.append((hint, node.help or "value"))
 
         if (self.ctx.mode == "op" and node.action is not None

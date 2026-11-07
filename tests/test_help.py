@@ -26,6 +26,14 @@ class HelpTest(unittest.TestCase):
         text = self.cli._help_text("set interfaces bridge ")
         self.assertIn("<br-name>", text)
 
+    def test_enum_hint_lists_choices(self):
+        pairs = dict(self.cli._matches_with_help(
+            ["set", "nat", "source", "rule", "10", "protocol", ""]))
+        self.assertIn("<tcp|udp|any>", pairs)
+        pairs = dict(self.cli._matches_with_help(
+            ["set", "interfaces", "ethernet", "eth0", "duplex", ""]))
+        self.assertIn("<auto|half|full>", pairs)
+
     def test_table_hint_and_range(self):
         text = self.cli._help_text(
             "set policy local-route rule 10 set table ")
