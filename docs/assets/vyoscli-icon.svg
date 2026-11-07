@@ -1,30 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="title">
   <title id="title">vyoscli — VyOS-style CLI on an OpenWrt base</title>
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#061321"/>
-      <stop offset="1" stop-color="#09273d"/>
+    <linearGradient id="owrt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#00b4e2"/>
+      <stop offset="1" stop-color="#008fbf"/>
     </linearGradient>
-    <linearGradient id="base" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#0a4f84"/>
-      <stop offset="1" stop-color="#08426a"/>
+    <linearGradient id="vyos" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0c1f3a"/>
+      <stop offset="1" stop-color="#0f2b4a"/>
     </linearGradient>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
-      <feDropShadow dx="0" dy="20" stdDeviation="18" flood-color="#000" flood-opacity=".55"/>
+      <feDropShadow dx="0" dy="20" stdDeviation="18" flood-color="#001e37" flood-opacity=".5"/>
     </filter>
   </defs>
 
-  <rect x="24" y="24" width="976" height="976" rx="220" fill="url(#bg)"/>
+  <rect x="24" y="24" width="976" height="976" rx="220" fill="url(#owrt)"/>
+
+  <text x="512" y="216" text-anchor="middle" font-family="Segoe UI, Inter, sans-serif"
+        font-size="92" font-weight="700" fill="#ffffff">openwrt</text>
 
   <g filter="url(#shadow)">
-    <circle cx="512" cy="520" r="318" fill="url(#base)"/>
+    <circle cx="512" cy="620" r="300" fill="url(#vyos)"/>
   </g>
-  <circle cx="512" cy="520" r="318" fill="none" stroke="#22d3ee" stroke-width="7"/>
+  <circle cx="512" cy="620" r="300" fill="none" stroke="#22d3ee" stroke-width="7"/>
 
-  <text x="352" y="500" font-family="Consolas, 'Cascadia Mono', monospace" font-size="300" font-weight="700" fill="#f5faff">&gt;</text>
-  <rect x="554" y="474" width="118" height="26" rx="5" fill="#22d3ee"/>
+  <text x="378" y="630" font-family="Consolas, 'Cascadia Mono', monospace"
+        font-size="250" font-weight="700" fill="#ffffff">&gt;</text>
+  <rect x="546" y="606" width="100" height="24" rx="5" fill="#22d3ee"/>
 
-  <text x="512" y="716" text-anchor="middle" font-family="Segoe UI, Inter, sans-serif" font-size="92" font-weight="700" fill="#f5faff">vyos<tspan fill="#22d3ee">cli</tspan></text>
+  <text x="512" y="824" text-anchor="middle" font-family="Segoe UI, Inter, sans-serif"
+        font-size="82" font-weight="700" fill="#ffffff">vyos<tspan fill="#22d3ee">cli</tspan></text>
 
-  <rect x="24" y="24" width="976" height="976" rx="220" fill="none" stroke="#2d6e8c" stroke-width="4"/>
+  <rect x="24" y="24" width="976" height="976" rx="220" fill="none"
+        stroke="#ffffff" stroke-opacity=".16" stroke-width="4"/>
 </svg>
