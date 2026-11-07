@@ -159,10 +159,18 @@ class Cli:
         # if unique match and it's a leaf, append space
         if len(filtered) == 1:
             name = filtered[0]
-            # check if this node has children (not a leaf)
             help_map = dict(matches)
-            # if help is a value hint or <Enter>, it's a leaf -> add space
-            if help_map.get(name) in ("value", "") or name.startswith("<") or name == "<Enter>":
+            # A placeholder such as <x.x.x.x> is not a completion: print it
+            # on its own line (VyOS style) and leave the buffer unchanged.
+            if name.startswith(("<", "{", "[")):
+                import sys
+                width = max((len(n) for n in names), default=len(name))
+                sys.stdout.write("\r\x1b[K")
+                print(f"  {name.ljust(width)}  {help_map.get(name, '')}")
+                sys.stdout.write(self._prompt() + buf)
+                sys.stdout.flush()
+                return None
+            if help_map.get(name) in ("value", "") or name == "<Enter>":
                 return name + " "
         return filtered[state]
 
