@@ -948,12 +948,48 @@ def _op_ping_tcp(ctx: Any, value: str) -> str:
         return f"tcp {host}:{port}: {e}"
 
 
+def _udp_payload(port: int, extra: str):
+    """Return (payload, label) that should provoke a reply for known ports."""
+    import os
+    import struct
+    if extra:
+        if extra.startswith("hex:"):
+            try:
+                return bytes.fromhex(extra[4:]), "custom"
+            except ValueError:
+                return b"\x00", "custom"
+        return extra.encode(), "custom"
+    if port == 53:
+        # DNS query: version.bind CH TXT (any response proves it is open).
+        name = b"\x07version\x04bind\x00"
+        question = name + struct.pack("!HH", 16, 3)
+        header = struct.pack("!HHHHHH", 0x1234, 0x0100, 1, 0, 0, 0)
+        return header + question, "dns"
+    if port == 123:
+        # NTPv3 client request.
+        return b"\x1b" + b"\x00" * 47, "ntp"
+    if port == 3478:
+        # STUN binding request.
+        return struct.pack("!HHI12s", 0x0001, 0, 0x2112A442,
+                           os.urandom(12)), "stun"
+    if port == 7:
+        return b"vyoscli", "echo"
+    return b"\x00", "generic"
+
+
 def _op_ping_udp(ctx: Any, value: str) -> str:
     import socket
     import time
-    host, port, err = _parse_host_port(value)
-    if err:
-        return err.replace("{proto}", "udp")
+    parts = (value or "").split()
+    if len(parts) < 2:
+        return "usage: ping udp <ip> <port> [payload|hex:...]"
+    host = parts[0]
+    try:
+        port = int(parts[1])
+    except ValueError:
+        return "port must be a number"
+    extra = " ".join(parts[2:])
+    payload, label = _udp_payload(port, extra)
     start = time.perf_counter()
     try:
         info = socket.getaddrinfo(host, port, type=socket.SOCK_DGRAM)[0]
@@ -962,15 +998,16 @@ def _op_ping_udp(ctx: Any, value: str) -> str:
         sock.settimeout(2)
         try:
             sock.connect(addr)
-            sock.send(b"\x00")
-            data = sock.recv(1024)
+            sock.send(payload)
+            data = sock.recv(2048)
             elapsed = (time.perf_counter() - start) * 1000
-            return (f"udp {host}:{port}: reply {len(data)} byte(s), "
+            return (f"udp {host}:{port}: {label} reply {len(data)} byte(s), "
                     f"time={elapsed:.1f} ms")
         except ConnectionRefusedError:
             return f"udp {host}:{port}: port closed (ICMP unreachable)"
         except socket.timeout:
-            return f"udp {host}:{port}: no response (open|filtered)"
+            return (f"udp {host}:{port}: no reply to {label} probe "
+                    f"(open|filtered, or service does not answer)")
         finally:
             sock.close()
     except OSError as e:  # noqa: BLE001
