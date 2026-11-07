@@ -51,6 +51,7 @@ from .op_show import (
     _op_show_dhcp_server_pools,
     _op_show_dhcp_server_static,
     _op_show_policy_local_route,
+    _op_show_login_user,
     _bgp_neighbor_ips,
     _op_show_bgp_neighbors,
     _op_show_bgp_neighbor_received_routes,
@@ -310,6 +311,8 @@ def build_tree(store: Any) -> CommandTree:
     tree.op("show arp", help="Show ARP table", action=_op_show_arp)
     tree.op("show policy local-route", help="Show local-route policy",
             action=_op_show_policy_local_route)
+    tree.op("show login user", help="Show logged-in users",
+            action=_op_show_login_user)
 
     # show container image
     tree.op("show container image", help="List podman images",

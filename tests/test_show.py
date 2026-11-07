@@ -40,6 +40,30 @@ ADDR = """\
 """
 
 
+class LoginUserTest(unittest.TestCase):
+    def test_lists_ssh_session(self):
+        def fake_run(args, **kwargs):
+            if args[:2] == ["ss", "-tnp"]:
+                return types.SimpleNamespace(
+                    stdout="ESTAB 0 0 192.168.75.206:22 192.168.75.78:54321 "
+                           'users:(("dropbear",pid=1234,fd=3))\n',
+                    stderr="", returncode=0)
+            if args[:3] == ["ps", "-o", "user="]:
+                return types.SimpleNamespace(stdout="root\n", stderr="",
+                                             returncode=0)
+            if args[:3] == ["ps", "-o", "lstart="]:
+                return types.SimpleNamespace(stdout="Sat Nov  7 18:00:00 2026\n",
+                                             stderr="", returncode=0)
+            return types.SimpleNamespace(stdout="", stderr="", returncode=0)
+
+        with mock.patch("subprocess.run", side_effect=fake_run):
+            text = op_show._op_show_login_user(None, "")
+        self.assertIn("Username", text)
+        self.assertIn("192.168.75.78", text)
+        self.assertIn("root", text)
+        self.assertIn("ssh", text)
+
+
 class ContainerImageTest(unittest.TestCase):
     def test_reports_missing_runtime(self):
         with mock.patch("shutil.which", return_value=None):

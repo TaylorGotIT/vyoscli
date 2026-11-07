@@ -591,6 +591,69 @@ def _op_show_dhcp_server_static(ctx: Any, value: Any) -> str:
     return "\n".join(lines)
 
 
+def _op_show_login_user(ctx: Any, value: Any) -> str:
+    import re
+    import subprocess
+    rows = []
+    seen = set()
+    for args in (["ss", "-tnp"], ["netstat", "-tnp"]):
+        try:
+            out = subprocess.run(args, capture_output=True, text=True,
+                                 timeout=5).stdout
+        except Exception:
+            continue
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) < 5:
+                continue
+            local, peer = parts[3], parts[4]
+            if not local.endswith(":22"):
+                continue
+            ip = peer.rsplit(":", 1)[0]
+            if ip in ("0.0.0.0", "::", "[::]"):
+                continue
+            m = re.search(r"pid=(\d+)", line) or re.search(r"(\d+)/", line)
+            pid = m.group(1) if m else ""
+            key = (ip, pid)
+            if key in seen:
+                continue
+            seen.add(key)
+            user, started = "root", "-"
+            if pid:
+                try:
+                    user = (subprocess.run(["ps", "-o", "user=", "-p", pid],
+                                           capture_output=True, text=True,
+                                           timeout=5).stdout.strip() or "root")
+                    started = (subprocess.run(
+                        ["ps", "-o", "lstart=", "-p", pid],
+                        capture_output=True, text=True,
+                        timeout=5).stdout.strip() or "-")
+                except Exception:
+                    pass
+            if started == "-" and pid:
+                try:
+                    with open(f"/proc/{pid}/stat", encoding="utf-8") as f:
+                        fields = f.read().split()
+                    with open("/proc/stat", encoding="utf-8") as f:
+                        btime = int(f.read().split("btime ")[1].split()[0])
+                    import time
+                    started = time.strftime(
+                        "%Y-%m-%d %H:%M:%S",
+                        time.localtime(btime + int(fields[21]) / 100.0))
+                except Exception:
+                    pass
+            rows.append((user, ip, "ssh", started))
+        if rows:
+            break
+    if not rows:
+        return "No users logged in."
+    lines = ["Username".ljust(12) + "IP Address".ljust(18)
+             + "TTY".ljust(8) + "Login Time"]
+    for user, ip, tty, started in rows:
+        lines.append(user.ljust(12) + ip.ljust(18) + tty.ljust(8) + started)
+    return "\n".join(lines)
+
+
 def _op_show_policy_local_route(ctx: Any, value: Any) -> str:
     rules = (ctx.store.get(["policy", "local-route", "rule"],
                            candidate=False) or {})
