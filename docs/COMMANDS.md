@@ -483,6 +483,12 @@
 | `service lldp description` | Description sent in LLDP frames | `service lldp description text` |
 | `service lldp interface` | Interface to advertise on | `service lldp interface text` |
 | `service lldp snmp` | Enable the SNMP subagent | `service lldp snmp true` |
+| `service mtr <name> count` | Probes per report | `service mtr <name> count 100` |
+| `service mtr <name> disable` | Stop the task | `service mtr <name> disable true` |
+| `service mtr <name> interface` | Egress interface | `service mtr <name> interface text` |
+| `service mtr <name> interval` | Seconds between reports | `service mtr <name> interval 100` |
+| `service mtr <name> max-hops` | Maximum TTL | `service mtr <name> max-hops 100` |
+| `service mtr <name> target` | Probe target | `service mtr <name> target text` |
 | `service ntp listen-address` | Bind address (unsupported by sysntpd) | `service ntp listen-address 192.0.2.1` |
 | `service ntp server` | NTP server hostname or address | `service ntp server ntp.aliyun.com` |
 | `service path-monitor task <name> disable` | Stop the task | `service path-monitor task <name> disable true` |

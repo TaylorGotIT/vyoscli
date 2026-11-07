@@ -1260,6 +1260,101 @@ def _op_show_service_path_monitor(ctx: Any, value: str) -> str:
     return "\n".join(lines)
 
 
+def _op_show_service_mtr(ctx: Any, value: str) -> str:
+    import re
+    tasks = (ctx.store.get(["service", "mtr"], candidate=False) or {})
+    if not tasks:
+        return "No MTR tasks."
+
+    def pid_running(name):
+        path = os.path.join(ctx.store.base_dir, "run", f"mtr-{name}.pid")
+        try:
+            with open(path, encoding="utf-8") as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 0)
+            return True
+        except (OSError, ValueError):
+            return False
+
+    def last_report(name):
+        path = os.path.join(ctx.store.base_dir, "mtr", f"{name}.log")
+        blocks = []
+        hops = []
+        started = "-"
+        try:
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("Start:"):
+                        if hops:
+                            blocks.append((started, hops))
+                        hops = []
+                        started = line.split(":", 1)[1].strip()
+                        continue
+                    m = re.match(r"^\s*(\d+)\.\|--\s+(\S+)\s+"
+                                 r"([\d.]+)%?\s+(\d+)\s+([\d.]+)", line)
+                    if m:
+                        hops.append({"ttl": int(m.group(1)),
+                                     "host": m.group(2),
+                                     "loss": float(m.group(3)),
+                                     "snt": int(m.group(4)),
+                                     "avg": m.group(5)})
+        except OSError:
+            pass
+        if hops:
+            blocks.append((started, hops))
+        return blocks[-1] if blocks else (started, hops)
+
+    if value:
+        cfg = tasks.get(value)
+        if not isinstance(cfg, dict):
+            return f"No such MTR task: {value}"
+        started, hops = last_report(value)
+        state = ("disabled" if cfg.get("disable")
+                 else ("running" if pid_running(value) else "stopped"))
+        lines = [f"Task:       {value}",
+                 f"Target:     {cfg.get('target', '-')}",
+                 f"Interface:  {cfg.get('interface') or '-'}",
+                 f"Count:      {cfg.get('count', 10)}",
+                 f"Interval:   {cfg.get('interval', 60)}s",
+                 f"State:      {state}",
+                 f"Last run:   {started}"]
+        if hops:
+            lines.append("")
+            lines.append("TTL  Host".ljust(28) + "Loss%".ljust(9) + "Avg(ms)")
+            for hop in hops:
+                lines.append(str(hop["ttl"]).ljust(5)
+                             + hop["host"].ljust(23)
+                             + f"{hop['loss']:.1f}".ljust(9)
+                             + hop["avg"])
+            last = hops[-1]
+            if last["loss"] >= 100:
+                lines.append(f"Break: TTL {last['ttl']} ({last['host']} loss 100%)")
+            else:
+                lines.append("Break: none (target responding)")
+        return "\n".join(lines)
+
+    lines = ["Task".ljust(14) + "Target".ljust(18) + "Interface".ljust(11)
+             + "Count".ljust(7) + "Interval".ljust(9) + "State".ljust(10)
+             + "Last run".ljust(27) + "Hops".ljust(6) + "Last loss"]
+    for name, cfg in sorted(tasks.items()):
+        if not isinstance(cfg, dict):
+            continue
+        started, hops = last_report(name)
+        state = ("disabled" if cfg.get("disable")
+                 else ("running" if pid_running(name) else "stopped"))
+        loss = f"{hops[-1]['loss']:.0f}%" if hops else "-"
+        lines.append(str(name).ljust(14)
+                     + str(cfg.get("target", "-")).ljust(18)
+                     + str(cfg.get("interface") or "-").ljust(11)
+                     + str(cfg.get("count", 10)).ljust(7)
+                     + (str(cfg.get("interval", 60)) + "s").ljust(9)
+                     + state.ljust(10)
+                     + str(started).ljust(27)
+                     + str(len(hops)).ljust(6)
+                     + loss)
+    return "\n".join(lines)
+
+
 def _op_show_system_cpu(ctx: Any, value: Any) -> str:
     vendor = model = ""
     procs = []

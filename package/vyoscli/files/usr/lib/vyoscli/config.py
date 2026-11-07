@@ -819,6 +819,7 @@ class ConfigStore:
             ("local-route", self._apply_local_route),
             ("tcp-mss", self._apply_tcp_mss),
             ("path-monitor", self._apply_path_monitor),
+            ("mtr", self._apply_mtr),
             ("bgp", self._apply_bgp),
             ("policy", self._apply_policy),
             ("firewall", self._apply_firewall),
@@ -1089,6 +1090,76 @@ class ConfigStore:
         os.makedirs(self.base_dir, exist_ok=True)
         with open(state_path, "w", encoding="utf-8") as f:
             json.dump(wanted, f)
+        return notes
+
+    def _apply_mtr(self, old, new):
+        old_t = (old.get("service") or {}).get("mtr") or {}
+        new_t = (new.get("service") or {}).get("mtr") or {}
+        if old_t == new_t:
+            return []
+        import shlex
+        import signal
+        run_dir = os.path.join(self.base_dir, "run")
+        mtr_dir = os.path.join(self.base_dir, "mtr")
+        os.makedirs(run_dir, exist_ok=True)
+        os.makedirs(mtr_dir, exist_ok=True)
+
+        def pid_path(name):
+            return os.path.join(run_dir, f"mtr-{name}.pid")
+
+        def stop(name):
+            pid = None
+            try:
+                with open(pid_path(name), encoding="utf-8") as f:
+                    pid = int(f.read().strip())
+            except (OSError, ValueError):
+                pass
+            if pid:
+                try:
+                    os.killpg(pid, signal.SIGTERM)
+                except OSError:
+                    try:
+                        os.kill(pid, signal.SIGTERM)
+                    except OSError:
+                        pass
+            try:
+                os.remove(pid_path(name))
+            except OSError:
+                pass
+
+        notes = []
+        for name in set(old_t) - set(new_t):
+            stop(name)
+            notes.append(f"mtr {name}: removed")
+        for name, cfg in new_t.items():
+            if not isinstance(cfg, dict):
+                continue
+            if old_t.get(name) == cfg:
+                continue
+            stop(name)
+            if cfg.get("disable") or not cfg.get("target"):
+                notes.append(f"mtr {name}: stopped")
+                continue
+            count = max(1, int(cfg.get("count") or 10))
+            interval = max(10, int(cfg.get("interval") or 60))
+            cmd = ["mtr", "-r", "-n", "-c", str(count), "-i", "1"]
+            if cfg.get("interface"):
+                cmd += ["-I", str(cfg["interface"])]
+            if cfg.get("max-hops"):
+                cmd += ["-m", str(cfg["max-hops"])]
+            cmd.append(str(cfg["target"]))
+            log = os.path.join(mtr_dir, f"{name}.log")
+            run_cmd = " ".join(shlex.quote(x) for x in cmd)
+            script = (f"while true; do {run_cmd} >> {shlex.quote(log)} 2>&1; "
+                      f"echo >> {shlex.quote(log)}; sleep {interval}; done")
+            proc = subprocess.Popen(["/bin/sh", "-c", script],
+                                    stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL,
+                                    start_new_session=True)
+            with open(pid_path(name), "w", encoding="utf-8") as f:
+                f.write(str(proc.pid))
+            notes.append(f"mtr {name}: started pid {proc.pid} "
+                         f"({count} probes every {interval}s)")
         return notes
 
     def _apply_path_monitor(self, old, new):

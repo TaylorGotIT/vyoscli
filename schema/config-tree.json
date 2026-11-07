@@ -2949,6 +2949,44 @@
       ]
      }
     ]
+   },
+   {
+    "name": "mtr",
+    "help": "Background MTR tasks",
+    "dyn": true,
+    "tpl_help": "Task name",
+    "children": [
+     {
+      "name": "target",
+      "help": "Probe target",
+      "type": "str"
+     },
+     {
+      "name": "interface",
+      "help": "Egress interface",
+      "type": "str"
+     },
+     {
+      "name": "count",
+      "help": "Probes per report",
+      "type": "int"
+     },
+     {
+      "name": "interval",
+      "help": "Seconds between reports",
+      "type": "int"
+     },
+     {
+      "name": "max-hops",
+      "help": "Maximum TTL",
+      "type": "int"
+     },
+     {
+      "name": "disable",
+      "help": "Stop the task",
+      "type": "bool"
+     }
+    ]
    }
   ]
  },
