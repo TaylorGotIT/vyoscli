@@ -815,6 +815,7 @@ class ConfigStore:
             ("static-routes", self._apply_static_routes),
             ("static-tables", self._apply_static_tables),
             ("local-route", self._apply_local_route),
+            ("tcp-mss", self._apply_tcp_mss),
             ("bgp", self._apply_bgp),
             ("policy", self._apply_policy),
             ("firewall", self._apply_firewall),
@@ -1062,6 +1063,61 @@ class ConfigStore:
         with open(state_path, "w", encoding="utf-8") as f:
             json.dump(wanted, f)
         return notes
+
+    def _apply_tcp_mss(self, old, new):
+        def mss_map(cfg):
+            found = {}
+            for items in (cfg.get("interfaces") or {}).values():
+                if not isinstance(items, dict):
+                    continue
+                for name, body in items.items():
+                    if isinstance(body, dict) and body.get("tcp-mss"):
+                        found[name] = int(body["tcp-mss"])
+            return found
+
+        old_m = mss_map(old)
+        new_m = mss_map(new)
+        if old_m == new_m:
+            return []
+        path = os.path.join(self.base_dir, "tcp-mss.nft")
+        if not new_m:
+            try:
+                subprocess.run(["nft", "delete", "table", "inet", "vyos_mss"],
+                               capture_output=True, text=True, timeout=10)
+            except (OSError, subprocess.SubprocessError):
+                pass
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            return ["tcp-mss: removed"]
+        lines = ["table inet vyos_mss {",
+                 "  chain forward { type filter hook forward priority 0; "
+                 "policy accept;"]
+        for name, mss in sorted(new_m.items()):
+            lines.append(f'    oifname "{name}" tcp flags & (syn|rst) == syn '
+                         f"tcp option maxseg size set {mss}")
+            lines.append(f'    iifname "{name}" tcp flags & (syn|rst) == syn '
+                         f"tcp option maxseg size set {mss}")
+        lines.append("  }")
+        lines.append("  chain output { type filter hook output priority 0; "
+                     "policy accept;")
+        for name, mss in sorted(new_m.items()):
+            lines.append(f'    oifname "{name}" tcp flags & (syn|rst) == syn '
+                         f"tcp option maxseg size set {mss}")
+        lines += ["  }", "}"]
+        text = "\n".join(lines) + "\n"
+        os.makedirs(self.base_dir, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        try:
+            proc = subprocess.run(["nft", "-f", path], capture_output=True,
+                                  text=True, timeout=15)
+        except (OSError, subprocess.SubprocessError) as e:
+            return [f"tcp-mss: nft unavailable ({e})"]
+        if proc.returncode != 0:
+            return [f"tcp-mss apply failed: {(proc.stderr or '').strip()[:160]}"]
+        return [f"tcp-mss: {len(new_m)} interface(s)"]
 
     def _apply_wan_lb(self, old, new):
         old_w = (old.get("load-balancing") or {}).get("wan") or {}
@@ -1857,9 +1913,18 @@ class ConfigStore:
         eth = (new_if.get("ethernet") or {})
         for gone in set(old_if.get("ethernet") or {}) - set(eth):
             self._release_iface(gone, mapping, notes)
+        old_eth = old_if.get("ethernet") or {}
         for ifname, cfg in eth.items():
             if not isinstance(cfg, dict) or ifname == "lo":
                 continue
+            if cfg.get("mtu"):
+                subprocess.run(["ip", "link", "set", str(ifname), "mtu",
+                                str(cfg["mtu"])], capture_output=True,
+                               text=True, timeout=10)
+            elif isinstance(old_eth.get(ifname), dict) and old_eth[ifname].get("mtu"):
+                subprocess.run(["ip", "link", "set", str(ifname), "mtu",
+                                "1500"], capture_output=True, text=True,
+                               timeout=10)
             addrs = _as_list(cfg.get("address"))
             # No address means "stop managing this port": restore a taken-over
             # section, or drop our own vyos_* interface.

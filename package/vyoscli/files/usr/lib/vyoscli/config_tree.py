@@ -983,6 +983,11 @@ TREE = json.loads(r'''[
 "name": "vrf",
 "help": "VRF instance name",
 "type": "str"
+},
+{
+"name": "tcp-mss",
+"help": "TCP MSS clamp value for this interface",
+"type": "int"
 }
 ]
 },

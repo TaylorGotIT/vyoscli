@@ -472,6 +472,25 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn(["nft", "delete", "table", "inet", "vyos_ssh"],
                       self.fake.calls)
 
+    def test_tcp_mss_renders_nft(self):
+        cfg(self.cli, "set interfaces ethernet eth0 mtu 1400",
+            "set interfaces ethernet eth0 tcp-mss 1300")
+        self.commit()
+        self.assertIn(["ip", "link", "set", "eth0", "mtu", "1400"],
+                      self.fake.calls)
+        path = os.path.join(self.cli.store.base_dir, "tcp-mss.nft")
+        text = open(path, encoding="utf-8").read()
+        self.assertIn('oifname "eth0"', text)
+        self.assertIn("maxseg size set 1300", text)
+        self.assertIn(["nft", "-f", path], self.fake.calls)
+        cfg(self.cli, "delete interfaces ethernet eth0 tcp-mss",
+            "delete interfaces ethernet eth0 mtu")
+        self.commit()
+        self.assertIn(["ip", "link", "set", "eth0", "mtu", "1500"],
+                      self.fake.calls)
+        self.assertIn(["nft", "delete", "table", "inet", "vyos_mss"],
+                      self.fake.calls)
+
     def test_ssh_acl_permit_allowlist(self):
         cfg(self.cli,
             "set service ssh acl permit 192.0.2.0/24",

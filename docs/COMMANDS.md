@@ -166,6 +166,7 @@
 | `interfaces ethernet <ifname> mac` | MAC address | `interfaces ethernet <ifname> mac text` |
 | `interfaces ethernet <ifname> mtu` | MTU (default 1500) | `interfaces ethernet <ifname> mtu 100` |
 | `interfaces ethernet <ifname> speed` | Speed: auto\|10\|100\|1000\|2500\|10000 | `interfaces ethernet <ifname> speed text` |
+| `interfaces ethernet <ifname> tcp-mss` | TCP MSS clamp value for this interface | `interfaces ethernet <ifname> tcp-mss 100` |
 | `interfaces ethernet <ifname> vif <vlan-id> address` | IPv4 address/prefix | `interfaces ethernet <ifname> vif <vlan-id> address 192.0.2.1/24` |
 | `interfaces ethernet <ifname> vif <vlan-id> description` | Interface description | `interfaces ethernet <ifname> vif <vlan-id> description text` |
 | `interfaces ethernet <ifname> vrf` | VRF instance name | `interfaces ethernet <ifname> vrf text` |
