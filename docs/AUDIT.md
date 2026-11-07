@@ -143,6 +143,7 @@ import vyoscli.cli          ≈ 0.07 s
 | 90 | podman --format 表头异常 | show container image 改用运行时原生 images 输出（REPOSITORY/TAG/IMAGE ID/CREATED/SIZE）。真机安装 podman 4.9.3，因 registry-1.docker.io 被劫持改用 docker.m.daocloud.io 镜像，成功列出 busybox | commands.py:_op_show_container_image |
 | 91 | 缺 show login user | 新增 `show login user`：解析 `ss -tnp`（无 ss 时回退 `netstat -tnp`）的 22 端口已建立连接，列出 Username/IP Address/TTY/Login Time；登录时间优先 ps，回退 /proc。真机列出两个 root SSH 会话及时间 | `op_show.py:_op_show_login_user` |
 | 92 | show login user 看不到 console/vty | 改为枚举 /proc 中带 TTY 的登录 shell（console/ttyS0/tty1/pts），TTY 名取自 fd/0 链接，用户取自进程；pts 会话通过父进程链关联 SSH 对端 IP，无 TTY 的 SSH 连接再按 netstat 兜底。真机列出 `pts/0`（192.168.75.78）和 `tty1`（本地控制台） | `op_show.py:_op_show_login_user` |
+| 93 | 缺 show login（当前会话） | 新增 `show login`：输出 login/user/level/groups，TTY 取 `os.ttyname(0)`（非 TTY 为 `-`），IP 沿父进程链匹配 SSH 连接，登录时间取会话进程；组从 /etc/passwd + /etc/group 解析。真机输出 root / admin / root / 192.168.75.78 | `op_show.py:_op_show_login` |
 tysh -c "show ip route bgp"，回退 ip route show proto bgp；真机输出 Codes 头 + B>* 条目（6204 条） | op_show.py:_op_show_ip_route_bgp |
 tysh，输出 VyOS/FRR 风格（Codes 头 + S>* 等）；FRR 未运行或表为空时回退到 ip route，静态表为空时保留 Codes 头。真机 static 显示 Codes 头，full 表为 FRR 格式 | op_show.py:_vtysh_route |
 | 78 | WAN 多线映射错误且 mwan3 不可用 | 安装 mwan3 后修正映射：设备名（eth1）先解析为 OpenWrt 网络接口名（wan），再写 mwan3.interface/member/policy/rule；真机验证 WAN/SSH 未中断，但 `mwan3 status` 中 wan 虽 online，所有 policy（含默认 balanced）均为 `unreachable`，WAN LB 不可用。已删除配置、停止 mwan3、清理 mwan3.* 漂移项；mwan3 包保留但未启用 | `config.py:_apply_wan_lb` |

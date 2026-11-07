@@ -652,6 +652,69 @@ def _ssh_peers() -> dict:
     return peers
 
 
+def _user_groups(user: str) -> list:
+    groups = set()
+    primary = ""
+    try:
+        with open("/etc/passwd", encoding="utf-8") as f:
+            for line in f:
+                parts = line.split(":")
+                if parts and parts[0] == user:
+                    primary = parts[3] if len(parts) > 3 else ""
+                    break
+    except OSError:
+        pass
+    try:
+        with open("/etc/group", encoding="utf-8") as f:
+            for line in f:
+                parts = line.rstrip("\n").split(":")
+                if len(parts) < 4:
+                    continue
+                members = parts[3].split(",")
+                if user in members or (primary and parts[2] == primary):
+                    groups.add(parts[0])
+    except OSError:
+        pass
+    if not groups:
+        groups.add(user)
+    return sorted(groups)
+
+
+def _op_show_login(ctx: Any, value: Any) -> str:
+    import getpass
+    import os
+    user = os.environ.get("USER") or os.environ.get("LOGNAME") or getpass.getuser()
+    try:
+        tty = os.ttyname(0)
+        tty = tty[5:] if tty.startswith("/dev/") else tty
+    except OSError:
+        tty = "-"
+    peers = _ssh_peers()
+    ip = "-"
+    pid = str(os.getpid())
+    session_pid = pid
+    for _ in range(12):
+        status = _proc_status(pid)
+        if pid in peers:
+            ip = peers[pid]
+            session_pid = pid
+            break
+        current_tty = _proc_tty(pid)
+        if current_tty and not current_tty.startswith("null"):
+            session_pid = pid
+        ppid = status.get("PPid", "")
+        if not ppid or ppid == "0":
+            break
+        pid = ppid
+    started = _proc_start(session_pid)
+    return "\n".join([
+        f"login     : {user}  {tty:<10} {started} ({ip})",
+        "level     : admin",
+        f"user      : {user}",
+        f"groups    : {' '.join(_user_groups(user))}",
+    ])
+
+
 def _op_show_login_user(ctx: Any, value: Any) -> str:
     import os
     import subprocess
