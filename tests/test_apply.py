@@ -81,7 +81,8 @@ class FrrRenderTest(unittest.TestCase):
         lines = config_mod.ConfigStore.render_frr_conf(
             {"local-as": 65001, "router-id": "10.0.0.1",
              "neighbor": {"10.0.0.2": {"remote-as": 65002,
-                                       "description": "peer"}},
+                                       "description": "peer",
+                                       "soft-reconfiguration": {"inbound": True}}},
              "network": ["10.9.0.0/16"]},
             {"RM1": {"permit": {"10": {"set": {"local-preference": 200}}}}},
             {"10": {"10": {"regex": "65001:*", "action": "permit"}}},
@@ -92,6 +93,7 @@ class FrrRenderTest(unittest.TestCase):
                        "neighbor 10.0.0.2 description peer",
                        "address-family ipv4 unicast",
                        "neighbor 10.0.0.2 activate",
+                       "neighbor 10.0.0.2 soft-reconfiguration inbound",
                        "network 10.9.0.0/16",
                        "route-map RM1 permit 10",
                        "set local-preference 200",

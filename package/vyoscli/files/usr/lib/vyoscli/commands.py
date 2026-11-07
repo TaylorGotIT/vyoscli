@@ -45,6 +45,8 @@ from .op_show import (
     _op_show_system_kmsg,
     _op_show_system_login,
     _op_show_ip_route,
+    _op_show_bgp,
+    _op_show_bgp_summary,
     _op_show_ip_route_static,
     _op_show_ip_route_connected,
     _op_show_ip_route_summary,
@@ -264,6 +266,12 @@ def build_tree(store: Any) -> CommandTree:
                         action=_op_show_ip_route_summary))
     show_route.action = _op_show_ip_route
     show_ip.add(show_route)
+    show_bgp = Node(name="bgp", help="BGP information")
+    show_bgp.add(Node(name="summary", help="Show BGP summary",
+                      action=_op_show_bgp_summary))
+    show_bgp.add(Node(name="table", help="Show BGP table",
+                      action=_op_show_bgp))
+    show_ip.add(show_bgp)
     tree.op_root.children["show"].add(show_ip)
 
     # show container image

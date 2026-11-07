@@ -364,6 +364,7 @@
 | `protocols bgp neighbor <name> remote-as` | Peer AS number | `protocols bgp neighbor <name> remote-as 100` |
 | `protocols bgp neighbor <name> route-map-in` | Inbound route-map name | `protocols bgp neighbor <name> route-map-in text` |
 | `protocols bgp neighbor <name> route-map-out` | Outbound route-map name | `protocols bgp neighbor <name> route-map-out text` |
+| `protocols bgp neighbor <name> soft-reconfiguration inbound` | Enable inbound soft reconfiguration | `protocols bgp neighbor <name> soft-reconfiguration inbound true` |
 | `protocols bgp network` | Advertise prefix (repeatable) | `protocols bgp network 203.0.113.0/24` |
 | `protocols bgp peer-group <name> remote-as` | Remote AS | `protocols bgp peer-group <name> remote-as 100` |
 | `protocols bgp peer-group <name> route-map-import` | Inbound route-map | `protocols bgp peer-group <name> route-map-import text` |

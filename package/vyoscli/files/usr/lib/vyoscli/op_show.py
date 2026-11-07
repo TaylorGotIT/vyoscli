@@ -337,6 +337,27 @@ def _op_show_ip_route(ctx: Any, value: Any) -> str:
         return "n/a"
 
 
+def _vtysh_show(command: str) -> str:
+    import subprocess
+    try:
+        r = subprocess.run(["vtysh", "-c", command], capture_output=True,
+                           text=True, timeout=15)
+    except FileNotFoundError:
+        return "vtysh not found (install frr)"
+    except Exception as e:  # noqa: BLE001
+        return f"vtysh failed: {e}"
+    out = (r.stdout or "").strip() or (r.stderr or "").strip()
+    return out or "BGP is not running (frr/bgpd not started)"
+
+
+def _op_show_bgp_summary(ctx: Any, value: Any) -> str:
+    return _vtysh_show("show bgp ipv4 unicast summary")
+
+
+def _op_show_bgp(ctx: Any, value: Any) -> str:
+    return _vtysh_show("show bgp ipv4 unicast")
+
+
 def _op_show_ip_route_static(ctx: Any, value: Any) -> str:
     import subprocess
     try:

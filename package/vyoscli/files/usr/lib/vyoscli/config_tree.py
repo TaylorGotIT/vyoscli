@@ -1904,6 +1904,17 @@ TREE = json.loads(r'''[
 "name": "route-map-out",
 "help": "Outbound route-map name",
 "type": "str"
+},
+{
+"name": "soft-reconfiguration",
+"help": "Store received routes for soft reconfiguration",
+"children": [
+{
+"name": "inbound",
+"help": "Enable inbound soft reconfiguration",
+"type": "bool"
+}
+]
 }
 ]
 },

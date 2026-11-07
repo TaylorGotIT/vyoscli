@@ -2886,6 +2886,10 @@ class ConfigStore:
                     lines.append(f"  network {net}")
                 for ip in peers:
                     lines.append(f"  neighbor {ip} activate")
+                    nb = (bgp.get("neighbor") or {}).get(ip) or {}
+                    if (nb.get("soft-reconfiguration") or {}).get("inbound"):
+                        lines.append(f"  neighbor {ip} "
+                                     f"soft-reconfiguration inbound")
                 for name in groups:
                     lines.append(f"  neighbor {name} activate")
                 lines.append(" exit-address-family")
