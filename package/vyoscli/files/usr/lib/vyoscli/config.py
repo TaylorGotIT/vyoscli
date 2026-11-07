@@ -866,6 +866,30 @@ class ConfigStore:
         self._current_owner = None
         return notes
 
+    def _iface_sections(self, ifname: str) -> List[str]:
+        """Network sections referencing this device (IPv4 before IPv6)."""
+        secs = {}
+        try:
+            text = self._uci("show", "network").stdout
+        except Exception:
+            return []
+        for line in text.splitlines():
+            lhs, _, raw = line.partition("=")
+            if not lhs.startswith("network."):
+                continue
+            path = lhs[len("network."):]
+            if "." in path:
+                sec, key = path.split(".", 1)
+                secs.setdefault(sec, {})[key] = raw.strip("'\"")
+            else:
+                secs.setdefault(path, {})["__type__"] = raw.strip("'\"")
+        found = [sec for sec, opts in secs.items()
+                 if opts.get("__type__") == "interface"
+                 and (opts.get("device") == ifname
+                      or opts.get("ifname") == ifname)]
+        found.sort(key=lambda sec: "dhcpv6" in secs[sec].get("proto", ""))
+        return found
+
     def _network_map(self) -> Dict[str, Dict[str, Any]]:
         """Map device name -> the UCI section that owns it.
 
@@ -1079,45 +1103,48 @@ class ConfigStore:
         new_m = mss_map(new)
         if old_m == new_m:
             return []
-        path = os.path.join(self.base_dir, "tcp-mss.nft")
+        native = os.path.isdir("/etc/nftables.d")
+        include_dir = "/etc/nftables.d" if native else self.base_dir
+        path = os.path.join(include_dir, "20-vyos-mss.nft")
+        # Drop the legacy standalone table if a previous version made one.
+        try:
+            subprocess.run(["nft", "delete", "table", "inet", "vyos_mss"],
+                           capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            pass
         if not new_m:
-            try:
-                subprocess.run(["nft", "delete", "table", "inet", "vyos_mss"],
-                               capture_output=True, text=True, timeout=10)
-            except (OSError, subprocess.SubprocessError):
-                pass
             try:
                 os.remove(path)
             except OSError:
                 pass
+            if native:
+                subprocess.run(["fw4", "restart"], capture_output=True,
+                               text=True, timeout=60)
             return ["tcp-mss: removed"]
-        lines = ["table inet vyos_mss {",
-                 "  chain forward { type filter hook forward priority 0; "
-                 "policy accept;"]
+        lines = ["chain vyos_mss_forward {",
+                 "    type filter hook forward priority mangle; policy accept;"]
         for name, mss in sorted(new_m.items()):
             lines.append(f'    oifname "{name}" tcp flags & (syn|rst) == syn '
                          f"tcp option maxseg size set {mss}")
             lines.append(f'    iifname "{name}" tcp flags & (syn|rst) == syn '
                          f"tcp option maxseg size set {mss}")
-        lines.append("  }")
-        lines.append("  chain output { type filter hook output priority 0; "
-                     "policy accept;")
+        lines += ["}", "chain vyos_mss_output {",
+                  "    type filter hook output priority mangle; policy accept;"]
         for name, mss in sorted(new_m.items()):
             lines.append(f'    oifname "{name}" tcp flags & (syn|rst) == syn '
                          f"tcp option maxseg size set {mss}")
-        lines += ["  }", "}"]
+        lines.append("}")
         text = "\n".join(lines) + "\n"
-        os.makedirs(self.base_dir, exist_ok=True)
+        os.makedirs(include_dir, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write(text)
-        try:
-            proc = subprocess.run(["nft", "-f", path], capture_output=True,
-                                  text=True, timeout=15)
-        except (OSError, subprocess.SubprocessError) as e:
-            return [f"tcp-mss: nft unavailable ({e})"]
-        if proc.returncode != 0:
-            return [f"tcp-mss apply failed: {(proc.stderr or '').strip()[:160]}"]
-        return [f"tcp-mss: {len(new_m)} interface(s)"]
+        if native:
+            proc = subprocess.run(["fw4", "reload"], capture_output=True,
+                                  text=True, timeout=60)
+            if proc.returncode != 0:
+                return [f"tcp-mss: fw4 reload failed: "
+                        f"{(proc.stderr or '').strip()[:160]}"]
+        return [f"tcp-mss: {len(new_m)} interface(s) via fw4 include"]
 
     def _apply_wan_lb(self, old, new):
         old_w = (old.get("load-balancing") or {}).get("wan") or {}
@@ -1917,11 +1944,22 @@ class ConfigStore:
         for ifname, cfg in eth.items():
             if not isinstance(cfg, dict) or ifname == "lo":
                 continue
+            sections = self._iface_sections(ifname)
+            section = sections[0] if sections else None
             if cfg.get("mtu"):
+                if section:
+                    self._uci("set", f"network.{section}.mtu={cfg['mtu']}")
+                    self._uci("commit", "network")
                 subprocess.run(["ip", "link", "set", str(ifname), "mtu",
                                 str(cfg["mtu"])], capture_output=True,
                                text=True, timeout=10)
             elif isinstance(old_eth.get(ifname), dict) and old_eth[ifname].get("mtu"):
+                if section:
+                    try:
+                        self._uci("delete", f"network.{section}.mtu")
+                        self._uci("commit", "network")
+                    except subprocess.CalledProcessError:
+                        pass
                 subprocess.run(["ip", "link", "set", str(ifname), "mtu",
                                 "1500"], capture_output=True, text=True,
                                timeout=10)

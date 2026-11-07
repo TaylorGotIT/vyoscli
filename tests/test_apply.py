@@ -478,18 +478,18 @@ class CommitBackendTest(unittest.TestCase):
         self.commit()
         self.assertIn(["ip", "link", "set", "eth0", "mtu", "1400"],
                       self.fake.calls)
-        path = os.path.join(self.cli.store.base_dir, "tcp-mss.nft")
+        path = os.path.join(self.cli.store.base_dir, "20-vyos-mss.nft")
         text = open(path, encoding="utf-8").read()
+        self.assertIn("chain vyos_mss_forward", text)
+        self.assertIn("priority mangle", text)
         self.assertIn('oifname "eth0"', text)
         self.assertIn("maxseg size set 1300", text)
-        self.assertIn(["nft", "-f", path], self.fake.calls)
         cfg(self.cli, "delete interfaces ethernet eth0 tcp-mss",
             "delete interfaces ethernet eth0 mtu")
         self.commit()
         self.assertIn(["ip", "link", "set", "eth0", "mtu", "1500"],
                       self.fake.calls)
-        self.assertIn(["nft", "delete", "table", "inet", "vyos_mss"],
-                      self.fake.calls)
+        self.assertFalse(os.path.exists(path))
 
     def test_ssh_acl_permit_allowlist(self):
         cfg(self.cli,
