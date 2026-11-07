@@ -56,6 +56,7 @@ from .op_show import (
     _op_ping_tcp,
     _op_ping_udp,
     _op_monitor_path,
+    _op_show_service_path_monitor,
     _op_show_monitor_path,
     _op_show_system_cpu,
     _op_show_system_image,
@@ -335,6 +336,8 @@ def build_tree(store: Any) -> CommandTree:
             action=_op_monitor_path)
     tree.op("show monitor path", help="Show recorded path status",
             action=_op_show_monitor_path)
+    tree.op("show service path-monitor", help="Show background path tasks",
+            value_type="str", action=_op_show_service_path_monitor)
     tree.op("show system cpu", help="Show CPU information",
             action=_op_show_system_cpu)
     tree.op("show system image", help="Show installed image",

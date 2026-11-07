@@ -485,6 +485,11 @@
 | `service lldp snmp` | Enable the SNMP subagent | `service lldp snmp true` |
 | `service ntp listen-address` | Bind address (unsupported by sysntpd) | `service ntp listen-address 192.0.2.1` |
 | `service ntp server` | NTP server hostname or address | `service ntp server ntp.aliyun.com` |
+| `service path-monitor task <name> disable` | Stop the task | `service path-monitor task <name> disable true` |
+| `service path-monitor task <name> interface` | Egress interface | `service path-monitor task <name> interface text` |
+| `service path-monitor task <name> interval` | Seconds between probes | `service path-monitor task <name> interval 100` |
+| `service path-monitor task <name> max-hops` | Maximum TTL to probe | `service path-monitor task <name> max-hops 100` |
+| `service path-monitor task <name> target` | Probe target IPv4/host | `service path-monitor task <name> target text` |
 | `service router-advert interface <name> default-lifetime` | Default lifetime (seconds) | `service router-advert interface <name> default-lifetime 100` |
 | `service router-advert interface <name> managed-flag` | Set the managed address flag | `service router-advert interface <name> managed-flag true` |
 | `service router-advert interface <name> no-send-advert` | Do not send advertisements | `service router-advert interface <name> no-send-advert true` |

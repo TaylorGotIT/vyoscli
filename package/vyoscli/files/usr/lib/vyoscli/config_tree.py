@@ -2918,6 +2918,45 @@ TREE = json.loads(r'''[
 "repeatable": true
 }
 ]
+},
+{
+"name": "path-monitor",
+"help": "Background per-uplink path monitoring",
+"children": [
+{
+"name": "task",
+"help": "Task name",
+"dyn": true,
+"tpl_help": "Path monitor task",
+"children": [
+{
+"name": "target",
+"help": "Probe target IPv4/host",
+"type": "str"
+},
+{
+"name": "interface",
+"help": "Egress interface",
+"type": "str"
+},
+{
+"name": "interval",
+"help": "Seconds between probes",
+"type": "int"
+},
+{
+"name": "disable",
+"help": "Stop the task",
+"type": "bool"
+},
+{
+"name": "max-hops",
+"help": "Maximum TTL to probe",
+"type": "int"
+}
+]
+}
+]
 }
 ]
 },

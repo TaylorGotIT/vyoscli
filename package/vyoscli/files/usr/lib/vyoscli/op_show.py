@@ -1191,6 +1191,75 @@ def _op_show_monitor_path(ctx: Any, value: str) -> str:
     return "\n".join(lines)
 
 
+def _op_show_service_path_monitor(ctx: Any, value: str) -> str:
+    import json
+    tasks = (ctx.store.get(["service", "path-monitor", "task"],
+                           candidate=False) or {})
+    if not tasks:
+        return "No path-monitor tasks."
+
+    def pid_running(name):
+        path = os.path.join(ctx.store.base_dir, "run", f"path-{name}.pid")
+        try:
+            with open(path, encoding="utf-8") as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 0)
+            return True
+        except (OSError, ValueError):
+            return False
+
+    latest = {}
+    try:
+        with open(os.path.join(ctx.store.base_dir, "monitor", "path.jsonl"),
+                  encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                rec = json.loads(line)
+                latest[(rec.get("target"), rec.get("interface"))] = rec
+    except (OSError, ValueError):
+        pass
+
+    if value:
+        cfg = tasks.get(value)
+        if not isinstance(cfg, dict):
+            return f"No such path-monitor task: {value}"
+        iface = cfg.get("interface") or "-"
+        rec = latest.get((cfg.get("target"), iface))
+        state = ("disabled" if cfg.get("disable")
+                 else ("running" if pid_running(value) else "stopped"))
+        lines = [f"Task:       {value}",
+                 f"Target:     {cfg.get('target', '-')}",
+                 f"Interface:  {iface}",
+                 f"Interval:   {cfg.get('interval', 60)}s",
+                 f"State:      {state}"]
+        if rec:
+            lines.append("")
+            lines.append(_format_path(rec))
+        return "\n".join(lines)
+
+    lines = ["Task".ljust(14) + "Target".ljust(18) + "Interface".ljust(11)
+             + "Interval".ljust(9) + "State".ljust(10) + "Last seen".ljust(21)
+             + "Hops".ljust(6) + "Reached".ljust(9) + "Break"]
+    for name, cfg in sorted(tasks.items()):
+        if not isinstance(cfg, dict):
+            continue
+        iface = cfg.get("interface") or "-"
+        rec = latest.get((cfg.get("target"), iface), {})
+        state = ("disabled" if cfg.get("disable")
+                 else ("running" if pid_running(name) else "stopped"))
+        lines.append(str(name).ljust(14)
+                     + str(cfg.get("target", "-")).ljust(18)
+                     + str(iface).ljust(11)
+                     + (str(cfg.get("interval", 60)) + "s").ljust(9)
+                     + state.ljust(10)
+                     + str(rec.get("time", "-")).ljust(21)
+                     + str(len(rec.get("hops", []))).ljust(6)
+                     + ("yes" if rec.get("reached") else "no").ljust(9)
+                     + str(rec.get("break_at", "")))
+    return "\n".join(lines)
+
+
 def _op_show_system_cpu(ctx: Any, value: Any) -> str:
     vendor = model = ""
     procs = []
