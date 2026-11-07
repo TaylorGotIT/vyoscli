@@ -2219,11 +2219,69 @@ TREE = json.loads(r'''[
 {
 "name": "bgp",
 "help": "BGP routing (FRR)",
+"dyn": true,
+"tpl_help": "BGP ASN",
 "children": [
 {
-"name": "local-as",
-"help": "Local AS number",
+"name": "parameters",
+"help": "BGP parameters",
+"children": [
+{
+"name": "router-id",
+"help": "Router ID",
+"type": "ipv4"
+}
+]
+},
+{
+"name": "timers",
+"help": "BGP timers",
+"children": [
+{
+"name": "holdtime",
+"help": "Hold time",
 "type": "int"
+},
+{
+"name": "keepalive",
+"help": "Keepalive",
+"type": "int"
+}
+]
+},
+{
+"name": "address-family",
+"help": "Address family",
+"children": [
+{
+"name": "ipv4-unicast",
+"help": "IPv4 unicast",
+"children": [
+{
+"name": "maximum-paths",
+"help": "Maximum paths",
+"children": [
+{
+"name": "ibgp",
+"help": "iBGP multipath count",
+"type": "int"
+}
+]
+},
+{
+"name": "redistribute",
+"help": "Redistribute",
+"children": [
+{
+"name": "connected",
+"help": "Redistribute connected",
+"type": "bool"
+}
+]
+}
+]
+}
+]
 },
 {
 "name": "neighbor",
@@ -2232,107 +2290,14 @@ TREE = json.loads(r'''[
 "tpl_help": "Neighbor IP",
 "children": [
 {
-"name": "description",
-"help": "Neighbor description",
-"type": "str"
-},
-{
 "name": "remote-as",
 "help": "Peer AS number",
 "type": "int"
 },
 {
-"name": "route-map-in",
-"help": "Inbound route-map name",
-"type": "str"
-},
-{
-"name": "route-map-out",
-"help": "Outbound route-map name",
-"type": "str"
-},
-{
-"name": "soft-reconfiguration",
-"help": "Store received routes for soft reconfiguration",
-"children": [
-{
-"name": "inbound",
-"help": "Enable inbound soft reconfiguration",
-"type": "bool"
-}
-]
-},
-{
-"name": "address-family",
-"help": "Address family",
-"children": [
-{
-"name": "ipv4-unicast",
-"help": "IPv4 unicast",
-"children": [
-{
-"name": "route-map",
-"help": "Route map",
-"children": [
-{
-"name": "import",
-"help": "Import route-map",
-"type": "str"
-},
-{
-"name": "export",
-"help": "Export route-map",
-"type": "str"
-}
-]
-},
-{
-"name": "soft-reconfiguration",
-"help": "Soft reconfiguration",
-"children": [
-{
-"name": "inbound",
-"help": "Inbound soft reconfiguration",
-"type": "bool"
-}
-]
-},
-{
-"name": "maximum-paths",
-"help": "Maximum paths",
-"children": [
-{
-"name": "ibgp",
-"help": "iBGP multipath count",
+"name": "local-as",
+"help": "Local AS override",
 "type": "int"
-}
-]
-},
-{
-"name": "redistribute",
-"help": "Redistribute",
-"children": [
-{
-"name": "connected",
-"help": "Redistribute connected",
-"type": "bool"
-}
-]
-}
-]
-}
-]
-},
-{
-"name": "bfd",
-"help": "BFD",
-"children": [
-{
-"name": "check-control-plane-failure",
-"help": "BFD check control plane",
-"type": "bool"
-}
-]
 },
 {
 "name": "peer-group",
@@ -2340,42 +2305,20 @@ TREE = json.loads(r'''[
 "type": "str"
 },
 {
-"name": "local-as",
-"help": "Local AS override",
-"type": "int"
-}
-]
+"name": "description",
+"help": "Neighbor description",
+"type": "str"
 },
 {
-"name": "network",
-"help": "Advertise prefix (repeatable)",
-"type": "ipv4_cidr"
-},
-{
-"name": "peer-group",
-"help": "BGP peer group",
-"dyn": true,
-"tpl_help": "Peer-group name",
+"name": "bfd",
+"help": "BFD",
 "children": [
 {
-"name": "remote-as",
-"help": "Remote AS",
-"type": "int"
-},
-{
-"name": "route-map-import",
-"help": "Inbound route-map",
-"type": "str"
-},
-{
-"name": "soft-reconfiguration",
-"help": "Soft reconfig inbound",
-"type": "str"
-},
-{
-"name": "update-source",
-"help": "Update source IP",
-"type": "ipv4"
+"name": "check-control-plane-failure",
+"help": "BFD check control plane",
+"type": "bool"
+}
+]
 },
 {
 "name": "address-family",
@@ -2411,32 +2354,33 @@ TREE = json.loads(r'''[
 "type": "bool"
 }
 ]
+}
+]
+}
+]
+}
+]
 },
 {
-"name": "maximum-paths",
-"help": "Maximum paths",
+"name": "peer-group",
+"help": "BGP peer-group",
+"dyn": true,
+"tpl_help": "Peer-group name",
 "children": [
 {
-"name": "ibgp",
-"help": "iBGP multipath count",
+"name": "remote-as",
+"help": "Peer AS number",
 "type": "int"
-}
-]
 },
 {
-"name": "redistribute",
-"help": "Redistribute",
-"children": [
+"name": "update-source",
+"help": "Update source",
+"type": "ipv4"
+},
 {
-"name": "connected",
-"help": "Redistribute connected",
-"type": "bool"
-}
-]
-}
-]
-}
-]
+"name": "description",
+"help": "Description",
+"type": "str"
 },
 {
 "name": "bfd",
@@ -2450,16 +2394,51 @@ TREE = json.loads(r'''[
 ]
 },
 {
-"name": "description",
-"help": "Description",
+"name": "address-family",
+"help": "Address family",
+"children": [
+{
+"name": "ipv4-unicast",
+"help": "IPv4 unicast",
+"children": [
+{
+"name": "route-map",
+"help": "Route map",
+"children": [
+{
+"name": "import",
+"help": "Import route-map",
+"type": "str"
+},
+{
+"name": "export",
+"help": "Export route-map",
 "type": "str"
 }
 ]
 },
 {
-"name": "router-id",
-"help": "BGP router-id",
-"type": "ipv4"
+"name": "soft-reconfiguration",
+"help": "Soft reconfiguration",
+"children": [
+{
+"name": "inbound",
+"help": "Inbound soft reconfiguration",
+"type": "bool"
+}
+]
+}
+]
+}
+]
+}
+]
+},
+{
+"name": "network",
+"help": "Network to advertise",
+"type": "ipv4_cidr",
+"repeatable": true
 }
 ]
 },

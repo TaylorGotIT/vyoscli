@@ -3308,6 +3308,12 @@ class ConfigStore:
                 parts.append(f"multiplier {bfd['multiplier']}")
             if parts:
                 lines.append(" " + " ".join(parts))
+            for peer, pcfg in (bfd.get("peer") or {}).items():
+                if not isinstance(pcfg, dict):
+                    continue
+                lines.append(f" peer {peer}")
+                if pcfg.get("echo-mode"):
+                    lines.append("  echo-mode")
             lines.append("!")
         for num, body in (access_lists or {}).items():
             if not isinstance(body, dict):
@@ -3519,18 +3525,12 @@ class ConfigStore:
             with open("/etc/frr/frr.conf", "w", encoding="utf-8") as f:
                 f.write(text)
             os.chmod("/etc/frr/frr.conf", 0o640)
-            changed = self._set_frr_daemons(bool(new_b.get("local-as")),
-                                           bool(ospf), bool(rip), bool(bfd))
-            if changed:
-                # restarting FRR can take longer than the CLI timeout; do it
-                # detached so the commit does not hang.
-                subprocess.Popen(["/etc/init.d/frr", "restart"],
-                                 stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL,
-                                 start_new_session=True)
-            else:
-                subprocess.run(["/etc/init.d/frr", "start"],
-                               capture_output=True, text=True, timeout=25)
+            self._set_frr_daemons(bool(new_b.get("local-as")),
+                                  bool(ospf), bool(rip), bool(bfd))
+            # frr reads frr.conf at daemon start; a plain start is a no-op
+            # when it is already running, so restart to apply changes.
+            subprocess.run(["/etc/init.d/frr", "restart"],
+                           capture_output=True, text=True, timeout=60)
             subprocess.run(["vtysh", "-b"], capture_output=True,
                            text=True, timeout=30)
             if new_b.get("local-as"):

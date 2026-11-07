@@ -407,33 +407,27 @@
 | `protocols bfd min-rx` | Minimum receive interval (ms) | `protocols bfd min-rx 100` |
 | `protocols bfd multiplier` | Detection multiplier | `protocols bfd multiplier 100` |
 | `protocols bfd peer <ip> echo-mode` | Echo mode | `protocols bfd peer <ip> echo-mode true` |
-| `protocols bgp local-as` | Local AS number | `protocols bgp local-as 100` |
-| `protocols bgp neighbor <name> address-family ipv4-unicast maximum-paths ibgp` | iBGP multipath count | `protocols bgp neighbor <name> address-family ipv4-unicast maximum-paths ibgp 100` |
-| `protocols bgp neighbor <name> address-family ipv4-unicast redistribute connected` | Redistribute connected | `protocols bgp neighbor <name> address-family ipv4-unicast redistribute connected true` |
-| `protocols bgp neighbor <name> address-family ipv4-unicast route-map export` | Export route-map | `protocols bgp neighbor <name> address-family ipv4-unicast route-map export text` |
-| `protocols bgp neighbor <name> address-family ipv4-unicast route-map import` | Import route-map | `protocols bgp neighbor <name> address-family ipv4-unicast route-map import text` |
-| `protocols bgp neighbor <name> address-family ipv4-unicast soft-reconfiguration inbound` | Inbound soft reconfiguration | `protocols bgp neighbor <name> address-family ipv4-unicast soft-reconfiguration inbound true` |
-| `protocols bgp neighbor <name> bfd check-control-plane-failure` | BFD check control plane | `protocols bgp neighbor <name> bfd check-control-plane-failure true` |
-| `protocols bgp neighbor <name> description` | Neighbor description | `protocols bgp neighbor <name> description text` |
-| `protocols bgp neighbor <name> local-as` | Local AS override | `protocols bgp neighbor <name> local-as 100` |
-| `protocols bgp neighbor <name> peer-group` | Peer group | `protocols bgp neighbor <name> peer-group text` |
-| `protocols bgp neighbor <name> remote-as` | Peer AS number | `protocols bgp neighbor <name> remote-as 100` |
-| `protocols bgp neighbor <name> route-map-in` | Inbound route-map name | `protocols bgp neighbor <name> route-map-in text` |
-| `protocols bgp neighbor <name> route-map-out` | Outbound route-map name | `protocols bgp neighbor <name> route-map-out text` |
-| `protocols bgp neighbor <name> soft-reconfiguration inbound` | Enable inbound soft reconfiguration | `protocols bgp neighbor <name> soft-reconfiguration inbound true` |
-| `protocols bgp network` | Advertise prefix (repeatable) | `protocols bgp network 203.0.113.0/24` |
-| `protocols bgp peer-group <name> address-family ipv4-unicast maximum-paths ibgp` | iBGP multipath count | `protocols bgp peer-group <name> address-family ipv4-unicast maximum-paths ibgp 100` |
-| `protocols bgp peer-group <name> address-family ipv4-unicast redistribute connected` | Redistribute connected | `protocols bgp peer-group <name> address-family ipv4-unicast redistribute connected true` |
-| `protocols bgp peer-group <name> address-family ipv4-unicast route-map export` | Export route-map | `protocols bgp peer-group <name> address-family ipv4-unicast route-map export text` |
-| `protocols bgp peer-group <name> address-family ipv4-unicast route-map import` | Import route-map | `protocols bgp peer-group <name> address-family ipv4-unicast route-map import text` |
-| `protocols bgp peer-group <name> address-family ipv4-unicast soft-reconfiguration inbound` | Inbound soft reconfiguration | `protocols bgp peer-group <name> address-family ipv4-unicast soft-reconfiguration inbound true` |
-| `protocols bgp peer-group <name> bfd check-control-plane-failure` | BFD check control plane | `protocols bgp peer-group <name> bfd check-control-plane-failure true` |
-| `protocols bgp peer-group <name> description` | Description | `protocols bgp peer-group <name> description text` |
-| `protocols bgp peer-group <name> remote-as` | Remote AS | `protocols bgp peer-group <name> remote-as 100` |
-| `protocols bgp peer-group <name> route-map-import` | Inbound route-map | `protocols bgp peer-group <name> route-map-import text` |
-| `protocols bgp peer-group <name> soft-reconfiguration` | Soft reconfig inbound | `protocols bgp peer-group <name> soft-reconfiguration text` |
-| `protocols bgp peer-group <name> update-source` | Update source IP | `protocols bgp peer-group <name> update-source 192.0.2.1` |
-| `protocols bgp router-id` | BGP router-id | `protocols bgp router-id 10.0.0.1` |
+| `protocols bgp <name> address-family ipv4-unicast maximum-paths ibgp` | iBGP multipath count | `protocols bgp <name> address-family ipv4-unicast maximum-paths ibgp 100` |
+| `protocols bgp <name> address-family ipv4-unicast redistribute connected` | Redistribute connected | `protocols bgp <name> address-family ipv4-unicast redistribute connected true` |
+| `protocols bgp <name> neighbor <name> address-family ipv4-unicast route-map export` | Export route-map | `protocols bgp <name> neighbor <name> address-family ipv4-unicast route-map export text` |
+| `protocols bgp <name> neighbor <name> address-family ipv4-unicast route-map import` | Import route-map | `protocols bgp <name> neighbor <name> address-family ipv4-unicast route-map import text` |
+| `protocols bgp <name> neighbor <name> address-family ipv4-unicast soft-reconfiguration inbound` | Inbound soft reconfiguration | `protocols bgp <name> neighbor <name> address-family ipv4-unicast soft-reconfiguration inbound true` |
+| `protocols bgp <name> neighbor <name> bfd check-control-plane-failure` | BFD check control plane | `protocols bgp <name> neighbor <name> bfd check-control-plane-failure true` |
+| `protocols bgp <name> neighbor <name> description` | Neighbor description | `protocols bgp <name> neighbor <name> description text` |
+| `protocols bgp <name> neighbor <name> local-as` | Local AS override | `protocols bgp <name> neighbor <name> local-as 100` |
+| `protocols bgp <name> neighbor <name> peer-group` | Peer group | `protocols bgp <name> neighbor <name> peer-group text` |
+| `protocols bgp <name> neighbor <name> remote-as` | Peer AS number | `protocols bgp <name> neighbor <name> remote-as 100` |
+| `protocols bgp <name> network` | Network to advertise | `protocols bgp <name> network 203.0.113.0/24` |
+| `protocols bgp <name> parameters router-id` | Router ID | `protocols bgp <name> parameters router-id 192.0.2.1` |
+| `protocols bgp <name> peer-group <name> address-family ipv4-unicast route-map export` | Export route-map | `protocols bgp <name> peer-group <name> address-family ipv4-unicast route-map export text` |
+| `protocols bgp <name> peer-group <name> address-family ipv4-unicast route-map import` | Import route-map | `protocols bgp <name> peer-group <name> address-family ipv4-unicast route-map import text` |
+| `protocols bgp <name> peer-group <name> address-family ipv4-unicast soft-reconfiguration inbound` | Inbound soft reconfiguration | `protocols bgp <name> peer-group <name> address-family ipv4-unicast soft-reconfiguration inbound true` |
+| `protocols bgp <name> peer-group <name> bfd check-control-plane-failure` | BFD check control plane | `protocols bgp <name> peer-group <name> bfd check-control-plane-failure true` |
+| `protocols bgp <name> peer-group <name> description` | Description | `protocols bgp <name> peer-group <name> description text` |
+| `protocols bgp <name> peer-group <name> remote-as` | Peer AS number | `protocols bgp <name> peer-group <name> remote-as 100` |
+| `protocols bgp <name> peer-group <name> update-source` | Update source | `protocols bgp <name> peer-group <name> update-source 192.0.2.1` |
+| `protocols bgp <name> timers holdtime` | Hold time | `protocols bgp <name> timers holdtime 100` |
+| `protocols bgp <name> timers keepalive` | Keepalive | `protocols bgp <name> timers keepalive 100` |
 | `protocols ospf area <name> network` | Network to advertise in this area | `protocols ospf area <name> network 192.0.2.1/24` |
 | `protocols ospf area <name> type` | normal \| stub \| nssa | `protocols ospf area <name> type text` |
 | `protocols ospf default-information` | Originate a default route | `protocols ospf default-information true` |
