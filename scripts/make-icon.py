@@ -71,12 +71,12 @@ def main() -> None:
                         radius=5, fill=CYAN + (255,))
 
     # vyoscli wordmark
-    wf = ImageFont.truetype(FONT_BOLD, 82)
+    wf = ImageFont.truetype(FONT_BOLD, 108)
     vw = d.textlength("vyos", font=wf)
     cw = d.textlength("cli", font=wf)
     sx = cx - (vw + cw) / 2
-    d.text((sx, 760), "vyos", font=wf, fill=(255, 255, 255, 255))
-    d.text((sx + vw, 760), "cli", font=wf, fill=CYAN + (255,))
+    d.text((sx, 728), "vyos", font=wf, fill=(255, 176, 32, 255))
+    d.text((sx + vw, 728), "cli", font=wf, fill=(255, 209, 102, 255))
 
     # outer frame
     d.rounded_rectangle((24, 24, S - 24, S - 24), radius=220,
