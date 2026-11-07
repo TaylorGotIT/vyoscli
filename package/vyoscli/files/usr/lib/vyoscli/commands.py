@@ -80,15 +80,28 @@ def _op_ping(ctx: Any, value: str) -> str:
 
 
 # ---------- container images (operational) ----------
+def _container_runtime() -> str:
+    import shutil
+    for name in ("podman", "docker", "nerdctl"):
+        if shutil.which(name):
+            return name
+    return ""
+
+
 def _op_show_container_image(ctx: Any, value: Any) -> str:
+    runtime = _container_runtime()
+    if not runtime:
+        return ("no container runtime installed "
+                "(podman/docker/nerdctl)")
+    fmt = ("table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t"
+           "{{.CreatedSince}}\t{{.Size}}")
     try:
-        out = subprocess.run(["podman", "images"],
+        out = subprocess.run([runtime, "images", "--format", fmt],
                              capture_output=True, text=True, timeout=15)
-        return out.stdout or out.stderr or "(no images)"
-    except FileNotFoundError:
-        return "podman not installed (use 'set container ... commit' to auto-install)"
+        text = (out.stdout or "").strip()
+        return text or (out.stderr or "").strip() or "(no images)"
     except Exception as e:  # noqa: BLE001
-        return f"podman images failed: {e}"
+        return f"{runtime} images failed: {e}"
 
 
 def _op_add_container_image(ctx: Any, value: str) -> str:

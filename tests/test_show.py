@@ -10,7 +10,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from vyoscli import op_show  # noqa: E402
+from vyoscli import commands, op_show  # noqa: E402
 
 
 class _Store:
@@ -38,6 +38,27 @@ ADDR = """\
 2: eth0    inet 192.0.2.10/24 brd 192.0.2.255 scope global eth0
 7: br-lan  inet 192.168.1.1/24 brd 192.168.1.255 scope global br-lan
 """
+
+
+class ContainerImageTest(unittest.TestCase):
+    def test_reports_missing_runtime(self):
+        with mock.patch("shutil.which", return_value=None):
+            text = commands._op_show_container_image(None, "")
+        self.assertIn("no container runtime", text)
+
+    def test_uses_docker_when_present(self):
+        def which(name):
+            return "/usr/bin/docker" if name == "docker" else None
+
+        with mock.patch("shutil.which", side_effect=which), \
+             mock.patch("subprocess.run",
+                        return_value=types.SimpleNamespace(
+                            stdout="REPOSITORY  TAG  IMAGE ID  CREATED  SIZE\n"
+                                   "bjdgyc/anylink latest 102e3b7cb8c7 5 months ago 33.9 MB",
+                            stderr="", returncode=0)):
+            text = commands._op_show_container_image(None, "")
+        self.assertIn("REPOSITORY", text)
+        self.assertIn("bjdgyc/anylink", text)
 
 
 class RouteShowTest(unittest.TestCase):
