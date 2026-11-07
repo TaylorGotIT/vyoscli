@@ -472,6 +472,27 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn(["nft", "delete", "table", "inet", "vyos_ssh"],
                       self.fake.calls)
 
+    def test_local_route_and_static_table(self):
+        cfg(self.cli,
+            "set policy local-route rule 6600 source 192.0.2.10",
+            "set policy local-route rule 6600 set table 110",
+            "set protocols static table 110 route 0.0.0.0/0 "
+            "next-hop 192.168.75.1")
+        self.commit()
+        self.assertIn(["ip", "rule", "add", "from", "192.0.2.10",
+                       "lookup", "110", "priority", "6600"],
+                      self.fake.calls)
+        self.assertIn(["ip", "route", "replace", "table", "110",
+                       "0.0.0.0/0", "via", "192.168.75.1"],
+                      self.fake.calls)
+        cfg(self.cli, "delete policy local-route rule 6600",
+            "delete protocols static table 110")
+        self.commit()
+        self.assertIn(["ip", "rule", "del", "priority", "6600"],
+                      self.fake.calls)
+        self.assertIn(["ip", "route", "del", "table", "110",
+                       "0.0.0.0/0"], self.fake.calls)
+
     def test_wan_lb_refuses_without_mwan3(self):
         cfg(self.cli,
             "set load-balancing wan interface eth1 weight 2",

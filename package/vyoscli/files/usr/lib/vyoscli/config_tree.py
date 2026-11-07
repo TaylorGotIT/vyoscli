@@ -1863,6 +1863,36 @@ TREE = json.loads(r'''[
 ]
 }
 ]
+},
+{
+"name": "local-route",
+"help": "Policy routing for locally generated traffic",
+"children": [
+{
+"name": "rule",
+"help": "Rule number",
+"dyn": true,
+"tpl_help": "Local-route rule",
+"children": [
+{
+"name": "source",
+"help": "Source IPv4 address",
+"type": "ipv4"
+},
+{
+"name": "set",
+"help": "Action",
+"children": [
+{
+"name": "table",
+"help": "Routing table ID",
+"type": "int"
+}
+]
+}
+]
+}
+]
 }
 ]
 },
@@ -2086,6 +2116,37 @@ TREE = json.loads(r'''[
 "name": "reject",
 "help": "Send ICMP unreachable",
 "type": "bool"
+}
+]
+},
+{
+"name": "table",
+"help": "Policy routing table",
+"dyn": true,
+"tpl_help": "Routing table ID",
+"children": [
+{
+"name": "route",
+"help": "Route prefix",
+"dyn": true,
+"tpl_help": "Route",
+"children": [
+{
+"name": "next-hop",
+"help": "Next-hop gateway IPv4",
+"type": "ipv4"
+},
+{
+"name": "interface",
+"help": "Egress interface",
+"type": "str"
+},
+{
+"name": "blackhole",
+"help": "Silently drop packets",
+"type": "bool"
+}
+]
 }
 ]
 }

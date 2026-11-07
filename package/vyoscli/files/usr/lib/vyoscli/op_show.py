@@ -416,6 +416,21 @@ def _op_show_arp(ctx: Any, value: Any) -> str:
     return "\n".join(lines)
 
 
+def _op_show_policy_local_route(ctx: Any, value: Any) -> str:
+    rules = (ctx.store.get(["policy", "local-route", "rule"],
+                           candidate=False) or {})
+    if not rules:
+        return "No local-route rules configured."
+    lines = ["Rule".ljust(8) + "Source".ljust(24) + "Table"]
+    for num, rule in sorted(rules.items(), key=lambda kv: str(kv[0])):
+        if not isinstance(rule, dict):
+            continue
+        source = rule.get("source", "")
+        table = (rule.get("set") or {}).get("table", "")
+        lines.append(str(num).ljust(8) + str(source).ljust(24) + str(table))
+    return "\n".join(lines)
+
+
 def _op_show_bgp_summary(ctx: Any, value: Any) -> str:
     return _vtysh_show("show bgp ipv4 unicast summary")
 

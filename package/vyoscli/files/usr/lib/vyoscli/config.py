@@ -813,6 +813,8 @@ class ConfigStore:
             ("interface-roles", self._apply_interface_roles),
             ("vrf", self._apply_vrf),
             ("static-routes", self._apply_static_routes),
+            ("static-tables", self._apply_static_tables),
+            ("local-route", self._apply_local_route),
             ("bgp", self._apply_bgp),
             ("policy", self._apply_policy),
             ("firewall", self._apply_firewall),
@@ -979,6 +981,87 @@ class ConfigStore:
             except subprocess.CalledProcessError:
                 pass
             notes.append(f"{ifname}: removed network.{ours}")
+
+    def _apply_local_route(self, old, new):
+        old_r = (((old.get("policy") or {}).get("local-route") or {})
+                 .get("rule") or {})
+        new_r = (((new.get("policy") or {}).get("local-route") or {})
+                 .get("rule") or {})
+        if old_r == new_r:
+            return []
+        state_path = os.path.join(self.base_dir, "local-route.json")
+        try:
+            with open(state_path, encoding="utf-8") as f:
+                applied = json.load(f)
+        except (OSError, ValueError):
+            applied = []
+        wanted = []
+        notes = []
+        for num, rule in new_r.items():
+            if not isinstance(rule, dict):
+                continue
+            source = rule.get("source")
+            table = (rule.get("set") or {}).get("table")
+            if not source or not table:
+                continue
+            subprocess.run(["ip", "rule", "add", "from", str(source),
+                            "lookup", str(table), "priority", str(num)],
+                           capture_output=True, text=True, timeout=10)
+            wanted.append(str(num))
+            notes.append(f"local-route: {source} -> table {table} (prio {num})")
+        for prio in applied:
+            if prio not in wanted:
+                subprocess.run(["ip", "rule", "del", "priority", str(prio)],
+                               capture_output=True, text=True, timeout=10)
+        os.makedirs(self.base_dir, exist_ok=True)
+        with open(state_path, "w", encoding="utf-8") as f:
+            json.dump(wanted, f)
+        return notes
+
+    def _apply_static_tables(self, old, new):
+        old_t = (((old.get("protocols") or {}).get("static") or {})
+                 .get("table") or {})
+        new_t = (((new.get("protocols") or {}).get("static") or {})
+                 .get("table") or {})
+        if old_t == new_t:
+            return []
+        state_path = os.path.join(self.base_dir, "static-tables.json")
+        try:
+            with open(state_path, encoding="utf-8") as f:
+                applied = json.load(f)
+        except (OSError, ValueError):
+            applied = []
+        wanted = []
+        notes = []
+        for table, body in new_t.items():
+            routes = (body or {}).get("route") or {}
+            for prefix, route in routes.items():
+                if not isinstance(route, dict):
+                    continue
+                args = ["ip", "route", "replace", "table", str(table),
+                        str(prefix)]
+                if route.get("blackhole"):
+                    args.append("blackhole")
+                elif route.get("next-hop"):
+                    args += ["via", str(route["next-hop"])]
+                elif route.get("interface"):
+                    args += ["dev", str(route["interface"])]
+                else:
+                    continue
+                subprocess.run(args, capture_output=True, text=True,
+                               timeout=10)
+                wanted.append(f"{table}|{prefix}")
+                notes.append(f"static-table {table}: {prefix}")
+        for item in applied:
+            if item in wanted:
+                continue
+            table, _, prefix = item.partition("|")
+            subprocess.run(["ip", "route", "del", "table", table, prefix],
+                           capture_output=True, text=True, timeout=10)
+        os.makedirs(self.base_dir, exist_ok=True)
+        with open(state_path, "w", encoding="utf-8") as f:
+            json.dump(wanted, f)
+        return notes
 
     def _apply_wan_lb(self, old, new):
         old_w = (old.get("load-balancing") or {}).get("wan") or {}

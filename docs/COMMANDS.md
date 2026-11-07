@@ -345,6 +345,8 @@
 | `policy community-list <list-num> rule <id> action` | permit/deny | `policy community-list <list-num> rule <id> action permit` |
 | `policy community-list <list-num> rule <id> description` | Description | `policy community-list <list-num> rule <id> description text` |
 | `policy community-list <list-num> rule <id> regex` | Community regex | `policy community-list <list-num> rule <id> regex text` |
+| `policy local-route rule <id> set table` | Routing table ID | `policy local-route rule <id> set table 100` |
+| `policy local-route rule <id> source` | Source IPv4 address | `policy local-route rule <id> source 192.0.2.1` |
 | `policy prefix-list <name> rule <id> action` | permit \| deny | `policy prefix-list <name> rule <id> action text` |
 | `policy prefix-list <name> rule <id> ge` | Minimum prefix length | `policy prefix-list <name> rule <id> ge 100` |
 | `policy prefix-list <name> rule <id> le` | Maximum prefix length | `policy prefix-list <name> rule <id> le 100` |
@@ -401,6 +403,9 @@
 | `protocols static route <prefix> interface` | Egress interface | `protocols static route <prefix> interface text` |
 | `protocols static route <prefix> next-hop` | Next-hop gateway IPv4 | `protocols static route <prefix> next-hop 192.0.2.1` |
 | `protocols static route <prefix> reject` | Send ICMP unreachable | `protocols static route <prefix> reject true` |
+| `protocols static table <name> route <prefix> blackhole` | Silently drop packets | `protocols static table <name> route <prefix> blackhole true` |
+| `protocols static table <name> route <prefix> interface` | Egress interface | `protocols static table <name> route <prefix> interface text` |
+| `protocols static table <name> route <prefix> next-hop` | Next-hop gateway IPv4 | `protocols static table <name> route <prefix> next-hop 192.0.2.1` |
 
 ## set qos
 

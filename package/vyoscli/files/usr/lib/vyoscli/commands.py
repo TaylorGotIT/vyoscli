@@ -46,6 +46,7 @@ from .op_show import (
     _op_show_system_login,
     _op_show_ip_route,
     _op_show_bgp,
+    _op_show_policy_local_route,
     _bgp_neighbor_ips,
     _op_show_bgp_neighbors,
     _op_show_bgp_neighbor_received_routes,
@@ -292,6 +293,8 @@ def build_tree(store: Any) -> CommandTree:
     show_ip.add(show_bgp)
     tree.op_root.children["show"].add(show_ip)
     tree.op("show arp", help="Show ARP table", action=_op_show_arp)
+    tree.op("show policy local-route", help="Show local-route policy",
+            action=_op_show_policy_local_route)
 
     # show container image
     tree.op("show container image", help="List podman images",
