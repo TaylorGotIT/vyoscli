@@ -902,6 +902,190 @@ def _op_show_login_user(ctx: Any, value: Any) -> str:
     return "\n".join(lines)
 
 
+def _range_text(values) -> str:
+    nums = sorted({int(v) for v in values})
+    if not nums:
+        return "-"
+    parts = []
+    start = prev = nums[0]
+    for n in nums[1:]:
+        if n == prev + 1:
+            prev = n
+            continue
+        parts.append(str(start) if start == prev else f"{start}-{prev}")
+        start = prev = n
+    parts.append(str(start) if start == prev else f"{start}-{prev}")
+    return ",".join(parts)
+
+
+def _op_show_system_cpu(ctx: Any, value: Any) -> str:
+    vendor = model = ""
+    procs = []
+    sockets = set()
+    cores = 0
+    siblings = 0
+    mhz = ""
+    try:
+        with open("/proc/cpuinfo", encoding="utf-8") as f:
+            blocks = f.read().split("\n\n")
+        for block in blocks:
+            fields = {}
+            for line in block.splitlines():
+                key, _, val = line.partition(":")
+                if key.strip():
+                    fields[key.strip()] = val.strip()
+            if not fields:
+                continue
+            if "processor" in fields:
+                procs.append(fields["processor"])
+            vendor = vendor or fields.get("vendor_id", "")
+            model = model or fields.get("model name", "")
+            if "physical id" in fields:
+                sockets.add(fields["physical id"])
+            try:
+                cores = max(cores, int(fields.get("cpu cores", 0)))
+                siblings = max(siblings, int(fields.get("siblings", 0)))
+            except ValueError:
+                pass
+            if not mhz and fields.get("cpu MHz"):
+                mhz = fields["cpu MHz"]
+    except OSError:
+        pass
+    threads = int(siblings / cores) if cores and siblings else 1
+    return "\n".join([
+        f"CPU Vendor:       {vendor or 'unknown'}",
+        f"Model:            {model or 'unknown'}",
+        f"Total CPUs:       {_range_text(procs)}",
+        f"Sockets:          {len(sockets) or 1}",
+        f"Cores:            {cores or len(procs)}",
+        f"Threads:          {threads}",
+        f"Current MHz:      {mhz or 'unknown'}",
+    ])
+
+
+def _image_info() -> str:
+    info = {}
+    try:
+        with open("/etc/openwrt_release", encoding="utf-8") as f:
+            for line in f:
+                key, _, val = line.partition("=")
+                if key.strip():
+                    info[key.strip()] = val.strip().strip("'\"")
+    except OSError:
+        pass
+    name = f"{info.get('DISTRIB_ID', 'OpenWrt')} {info.get('DISTRIB_RELEASE', '')}".strip()
+    desc = info.get("DISTRIB_DESCRIPTION", name)
+    return desc or name
+
+
+def _op_show_system_image(ctx: Any, value: Any) -> str:
+    try:
+        with open("/proc/sys/kernel/osrelease", encoding="utf-8") as f:
+            kernel = f.read().strip()
+    except OSError:
+        kernel = "unknown"
+    return "\n".join([
+        "The system currently has the following image(s) installed:",
+        "",
+        f"   1: {_image_info()} (running image)",
+        "",
+        f"Kernel: {kernel}",
+    ])
+
+
+def _op_show_system_image_storage(ctx: Any, value: Any) -> str:
+    import subprocess
+    try:
+        return subprocess.run(["df", "-h", "/"], capture_output=True,
+                              text=True, timeout=5).stdout.strip()
+    except Exception as e:  # noqa: BLE001
+        return f"df failed: {e}"
+
+
+def _op_show_system_image_version(ctx: Any, value: Any) -> str:
+    return _image_info()
+
+
+def _op_show_system_login_users(ctx: Any, value: Any) -> str:
+    import os
+    import subprocess
+    sessions = _login_ssh_sessions(_ssh_peers())
+    shadow = {}
+    try:
+        with open("/etc/shadow", encoding="utf-8") as f:
+            for line in f:
+                parts = line.rstrip("\n").split(":")
+                if len(parts) >= 2:
+                    shadow[parts[0]] = parts[1]
+    except OSError:
+        pass
+    rows = []
+    try:
+        with open("/etc/passwd", encoding="utf-8") as f:
+            for line in f:
+                parts = line.rstrip("\n").split(":")
+                if len(parts) < 7:
+                    continue
+                name, shell = parts[0], parts[6]
+                if "nologin" in shell or "false" in shell or shell == "/bin/sync":
+                    continue
+                locked = shadow.get(name, "").startswith(("!", "*")) if shadow else False
+                tty = frm = last = "-"
+                for sess in sessions:
+                    if sess.get("user") == name:
+                        tty = sess.get("tty", "-")
+                        frm = sess.get("ip", "-")
+                        last = _proc_start(str(sess.get("drop", "")))
+                        break
+                rows.append((name, "linux", str(locked), tty, frm, last))
+    except OSError:
+        pass
+    if not rows:
+        return "No user accounts."
+    lines = ["Username".ljust(14) + "Type".ljust(8) + "Locked".ljust(10)
+             + "Tty".ljust(9) + "From".ljust(18) + "Last login"]
+    for user, typ, locked, tty, frm, last in rows:
+        lines.append(user.ljust(14) + typ.ljust(8) + locked.ljust(10)
+                     + tty.ljust(9) + frm.ljust(18) + last)
+    return "\n".join(lines)
+
+
+def _op_show_system_connections(ctx: Any, value: str = "") -> str:
+    import subprocess
+    proto = (value or "").lower()
+    args = ["netstat", "-tnap"] if proto == "tcp" else (
+        ["netstat", "-unap"] if proto == "udp" else ["netstat", "-tunap"])
+    try:
+        out = subprocess.run(args, capture_output=True, text=True,
+                             timeout=5).stdout
+    except Exception as e:  # noqa: BLE001
+        return f"netstat failed: {e}"
+    lines = []
+    for line in out.splitlines():
+        parts = line.split()
+        if not parts:
+            continue
+        if parts[0] == "Proto":
+            lines.append("Proto".ljust(7) + "Recv-Q".rjust(7) + "Send-Q".rjust(7)
+                         + " " + "Local Address".ljust(23)
+                         + "Foreign Address".ljust(23) + "State")
+            continue
+        if parts[0] not in ("tcp", "tcp6", "udp", "udp6"):
+            continue
+        if len(parts) > 5 and ("/" in parts[-1] or parts[-1] == "-"):
+            parts = parts[:-1]
+        if parts[0].startswith("udp") and len(parts) >= 5:
+            state = " ".join(parts[5:]) if len(parts) > 5 else ""
+            lines.append(parts[0].ljust(7) + parts[1].rjust(7)
+                         + parts[2].rjust(7) + " " + parts[3].ljust(23)
+                         + parts[4].ljust(23) + state)
+        elif len(parts) >= 6:
+            lines.append(parts[0].ljust(7) + parts[1].rjust(7)
+                         + parts[2].rjust(7) + " " + parts[3].ljust(23)
+                         + parts[4].ljust(23) + " ".join(parts[5:]))
+    return "\n".join(lines) or "No connections."
+
+
 def _op_show_policy_local_route(ctx: Any, value: Any) -> str:
     rules = (ctx.store.get(["policy", "local-route", "rule"],
                            candidate=False) or {})

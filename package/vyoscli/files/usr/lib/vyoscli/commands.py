@@ -53,6 +53,12 @@ from .op_show import (
     _op_show_policy_local_route,
     _op_show_login_user,
     _op_show_login,
+    _op_show_system_cpu,
+    _op_show_system_image,
+    _op_show_system_image_storage,
+    _op_show_system_image_version,
+    _op_show_system_login_users,
+    _op_show_system_connections,
     _op_disconnect_user,
     _op_disconnect_ssh,
     _op_disconnect_tty,
@@ -317,6 +323,22 @@ def build_tree(store: Any) -> CommandTree:
             action=_op_show_policy_local_route)
     tree.op("show login", help="Show current login details",
             action=_op_show_login)
+    tree.op("show system cpu", help="Show CPU information",
+            action=_op_show_system_cpu)
+    tree.op("show system image", help="Show installed image",
+            action=_op_show_system_image)
+    tree.op("show system image storage", help="Show image disk usage",
+            action=_op_show_system_image_storage)
+    tree.op("show system image version", help="Show image version",
+            action=_op_show_system_image_version)
+    tree.op("show system login users", help="Show user accounts",
+            action=_op_show_system_login_users)
+    conn = tree.op("show system connections", help="Show connections",
+                   action=_op_show_system_connections)
+    conn.add(Node(name="tcp", help="Show TCP connections",
+                  action=lambda ctx, v: _op_show_system_connections(ctx, "tcp")))
+    conn.add(Node(name="udp", help="Show UDP sockets",
+                  action=lambda ctx, v: _op_show_system_connections(ctx, "udp")))
     tree.op("disconnect user", help="Disconnect a user's SSH sessions",
             value_type="str", action=_op_disconnect_user)
     ssh_disc = tree.op("disconnect ssh",
