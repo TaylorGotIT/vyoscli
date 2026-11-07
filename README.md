@@ -426,6 +426,20 @@ set interfaces openvpn vtun9 port 11999
 set interfaces openvpn vtun9 dev tun
 ```
 
+### 服务
+
+SSH、NTP、LLDP、SNMP、Router Advertisement、DHCP、DNS（dnsmasq/smartdns/AdGuard）、
+SQM、TCP 加速、KCP、Console Server、Crontab、HTTPS API、MTR 的完整配置示例见
+[GUIDE.md 服务章节](docs/GUIDE.md#11-服务)。例如 MTR：
+
+```bash
+set service mtr t1 target 1.1.1.1
+set service mtr t1 interface eth1
+set service mtr t1 count 10
+set service mtr t1 interval 60
+show service mtr
+```
+
 ### 运维/诊断
 
 ```bash

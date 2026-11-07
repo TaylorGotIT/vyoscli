@@ -425,23 +425,212 @@ set interfaces openvpn vtun9 dev tun
 
 ## 11. 服务
 
+> 每个 `service` 子树的完整叶子见 [COMMANDS.md](COMMANDS.md)。
+> 下面给出当前可用的常用示例。
+
+### SSH
+
 ```bash
 set service ssh port 22
+set service ssh listen-address 0.0.0.0
 set service ssh password-auth true
+set service ssh root-login true
+
+# 访问控制（deny 优先）
+set service ssh access-control allow address 192.168.75.0/24
+set service ssh access-control deny address 203.0.113.0/24
+
+# allow-list（只允许这些源地址）
 set service ssh acl permit 192.168.75.0/24
 
-set service ntp server pool.ntp.org
-set service lldp interface eth0
-
-set service mtr t1 target 1.1.1.1
-set service mtr t1 count 10
-set service mtr t1 interval 60
+# 禁用 SSH（谨慎，确保有 console）
+set service ssh disable
 ```
 
-- `service ssh acl permit` 是 allow-list；添加前确保包含当前管理网段。
-- `service mtr` 后台任务，日志在 `/etc/vyoscli/mtr/<name>.log`，
-  `show service mtr` 查看最近跳数/丢失/中断。
-- LLDP 依赖 `lldpd`。
+### NTP
+
+```bash
+set service ntp server pool.ntp.org
+set service ntp server ntp.aliyun.com
+set service ntp listen-address 0.0.0.0
+```
+
+### LLDP
+
+```bash
+set service lldp interface eth0
+set service lldp interface eth1
+set service lldp snmp
+```
+
+依赖 `lldpd`；`show lldp neighbors` 可查看邻居。
+
+### SNMP
+
+```bash
+set service snmp community public authorization ro
+set service snmp community private authorization rw
+set service snmp contact admin@example.com
+set service snmp location "DC-1"
+set service snmp listen-address 0.0.0.0
+set service snmp port 161
+```
+
+### Router Advertisement
+
+```bash
+set service router-advert interface eth0 prefix 2001:db8:1::/64
+set service router-advert interface eth0 managed-flag true
+set service router-advert interface eth0 other-config-flag true
+set service router-advert interface eth0 default-lifetime 1800
+set service router-advert interface eth0 no-send-advert
+```
+
+### DHCP Server
+
+完整示例见 [DHCP-TEST.md](DHCP-TEST.md)，最小配置：
+
+```bash
+set service dhcp-server shared-network-name LAN interface lan
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 default-router 192.168.1.1
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 name-server 192.168.1.1
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 lease 3600
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 range R1 start 192.168.1.100
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 range R1 stop 192.168.1.150
+
+show dhcp server
+show dhcp server pools
+show dhcp server leases
+show dhcp server static
+```
+
+### DHCP Relay
+
+```bash
+set service dhcp-relay server 192.0.2.10
+set service dhcp-relay interface eth0
+set service dhcp-relay upstream-interface eth1
+```
+
+> 当前 `dhcp-fwd` 在设备上仍会退出（日志
+> `BOOTREQUEST request from interface without clients`），暂未完全可用。
+
+### DNS：dnsmasq / smartdns / AdGuard
+
+```bash
+# dnsmasq
+set service dnsmasq port 53
+set service dnsmasq listen-address 0.0.0.0
+set service dnsmasq disable
+
+# smartdns
+set service smartdns enabled true
+set service smartdns port 5333
+set service smartdns listen-address 0.0.0.0
+set service smartdns server aliyun ip 223.5.5.5
+set service smartdns server aliyun type udp
+set service smartdns speed-check-mode ping,tcp:80
+set service smartdns forbid-aaaa true
+set service smartdns domain-set ads file /etc/smartdns/ads.txt
+set service smartdns domain-rule ads domain-set ads
+set service smartdns domain-rule ads forward block
+
+# AdGuardHome
+set service adguard enabled true
+set service adguard port 53
+set service adguard web-port 3000
+set service adguard listen-address 0.0.0.0
+set service adguard upstream 223.5.5.5
+```
+
+### SQM / TCP 加速
+
+```bash
+set service sqm interface eth0
+set service sqm download 100000
+set service sqm upload 20000
+set service sqm qdisc cake
+
+set service tcp-accelerate congestion-control bbr
+set service tcp-accelerate fq-codel true
+```
+
+### KCP
+
+```bash
+set service kcp kcp0 mode client
+set service kcp kcp0 kcp-mode fast2
+set service kcp kcp0 local-ip 0.0.0.0
+set service kcp kcp0 local-port 1090
+set service kcp kcp0 remote-ip 198.51.100.10
+set service kcp kcp0 remote-port 1090
+```
+
+### Console Server
+
+```bash
+set service console-server ttyS0 speed 115200
+set service console-server ttyS0 data-bits 8
+set service console-server ttyS0 parity none
+set service console-server ttyS0 stop-bits 1
+set service console-server ttyS0 ssh-port 2222
+```
+
+### Crontab
+
+```bash
+set service crontab backup schedule "0 3 * * *"
+set service crontab backup script /etc/vyoscli/scripts/backup.sh
+set service crontab backup description "nightly backup"
+```
+
+### HTTPS API
+
+```bash
+set service https port 8443
+set service https listen-address 127.0.0.1
+set service https api-key 'strong-token'
+set service https certificate my-cert
+```
+
+启用 TLS 需要先在 `pki` 下配置证书；否则为明文 HTTP，建议只监听回环。
+
+### MTR 后台任务
+
+```bash
+set service mtr t1 target 1.1.1.1
+set service mtr t1 interface eth1
+set service mtr t1 count 10
+set service mtr t1 interval 60
+set service mtr t1 max-hops 20
+
+show service mtr
+show service mtr t1
+```
+
+- 后台循环执行 `mtr -r`，日志在 `/etc/vyoscli/mtr/<name>.log`。
+- `count` 是每轮探针数，`interval` 是两轮间隔秒数。
+- `disable` 停止任务；`delete service mtr t1` 删除并停进程。
+
+### 服务状态与重启（操作模式）
+
+```bash
+show service mtr
+restart service ssh
+reload service firewall
+restart service dnsmasq
+```
+
+### 其他服务
+
+```bash
+# 系统时间同步（与 service ntp 配合）
+show system uptime
+
+# 查看依赖是否齐全
+show dependencies
+```
+
 
 ---
 
