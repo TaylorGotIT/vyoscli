@@ -1191,6 +1191,81 @@ def _op_show_monitor_path(ctx: Any, value: str) -> str:
     return "\n".join(lines)
 
 
+def _parse_ts(text: str):
+    from datetime import datetime
+    if not text or text == "-":
+        return None
+    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            pass
+    return None
+
+
+def _down_text(since: str) -> tuple:
+    from datetime import datetime
+    ts = _parse_ts(since)
+    if ts is None:
+        return "-", "-"
+    now = datetime.now(ts.tzinfo) if ts.tzinfo else datetime.now()
+    secs = max(0, int((now - ts).total_seconds()))
+    if secs < 60:
+        dur = f"{secs}s"
+    elif secs < 3600:
+        dur = f"{secs // 60}m{secs % 60:02d}s"
+    else:
+        dur = f"{secs // 3600}h{(secs % 3600) // 60:02d}m"
+    return since, dur
+
+
+def _mtr_reports(path: str) -> list:
+    import re
+    blocks = []
+    hops = []
+    started = "-"
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("Start:"):
+                    if hops:
+                        blocks.append((started, hops))
+                    hops = []
+                    started = line.split(":", 1)[1].strip()
+                    continue
+                m = re.match(r"^\s*(\d+)\.\|--\s+(\S+)\s+"
+                             r"([\d.]+)%?\s+(\d+)\s+([\d.]+)", line)
+                if m:
+                    hops.append({"ttl": int(m.group(1)),
+                                 "host": m.group(2),
+                                 "loss": float(m.group(3)),
+                                 "snt": int(m.group(4)),
+                                 "avg": m.group(5)})
+    except OSError:
+        pass
+    if hops:
+        blocks.append((started, hops))
+    return blocks
+
+
+def _mtr_down(blocks: list, target: str) -> tuple:
+    def reached(hops):
+        return any(hop.get("host") == target for hop in hops)
+
+    if not blocks:
+        return "-", "-", "-"
+    if reached(blocks[-1][1]):
+        return "-", "-", ""
+    idx = len(blocks) - 1
+    while idx >= 0 and not reached(blocks[idx][1]):
+        idx -= 1
+    since = blocks[idx + 1][0] if idx + 1 < len(blocks) else blocks[0][0]
+    since, dur = _down_text(since)
+    hops = blocks[-1][1]
+    break_ttl = str(hops[-1]["ttl"] + 1) if hops else "-"
+    return since, dur, break_ttl
+
+
 def _op_show_service_path_monitor(ctx: Any, value: str) -> str:
     import json
     tasks = (ctx.store.get(["service", "path-monitor", "task"],
@@ -1208,24 +1283,36 @@ def _op_show_service_path_monitor(ctx: Any, value: str) -> str:
         except (OSError, ValueError):
             return False
 
-    latest = {}
+    records = []
     try:
         with open(os.path.join(ctx.store.base_dir, "monitor", "path.jsonl"),
                   encoding="utf-8") as f:
-            for line in f:
-                if not line.strip():
-                    continue
-                rec = json.loads(line)
-                latest[(rec.get("target"), rec.get("interface"))] = rec
+            records = [json.loads(line) for line in f if line.strip()]
     except (OSError, ValueError):
         pass
+
+    def stats(target, iface):
+        mine = [r for r in records
+                if r.get("target") == target
+                and r.get("interface") == iface]
+        if not mine:
+            return {}, "-", "-"
+        last = mine[-1]
+        if last.get("reached"):
+            return last, "-", "-"
+        idx = len(mine) - 1
+        while idx >= 0 and not mine[idx].get("reached"):
+            idx -= 1
+        since = mine[idx + 1]["time"] if idx + 1 < len(mine) else mine[0]["time"]
+        since, dur = _down_text(since)
+        return last, since, dur
 
     if value:
         cfg = tasks.get(value)
         if not isinstance(cfg, dict):
             return f"No such path-monitor task: {value}"
         iface = cfg.get("interface") or "-"
-        rec = latest.get((cfg.get("target"), iface))
+        rec, since, dur = stats(cfg.get("target"), iface)
         state = ("disabled" if cfg.get("disable")
                  else ("running" if pid_running(value) else "stopped"))
         lines = [f"Task:       {value}",
@@ -1233,35 +1320,40 @@ def _op_show_service_path_monitor(ctx: Any, value: str) -> str:
                  f"Interface:  {iface}",
                  f"Interval:   {cfg.get('interval', 60)}s",
                  f"State:      {state}"]
+        if since != "-":
+            lines.append(f"Down since: {since} ({dur})")
         if rec:
             lines.append("")
             lines.append(_format_path(rec))
         return "\n".join(lines)
 
-    lines = ["Task".ljust(14) + "Target".ljust(18) + "Interface".ljust(11)
-             + "Interval".ljust(9) + "State".ljust(10) + "Last seen".ljust(21)
-             + "Hops".ljust(6) + "Reached".ljust(9) + "Break"]
-    for name, cfg in sorted(tasks.items()):
+    lines = ["Task".ljust(12) + "Target".ljust(16) + "Iface".ljust(8)
+             + "State".ljust(10) + "Last seen".ljust(21) + "Hops".ljust(5)
+             + "Break".ljust(7) + "Down since".ljust(27) + "Down"]
+    rows = []
+    for name, cfg in tasks.items():
         if not isinstance(cfg, dict):
             continue
         iface = cfg.get("interface") or "-"
-        rec = latest.get((cfg.get("target"), iface), {})
+        rec, since, dur = stats(cfg.get("target"), iface)
         state = ("disabled" if cfg.get("disable")
                  else ("running" if pid_running(name) else "stopped"))
-        lines.append(str(name).ljust(14)
-                     + str(cfg.get("target", "-")).ljust(18)
-                     + str(iface).ljust(11)
-                     + (str(cfg.get("interval", 60)) + "s").ljust(9)
+        rows.append((0 if rec and not rec.get("reached") else 1,
+                     name, cfg, iface, state, rec, since, dur))
+    for _bad, name, cfg, iface, state, rec, since, dur in sorted(rows):
+        lines.append(str(name).ljust(12)
+                     + str(cfg.get("target", "-")).ljust(16)
+                     + str(iface).ljust(8)
                      + state.ljust(10)
                      + str(rec.get("time", "-")).ljust(21)
-                     + str(len(rec.get("hops", []))).ljust(6)
-                     + ("yes" if rec.get("reached") else "no").ljust(9)
-                     + str(rec.get("break_at", "")))
+                     + str(len(rec.get("hops", []))).ljust(5)
+                     + str(rec.get("break_at", "") or "-").ljust(7)
+                     + str(since).ljust(27)
+                     + str(dur))
     return "\n".join(lines)
 
 
 def _op_show_service_mtr(ctx: Any, value: str) -> str:
-    import re
     tasks = (ctx.store.get(["service", "mtr"], candidate=False) or {})
     if not tasks:
         return "No MTR tasks."
@@ -1276,39 +1368,18 @@ def _op_show_service_mtr(ctx: Any, value: str) -> str:
         except (OSError, ValueError):
             return False
 
-    def last_report(name):
+    def report(name):
         path = os.path.join(ctx.store.base_dir, "mtr", f"{name}.log")
-        blocks = []
-        hops = []
-        started = "-"
-        try:
-            with open(path, encoding="utf-8") as f:
-                for line in f:
-                    if line.startswith("Start:"):
-                        if hops:
-                            blocks.append((started, hops))
-                        hops = []
-                        started = line.split(":", 1)[1].strip()
-                        continue
-                    m = re.match(r"^\s*(\d+)\.\|--\s+(\S+)\s+"
-                                 r"([\d.]+)%?\s+(\d+)\s+([\d.]+)", line)
-                    if m:
-                        hops.append({"ttl": int(m.group(1)),
-                                     "host": m.group(2),
-                                     "loss": float(m.group(3)),
-                                     "snt": int(m.group(4)),
-                                     "avg": m.group(5)})
-        except OSError:
-            pass
-        if hops:
-            blocks.append((started, hops))
-        return blocks[-1] if blocks else (started, hops)
+        return _mtr_reports(path)
 
     if value:
         cfg = tasks.get(value)
         if not isinstance(cfg, dict):
             return f"No such MTR task: {value}"
-        started, hops = last_report(value)
+        blocks = report(value)
+        hops = blocks[-1][1] if blocks else []
+        started = blocks[-1][0] if blocks else "-"
+        since, dur, break_ttl = _mtr_down(blocks, cfg.get("target"))
         state = ("disabled" if cfg.get("disable")
                  else ("running" if pid_running(value) else "stopped"))
         lines = [f"Task:       {value}",
@@ -1318,6 +1389,8 @@ def _op_show_service_mtr(ctx: Any, value: str) -> str:
                  f"Interval:   {cfg.get('interval', 60)}s",
                  f"State:      {state}",
                  f"Last run:   {started}"]
+        if since != "-":
+            lines.append(f"Down since: {since} ({dur})")
         if hops:
             lines.append("")
             lines.append("TTL  Host".ljust(28) + "Loss%".ljust(9) + "Avg(ms)")
@@ -1326,32 +1399,40 @@ def _op_show_service_mtr(ctx: Any, value: str) -> str:
                              + hop["host"].ljust(23)
                              + f"{hop['loss']:.1f}".ljust(9)
                              + hop["avg"])
-            last = hops[-1]
-            if last["loss"] >= 100:
-                lines.append(f"Break: TTL {last['ttl']} ({last['host']} loss 100%)")
+            if break_ttl:
+                lines.append(f"Break: TTL {break_ttl} (target not responding)")
             else:
                 lines.append("Break: none (target responding)")
         return "\n".join(lines)
 
-    lines = ["Task".ljust(14) + "Target".ljust(18) + "Interface".ljust(11)
-             + "Count".ljust(7) + "Interval".ljust(9) + "State".ljust(10)
-             + "Last run".ljust(27) + "Hops".ljust(6) + "Last loss"]
-    for name, cfg in sorted(tasks.items()):
+    rows = []
+    for name, cfg in tasks.items():
         if not isinstance(cfg, dict):
             continue
-        started, hops = last_report(name)
+        blocks = report(name)
+        hops = blocks[-1][1] if blocks else []
+        started = blocks[-1][0] if blocks else "-"
+        since, dur, break_ttl = _mtr_down(blocks, cfg.get("target"))
         state = ("disabled" if cfg.get("disable")
                  else ("running" if pid_running(name) else "stopped"))
         loss = f"{hops[-1]['loss']:.0f}%" if hops else "-"
-        lines.append(str(name).ljust(14)
-                     + str(cfg.get("target", "-")).ljust(18)
-                     + str(cfg.get("interface") or "-").ljust(11)
-                     + str(cfg.get("count", 10)).ljust(7)
-                     + (str(cfg.get("interval", 60)) + "s").ljust(9)
+        rows.append((0 if since != "-" else 1, name, cfg, state, started,
+                     hops, loss, break_ttl, since, dur))
+    lines = ["Task".ljust(12) + "Target".ljust(16) + "Iface".ljust(8)
+             + "State".ljust(10) + "Last run".ljust(26) + "Hops".ljust(5)
+             + "Loss".ljust(6) + "Break".ljust(7) + "Down since".ljust(27)
+             + "Down"]
+    for _bad, name, cfg, state, started, hops, loss, break_ttl, since, dur in sorted(rows):
+        lines.append(str(name).ljust(12)
+                     + str(cfg.get("target", "-")).ljust(16)
+                     + str(cfg.get("interface") or "-").ljust(8)
                      + state.ljust(10)
-                     + str(started).ljust(27)
-                     + str(len(hops)).ljust(6)
-                     + loss)
+                     + str(started).ljust(26)
+                     + str(len(hops)).ljust(5)
+                     + loss.ljust(6)
+                     + str(break_ttl or "-").ljust(7)
+                     + str(since).ljust(27)
+                     + str(dur))
     return "\n".join(lines)
 
 
