@@ -16,6 +16,7 @@ import os
 import sys
 import json
 import shlex
+import shutil
 from typing import List, Optional
 
 try:
@@ -27,6 +28,32 @@ except ImportError:  # Windows / minimal python3 without readline
 
 from .config import ConfigStore
 from .tree import CommandTree, Node, VALUE_TYPES, coerce_value, validate_value
+
+def _read_key() -> str:
+    """Read one key without Enter on POSIX; best effort elsewhere."""
+    try:
+        import termios
+        import tty
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            return os.read(fd, 1).decode(errors="ignore")
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    except Exception:
+        try:
+            return sys.stdin.read(1)
+        except Exception:
+            return "q"
+
+
+def _page_height() -> int:
+    try:
+        return max(5, shutil.get_terminal_size((80, 24)).lines - 1)
+    except Exception:
+        return 23
+
 
 DYNAMIC_PLACEHOLDERS = {
     "ethernet": "<ifname>", "bridge": "<br-name>",
@@ -236,6 +263,35 @@ class Cli:
         return ""
 
     # ------------ command dispatch ------------
+    def _print_output(self, text: str) -> None:
+        """VyOS-style pager: page long output on a TTY, plain print otherwise."""
+        lines = text.splitlines()
+        height = _page_height()
+        if (os.environ.get("VYOSCLI_PAGER") == "0"
+                or not sys.stdout.isatty() or not sys.stdin.isatty()
+                or len(lines) <= height):
+            print(text)
+            return
+        pos = 0
+        while pos < len(lines):
+            end = min(len(lines), pos + height)
+            print("\n".join(lines[pos:end]))
+            pos = end
+            if pos >= len(lines):
+                break
+            prompt = "--More-- (Space: next, b: back, q: quit) "
+            sys.stdout.write(prompt)
+            sys.stdout.flush()
+            key = _read_key()
+            sys.stdout.write("\r" + " " * len(prompt) + "\r")
+            sys.stdout.flush()
+            if key in ("q", "Q", "\x03", "\x1b"):
+                break
+            if key in ("b", "B"):
+                pos = max(0, pos - 2 * height)
+            elif key in ("\n", "\r"):
+                pos = max(pos - height + 1, 0)
+
     def _run_op(self, tokens: List[str]) -> str:
         node, remaining, _matched, _canon = self.tree.op_root.walk(tokens)
         # fully matched node with action?
@@ -436,7 +492,7 @@ class Cli:
             except Exception as e:  # noqa: BLE001
                 out = f"error: {e}"
             if out:
-                print(out)
+                self._print_output(out)
         print("Bye.")
         self.postloop()
 

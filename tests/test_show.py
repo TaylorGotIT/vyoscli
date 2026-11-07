@@ -40,6 +40,19 @@ ADDR = """\
 """
 
 
+class PagerTest(unittest.TestCase):
+    def test_non_tty_prints_everything(self):
+        import io
+        from contextlib import redirect_stdout
+        from harness import new_cli
+        cli = new_cli()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cli._print_output("one\ntwo\nthree")
+        self.assertIn("one", buf.getvalue())
+        self.assertIn("three", buf.getvalue())
+
+
 class ShowInterfaceTest(unittest.TestCase):
     def test_lists_configured_and_physical_only(self):
         def fake_run(args, **kwargs):
