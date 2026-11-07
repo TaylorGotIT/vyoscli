@@ -1,5 +1,9 @@
 # vyoscli — 类 VyOS 的 OpenWrt CLI
 
+<p align="center">
+  <img src="docs/assets/vyoscli-icon.png" alt="vyoscli icon — VyOS-style CLI on an OpenWrt base" width="180">
+</p>
+
 > **本项目由 DeepSeek Harness 协助完成。**
 
 用 Python 实现的 VyOS 风格命令行，以 opkg 包安装到 OpenWrt。
