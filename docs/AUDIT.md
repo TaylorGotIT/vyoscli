@@ -185,6 +185,8 @@ rr-ospfd/ripd/bfdd 依赖；真机 OSPF 在 br-lan 建立、BGP 恢复 Establish
 | 131 | lldp/login 依赖缺失 | lldpd、shadow-useradd、shadow-chpasswd 加入依赖；缺失时 apply 有明确 note | Makefile / config.py |
 | 132 | OpenVPN 删除不生效 | 旧实现只写新配置，不删除旧 UCI/conf，进程继续跑；删除时清理 openvpn.<vtun>、/etc/openvpn/<vtun>.conf 并 restart。真机 add/delete vtun9 验证 | config.py:_apply_openvpn |
 | 133 | WireGuard 运行时装包后 netifd 不识别 proto | UCI 正确但 ifup 报无设备，重启 network 后 wg9 正常；属安装 wireguard-tools/kmod 后未重载 netifd，重启一次即可，驱动本身正常 | 环境说明 |
+| 134 | 逐项测试：WireGuard/OpenVPN/IPsec | WireGuard wg9 在 proto 加载后创建/删除正常；OpenVPN vtun9 配置+进程启动，删除修复后 UCI/conf/进程均清理；IPsec 安装 strongswan-ipsec/charon/mod-aes/mod-sha2 后 apply 成功、服务 running。依赖已补 Makefile | Makefile / config.py |
+| 135 | IPsec 仅基础包时 apply 失败 | 仅 strongswan 无 /etc/init.d/ipsec；补 strongswan-ipsec/charon 及 aes/sha2 插件。真机 apply 成功 | Makefile |
 tysh -c "show ip route bgp"，回退 ip route show proto bgp；真机输出 Codes 头 + B>* 条目（6204 条） | op_show.py:_op_show_ip_route_bgp |
 tysh，输出 VyOS/FRR 风格（Codes 头 + S>* 等）；FRR 未运行或表为空时回退到 ip route，静态表为空时保留 Codes 头。真机 static 显示 Codes 头，full 表为 FRR 格式 | op_show.py:_vtysh_route |
 | 78 | WAN 多线映射错误且 mwan3 不可用 | 安装 mwan3 后修正映射：设备名（eth1）先解析为 OpenWrt 网络接口名（wan），再写 mwan3.interface/member/policy/rule；真机验证 WAN/SSH 未中断，但 `mwan3 status` 中 wan 虽 online，所有 policy（含默认 balanced）均为 `unreachable`，WAN LB 不可用。已删除配置、停止 mwan3、清理 mwan3.* 漂移项；mwan3 包保留但未启用 | `config.py:_apply_wan_lb` |
