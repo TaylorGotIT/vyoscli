@@ -2849,6 +2849,9 @@ class ConfigStore:
             lines.append(f"router bgp {asn}")
             if bgp.get("router-id"):
                 lines.append(f" bgp router-id {bgp['router-id']}")
+            # FRR 8+ enables RFC 8212 (eBGP requires policy) by default;
+            # without route-maps every update is discarded as (Policy).
+            lines.append(" no bgp ebgp-requires-policy")
             for name, pg in (bgp.get("peer-group") or {}).items():
                 if not isinstance(pg, dict):
                     continue
@@ -2875,10 +2878,16 @@ class ConfigStore:
                 if nb.get("route-map-out"):
                     lines.append(f" neighbor {ip} route-map {nb['route-map-out']} out")
             networks = _as_list(bgp.get("network"))
-            if networks:
+            peers = list((bgp.get("neighbor") or {}).keys())
+            groups = list((bgp.get("peer-group") or {}).keys())
+            if networks or peers or groups:
                 lines.append(" address-family ipv4 unicast")
                 for net in networks:
                     lines.append(f"  network {net}")
+                for ip in peers:
+                    lines.append(f"  neighbor {ip} activate")
+                for name in groups:
+                    lines.append(f"  neighbor {name} activate")
                 lines.append(" exit-address-family")
             lines.append("!")
         for num, body in (community_lists or {}).items():

@@ -90,6 +90,8 @@ class FrrRenderTest(unittest.TestCase):
         for needle in ("router bgp 65001", "bgp router-id 10.0.0.1",
                        "neighbor 10.0.0.2 remote-as 65002",
                        "neighbor 10.0.0.2 description peer",
+                       "address-family ipv4 unicast",
+                       "neighbor 10.0.0.2 activate",
                        "network 10.9.0.0/16",
                        "route-map RM1 permit 10",
                        "set local-preference 200",
