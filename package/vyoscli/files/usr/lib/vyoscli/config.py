@@ -3185,6 +3185,9 @@ class ConfigStore:
             lines.append(f"router bgp {asn}")
             if bgp.get("router-id"):
                 lines.append(f" bgp router-id {bgp['router-id']}")
+            timers = bgp.get("timers") or {}
+            if timers.get("keepalive") and timers.get("holdtime"):
+                lines.append(f" timers bgp {timers['keepalive']} {timers['holdtime']}")
             # FRR 8+ enables RFC 8212 (eBGP requires policy) by default;
             # without route-maps every update is discarded as (Policy).
             lines.append(" no bgp ebgp-requires-policy")
@@ -3200,6 +3203,11 @@ class ConfigStore:
                 if pg.get("route-map-import"):
                     lines.append(f" neighbor {name} route-map "
                                  f"{pg['route-map-import']} in")
+                if pg.get("route-map-export"):
+                    lines.append(f" neighbor {name} route-map "
+                                 f"{pg['route-map-export']} out")
+                if pg.get("bfd"):
+                    lines.append(f" neighbor {name} bfd")
             for ip, nb in (bgp.get("neighbor") or {}).items():
                 if not isinstance(nb, dict):
                     continue
@@ -3213,6 +3221,10 @@ class ConfigStore:
                     lines.append(f" neighbor {ip} route-map {nb['route-map-in']} in")
                 if nb.get("route-map-out"):
                     lines.append(f" neighbor {ip} route-map {nb['route-map-out']} out")
+                if nb.get("local-as"):
+                    lines.append(f" neighbor {ip} local-as {nb['local-as']}")
+                if nb.get("bfd"):
+                    lines.append(f" neighbor {ip} bfd")
             networks = _as_list(bgp.get("network"))
             peers = list((bgp.get("neighbor") or {}).keys())
             groups = list((bgp.get("peer-group") or {}).keys())
@@ -3228,6 +3240,10 @@ class ConfigStore:
                                      f"soft-reconfiguration inbound")
                 for name in groups:
                     lines.append(f"  neighbor {name} activate")
+                if bgp.get("maximum-paths-ibgp"):
+                    lines.append(f"  maximum-paths ibgp {bgp['maximum-paths-ibgp']}")
+                if bgp.get("redistribute-connected"):
+                    lines.append("  redistribute connected")
                 lines.append(" exit-address-family")
             lines.append("!")
         for num, body in (community_lists or {}).items():
@@ -3395,8 +3411,57 @@ class ConfigStore:
         return text != before
 
     def _apply_bgp(self, old, new):
-        new_b = (new.get("protocols") or {}).get("bgp") or {}
-        old_b = (old.get("protocols") or {}).get("bgp") or {}
+        def norm_bgp(raw):
+            if not isinstance(raw, dict):
+                return {}
+            if raw.get("local-as"):
+                return raw
+            for asn, body in raw.items():
+                if not (str(asn).isdigit() and isinstance(body, dict)):
+                    continue
+                out = {"local-as": int(asn), "neighbor": {}, "peer-group": {}}
+                params = body.get("parameters") or {}
+                out["router-id"] = params.get("router-id") or body.get("router-id")
+                out["timers"] = body.get("timers") or {}
+                af = ((body.get("address-family") or {}).get("ipv4-unicast") or {})
+                if (af.get("redistribute") or {}).get("connected"):
+                    out["redistribute-connected"] = True
+                maxpaths = (af.get("maximum-paths") or {}).get("ibgp")
+                if maxpaths:
+                    out["maximum-paths-ibgp"] = maxpaths
+                for ip, nb in (body.get("neighbor") or {}).items():
+                    if not isinstance(nb, dict):
+                        continue
+                    n = dict(nb)
+                    naf = ((nb.get("address-family") or {}).get("ipv4-unicast") or {})
+                    rm = naf.get("route-map") or {}
+                    if rm.get("import"):
+                        n["route-map-in"] = rm["import"]
+                    if rm.get("export"):
+                        n["route-map-out"] = rm["export"]
+                    if (naf.get("soft-reconfiguration") or {}).get("inbound"):
+                        n["soft-reconfiguration"] = {"inbound": True}
+                    if (nb.get("bfd") or {}).get("check-control-plane-failure"):
+                        n["bfd"] = True
+                    out["neighbor"][ip] = n
+                for name, pg in (body.get("peer-group") or {}).items():
+                    if not isinstance(pg, dict):
+                        continue
+                    g = dict(pg)
+                    gaf = ((pg.get("address-family") or {}).get("ipv4-unicast") or {})
+                    grm = gaf.get("route-map") or {}
+                    if grm.get("import"):
+                        g["route-map-import"] = grm["import"]
+                    if grm.get("export"):
+                        g["route-map-export"] = grm["export"]
+                    if (gaf.get("soft-reconfiguration") or {}).get("inbound"):
+                        g["soft-reconfiguration"] = {"inbound": True}
+                    out["peer-group"][name] = g
+                return out
+            return raw
+
+        new_b = norm_bgp((new.get("protocols") or {}).get("bgp") or {})
+        old_b = norm_bgp((old.get("protocols") or {}).get("bgp") or {})
         def norm_rmaps(raw):
             out = {}
             for name, body in (raw or {}).items():

@@ -2261,6 +2261,88 @@ TREE = json.loads(r'''[
 "type": "bool"
 }
 ]
+},
+{
+"name": "address-family",
+"help": "Address family",
+"children": [
+{
+"name": "ipv4-unicast",
+"help": "IPv4 unicast",
+"children": [
+{
+"name": "route-map",
+"help": "Route map",
+"children": [
+{
+"name": "import",
+"help": "Import route-map",
+"type": "str"
+},
+{
+"name": "export",
+"help": "Export route-map",
+"type": "str"
+}
+]
+},
+{
+"name": "soft-reconfiguration",
+"help": "Soft reconfiguration",
+"children": [
+{
+"name": "inbound",
+"help": "Inbound soft reconfiguration",
+"type": "bool"
+}
+]
+},
+{
+"name": "maximum-paths",
+"help": "Maximum paths",
+"children": [
+{
+"name": "ibgp",
+"help": "iBGP multipath count",
+"type": "int"
+}
+]
+},
+{
+"name": "redistribute",
+"help": "Redistribute",
+"children": [
+{
+"name": "connected",
+"help": "Redistribute connected",
+"type": "bool"
+}
+]
+}
+]
+}
+]
+},
+{
+"name": "bfd",
+"help": "BFD",
+"children": [
+{
+"name": "check-control-plane-failure",
+"help": "BFD check control plane",
+"type": "bool"
+}
+]
+},
+{
+"name": "peer-group",
+"help": "Peer group",
+"type": "str"
+},
+{
+"name": "local-as",
+"help": "Local AS override",
+"type": "int"
 }
 ]
 },
@@ -2294,6 +2376,83 @@ TREE = json.loads(r'''[
 "name": "update-source",
 "help": "Update source IP",
 "type": "ipv4"
+},
+{
+"name": "address-family",
+"help": "Address family",
+"children": [
+{
+"name": "ipv4-unicast",
+"help": "IPv4 unicast",
+"children": [
+{
+"name": "route-map",
+"help": "Route map",
+"children": [
+{
+"name": "import",
+"help": "Import route-map",
+"type": "str"
+},
+{
+"name": "export",
+"help": "Export route-map",
+"type": "str"
+}
+]
+},
+{
+"name": "soft-reconfiguration",
+"help": "Soft reconfiguration",
+"children": [
+{
+"name": "inbound",
+"help": "Inbound soft reconfiguration",
+"type": "bool"
+}
+]
+},
+{
+"name": "maximum-paths",
+"help": "Maximum paths",
+"children": [
+{
+"name": "ibgp",
+"help": "iBGP multipath count",
+"type": "int"
+}
+]
+},
+{
+"name": "redistribute",
+"help": "Redistribute",
+"children": [
+{
+"name": "connected",
+"help": "Redistribute connected",
+"type": "bool"
+}
+]
+}
+]
+}
+]
+},
+{
+"name": "bfd",
+"help": "BFD",
+"children": [
+{
+"name": "check-control-plane-failure",
+"help": "BFD check control plane",
+"type": "bool"
+}
+]
+},
+{
+"name": "description",
+"help": "Description",
+"type": "str"
 }
 ]
 },
@@ -2480,6 +2639,19 @@ TREE = json.loads(r'''[
 "name": "multiplier",
 "help": "Detection multiplier",
 "type": "int"
+},
+{
+"name": "peer",
+"help": "BFD peer",
+"dyn": true,
+"tpl_help": "Peer IP",
+"children": [
+{
+"name": "echo-mode",
+"help": "Echo mode",
+"type": "bool"
+}
+]
 }
 ]
 }

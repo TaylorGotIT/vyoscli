@@ -406,13 +406,29 @@
 | `protocols bfd interval` | Transmit interval (ms) | `protocols bfd interval 100` |
 | `protocols bfd min-rx` | Minimum receive interval (ms) | `protocols bfd min-rx 100` |
 | `protocols bfd multiplier` | Detection multiplier | `protocols bfd multiplier 100` |
+| `protocols bfd peer <ip> echo-mode` | Echo mode | `protocols bfd peer <ip> echo-mode true` |
 | `protocols bgp local-as` | Local AS number | `protocols bgp local-as 100` |
+| `protocols bgp neighbor <name> address-family ipv4-unicast maximum-paths ibgp` | iBGP multipath count | `protocols bgp neighbor <name> address-family ipv4-unicast maximum-paths ibgp 100` |
+| `protocols bgp neighbor <name> address-family ipv4-unicast redistribute connected` | Redistribute connected | `protocols bgp neighbor <name> address-family ipv4-unicast redistribute connected true` |
+| `protocols bgp neighbor <name> address-family ipv4-unicast route-map export` | Export route-map | `protocols bgp neighbor <name> address-family ipv4-unicast route-map export text` |
+| `protocols bgp neighbor <name> address-family ipv4-unicast route-map import` | Import route-map | `protocols bgp neighbor <name> address-family ipv4-unicast route-map import text` |
+| `protocols bgp neighbor <name> address-family ipv4-unicast soft-reconfiguration inbound` | Inbound soft reconfiguration | `protocols bgp neighbor <name> address-family ipv4-unicast soft-reconfiguration inbound true` |
+| `protocols bgp neighbor <name> bfd check-control-plane-failure` | BFD check control plane | `protocols bgp neighbor <name> bfd check-control-plane-failure true` |
 | `protocols bgp neighbor <name> description` | Neighbor description | `protocols bgp neighbor <name> description text` |
+| `protocols bgp neighbor <name> local-as` | Local AS override | `protocols bgp neighbor <name> local-as 100` |
+| `protocols bgp neighbor <name> peer-group` | Peer group | `protocols bgp neighbor <name> peer-group text` |
 | `protocols bgp neighbor <name> remote-as` | Peer AS number | `protocols bgp neighbor <name> remote-as 100` |
 | `protocols bgp neighbor <name> route-map-in` | Inbound route-map name | `protocols bgp neighbor <name> route-map-in text` |
 | `protocols bgp neighbor <name> route-map-out` | Outbound route-map name | `protocols bgp neighbor <name> route-map-out text` |
 | `protocols bgp neighbor <name> soft-reconfiguration inbound` | Enable inbound soft reconfiguration | `protocols bgp neighbor <name> soft-reconfiguration inbound true` |
 | `protocols bgp network` | Advertise prefix (repeatable) | `protocols bgp network 203.0.113.0/24` |
+| `protocols bgp peer-group <name> address-family ipv4-unicast maximum-paths ibgp` | iBGP multipath count | `protocols bgp peer-group <name> address-family ipv4-unicast maximum-paths ibgp 100` |
+| `protocols bgp peer-group <name> address-family ipv4-unicast redistribute connected` | Redistribute connected | `protocols bgp peer-group <name> address-family ipv4-unicast redistribute connected true` |
+| `protocols bgp peer-group <name> address-family ipv4-unicast route-map export` | Export route-map | `protocols bgp peer-group <name> address-family ipv4-unicast route-map export text` |
+| `protocols bgp peer-group <name> address-family ipv4-unicast route-map import` | Import route-map | `protocols bgp peer-group <name> address-family ipv4-unicast route-map import text` |
+| `protocols bgp peer-group <name> address-family ipv4-unicast soft-reconfiguration inbound` | Inbound soft reconfiguration | `protocols bgp peer-group <name> address-family ipv4-unicast soft-reconfiguration inbound true` |
+| `protocols bgp peer-group <name> bfd check-control-plane-failure` | BFD check control plane | `protocols bgp peer-group <name> bfd check-control-plane-failure true` |
+| `protocols bgp peer-group <name> description` | Description | `protocols bgp peer-group <name> description text` |
 | `protocols bgp peer-group <name> remote-as` | Remote AS | `protocols bgp peer-group <name> remote-as 100` |
 | `protocols bgp peer-group <name> route-map-import` | Inbound route-map | `protocols bgp peer-group <name> route-map-import text` |
 | `protocols bgp peer-group <name> soft-reconfiguration` | Soft reconfig inbound | `protocols bgp peer-group <name> soft-reconfiguration text` |
