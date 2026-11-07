@@ -46,6 +46,10 @@ from .op_show import (
     _op_show_system_login,
     _op_show_ip_route,
     _op_show_bgp,
+    _op_show_dhcp_server,
+    _op_show_dhcp_server_leases,
+    _op_show_dhcp_server_pools,
+    _op_show_dhcp_server_static,
     _op_show_policy_local_route,
     _bgp_neighbor_ips,
     _op_show_bgp_neighbors,
@@ -319,6 +323,14 @@ def build_tree(store: Any) -> CommandTree:
             action=_op_show_container)
     tree.op("show dhcp lease", help="Show DHCP leases",
             action=_op_show_dhcp_lease)
+    tree.op("show dhcp server", help="Show DHCP server status",
+            action=_op_show_dhcp_server)
+    tree.op("show dhcp server leases", help="Show active DHCP leases",
+            action=_op_show_dhcp_server_leases)
+    tree.op("show dhcp server pools", help="Show DHCP address pool usage",
+            action=_op_show_dhcp_server_pools)
+    tree.op("show dhcp server static", help="Show static DHCP mappings",
+            action=_op_show_dhcp_server_static)
     tree.op("show smartdns", help="Show smartdns status",
             action=_op_show_smartdns)
     tree.op("show hardware usb", help="List USB devices",

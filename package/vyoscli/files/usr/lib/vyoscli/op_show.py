@@ -416,6 +416,181 @@ def _op_show_arp(ctx: Any, value: Any) -> str:
     return "\n".join(lines)
 
 
+def _dhcp_iface_subnet(iface: str) -> str:
+    import ipaddress
+    import subprocess
+    try:
+        dev = subprocess.run(["uci", "-q", "get", f"network.{iface}.device"],
+                             capture_output=True, text=True, timeout=5)
+        device = (dev.stdout or "").strip() or iface
+        out = subprocess.run(["ip", "-4", "-o", "addr", "show", "dev", device],
+                             capture_output=True, text=True, timeout=5).stdout
+        for token in out.split():
+            if "/" in token and token[0].isdigit():
+                net = ipaddress.ip_interface(token).network
+                return str(net)
+    except Exception:
+        pass
+    return ""
+
+
+def _dhcp_pools(ctx: Any) -> list:
+    import ipaddress
+    import subprocess
+    pools = []
+    cfg = (ctx.store.get(["service", "dhcp-server", "shared-network-name"],
+                         candidate=False) or {})
+    if cfg:
+        for network, body in cfg.items():
+            body = body if isinstance(body, dict) else {}
+            for subnet, sbody in (body.get("subnet") or {}).items():
+                sbody = sbody if isinstance(sbody, dict) else {}
+                static = []
+                for name, m in (sbody.get("static-mapping") or {}).items():
+                    if isinstance(m, dict):
+                        static.append({"name": name, "ip": m.get("ip-address", ""),
+                                       "mac": m.get("mac-address", "")})
+                ranges = sbody.get("range") or {}
+                if ranges:
+                    for _rid, r in ranges.items():
+                        if not isinstance(r, dict):
+                            continue
+                        pools.append({"network": network, "subnet": subnet,
+                                      "start": r.get("start", ""),
+                                      "stop": r.get("stop", ""),
+                                      "static": static})
+                else:
+                    pools.append({"network": network, "subnet": subnet,
+                                  "start": "", "stop": "", "static": static})
+        return pools
+
+    # Fallback: native OpenWrt /etc/config/dhcp (dnsmasq).
+    out = subprocess.run(["uci", "show", "dhcp"], capture_output=True,
+                         text=True, timeout=5).stdout
+    sections = {}
+    for line in out.splitlines():
+        key, _, value = line.partition("=")
+        parts = key.split(".")
+        if len(parts) != 3:
+            continue
+        sections.setdefault(parts[1], {})[parts[2]] = value.strip("'\"")
+    hosts = []
+    for sec, opts in sections.items():
+        if opts.get("ip") and opts.get("mac"):
+            hosts.append({"name": opts.get("name", sec), "ip": opts["ip"],
+                          "mac": opts["mac"]})
+    for sec, opts in sections.items():
+        start = opts.get("start")
+        limit = opts.get("limit")
+        if not start or opts.get("ignore") == "1":
+            continue
+        iface = opts.get("interface", sec)
+        subnet = _dhcp_iface_subnet(iface)
+        start_ip = stop_ip = ""
+        if subnet:
+            try:
+                net = ipaddress.ip_network(subnet, strict=False)
+                first = net.network_address + int(start)
+                last = first + max(0, int(limit or 1) - 1)
+                start_ip, stop_ip = str(first), str(last)
+            except Exception:
+                pass
+        pools.append({"network": sec, "subnet": subnet, "start": start_ip,
+                      "stop": stop_ip, "static": hosts})
+    return pools
+
+
+def _dhcp_leases() -> list:
+    import time
+    leases = []
+    try:
+        with open("/tmp/dhcp.leases", encoding="utf-8") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 4:
+                    leases.append({
+                        "expires": time.strftime(
+                            "%Y-%m-%d %H:%M:%S", time.localtime(int(parts[0]))),
+                        "mac": parts[1], "ip": parts[2], "host": parts[3]})
+    except (OSError, ValueError):
+        pass
+    return leases
+
+
+def _op_show_dhcp_server(ctx: Any, value: Any) -> str:
+    import subprocess
+    try:
+        running = subprocess.run(["pidof", "dnsmasq"], capture_output=True,
+                                 text=True, timeout=5).stdout.strip()
+    except Exception:
+        running = ""
+    pools = _dhcp_pools(ctx)
+    leases = _dhcp_leases()
+    statics = sum(len(p["static"]) for p in pools)
+    lines = [f"DHCP server:      {'running (dnsmasq)' if running else 'stopped'}",
+             f"Shared networks:  {len({p['network'] for p in pools})}",
+             f"Address pools:    {len(pools)}",
+             f"Active leases:    {len(leases)}",
+             f"Static mappings:  {statics}"]
+    return "\n".join(lines)
+
+
+def _op_show_dhcp_server_pools(ctx: Any, value: Any) -> str:
+    import ipaddress
+    pools = _dhcp_pools(ctx)
+    leases = _dhcp_leases()
+    if not pools:
+        return "No DHCP address pools configured."
+    lines = ["Shared network".ljust(18) + "Subnet".ljust(20)
+             + "Range".ljust(34) + "Used".ljust(7) + "Total"]
+    for pool in pools:
+        used = total = 0
+        if pool.get("subnet") and pool.get("start"):
+            try:
+                net = ipaddress.ip_network(pool["subnet"], strict=False)
+                first = ipaddress.ip_address(pool["start"])
+                last = ipaddress.ip_address(pool["stop"])
+                total = int(last) - int(first) + 1
+                for lease in leases:
+                    try:
+                        if ipaddress.ip_address(lease["ip"]) in net:
+                            used += 1
+                    except ValueError:
+                        pass
+            except Exception:
+                pass
+        rng = (f"{pool['start']}-{pool['stop']}" if pool.get("start")
+               else "-")
+        lines.append(pool["network"].ljust(18) + (pool.get("subnet") or "-").ljust(20)
+                     + rng.ljust(34) + str(used).ljust(7) + str(total))
+    return "\n".join(lines)
+
+
+def _op_show_dhcp_server_leases(ctx: Any, value: Any) -> str:
+    leases = _dhcp_leases()
+    if not leases:
+        return "No active DHCP leases."
+    lines = ["Expires".ljust(21) + "MAC".ljust(20) + "IP".ljust(18)
+             + "Hostname"]
+    for lease in leases:
+        lines.append(lease["expires"].ljust(21) + lease["mac"].ljust(20)
+                     + lease["ip"].ljust(18) + lease["host"])
+    return "\n".join(lines)
+
+
+def _op_show_dhcp_server_static(ctx: Any, value: Any) -> str:
+    pools = _dhcp_pools(ctx)
+    rows = [(p["network"], s) for p in pools for s in p["static"]]
+    if not rows:
+        return "No static DHCP mappings configured."
+    lines = ["Shared network".ljust(18) + "Name".ljust(16)
+             + "IP".ljust(18) + "MAC"]
+    for network, s in rows:
+        lines.append(network.ljust(18) + str(s["name"]).ljust(16)
+                     + str(s["ip"]).ljust(18) + str(s["mac"]))
+    return "\n".join(lines)
+
+
 def _op_show_policy_local_route(ctx: Any, value: Any) -> str:
     rules = (ctx.store.get(["policy", "local-route", "rule"],
                            candidate=False) or {})
