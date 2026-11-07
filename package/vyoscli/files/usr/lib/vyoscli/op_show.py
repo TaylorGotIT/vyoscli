@@ -1,4 +1,5 @@
 """op 模式命令函数 - show 类"""
+import os
 from typing import Any
 
 
@@ -1015,6 +1016,179 @@ def _op_ping_udp(ctx: Any, value: str) -> str:
                 f"(open|filtered, or service does not answer)")
     except OSError as e:  # noqa: BLE001
         return f"udp {host}:{port}: {e}"
+
+
+def _trace_hops(target: str, iface: str = "", source: str = "",
+                max_hops: int = 30) -> list:
+    import re
+    import subprocess
+    cmd = ["traceroute", "-n", "-q", "1", "-w", "2",
+           "-m", str(max_hops)]
+    if iface:
+        cmd += ["-i", iface]
+    if source:
+        cmd += ["-s", source]
+    cmd.append(target)
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True,
+                             timeout=max(20, max_hops * 2)).stdout
+    except Exception as e:  # noqa: BLE001
+        return [{"ttl": 0, "ip": "", "rtt": "", "error": str(e)}]
+    hops = []
+    for line in out.splitlines():
+        m = re.match(r"^\s*(\d+)\s+(.+)$", line)
+        if not m:
+            continue
+        ttl = int(m.group(1))
+        rest = m.group(2).strip()
+        if rest.startswith("*"):
+            hops.append({"ttl": ttl, "ip": "", "rtt": ""})
+            continue
+        rtt = ""
+        rm = re.search(r"([\d.]+)\s*ms", rest)
+        if rm:
+            rtt = rm.group(1)
+        ip = rest.split()[0]
+        hops.append({"ttl": ttl, "ip": ip, "rtt": rtt})
+    return hops
+
+
+def _ping_ok(target: str, iface: str = "") -> bool:
+    import subprocess
+    cmd = ["ping", "-c", "1", "-W", "1"]
+    if iface:
+        cmd += ["-I", iface]
+    cmd.append(target)
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+    except Exception:
+        return False
+    text = (out.stdout or "") + (out.stderr or "")
+    return "bytes from" in text or "1 packets received" in text
+
+
+def _path_record(target: str, iface: str, source: str,
+                 max_hops: int = 30) -> dict:
+    import socket
+    import time
+    hops = _trace_hops(target, iface, source, max_hops)
+    try:
+        resolved = socket.gethostbyname(target)
+    except OSError:
+        resolved = target
+    traced = any(h.get("ip") == resolved for h in hops)
+    ping_ok = _ping_ok(target, iface)
+    reached = traced or ping_ok
+    last_ok = max([h["ttl"] for h in hops if h.get("ip")], default=0)
+    note = ""
+    if ping_ok and not traced:
+        note = (f"target reachable via ICMP; traceroute stopped at TTL "
+                f"{last_ok} (probe filtering)")
+    elif not ping_ok:
+        note = "target unreachable via ICMP"
+    return {
+        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "target": target,
+        "interface": iface or "-",
+        "source": source or "-",
+        "hops": hops,
+        "reached": reached,
+        "traced": traced,
+        "ping_ok": ping_ok,
+        "last_ok": last_ok,
+        "break_at": "" if reached else (last_ok + 1),
+        "note": note,
+    }
+
+
+def _format_path(rec: dict) -> str:
+    lines = [f"Path to {rec['target']} via {rec['interface']} "
+             f"({rec['time']})",
+             "TTL  Hop".ljust(26) + "RTT(ms)".ljust(12) + "Status"]
+    for hop in rec["hops"]:
+        ip = hop.get("ip") or "*"
+        rtt = hop.get("rtt") or "-"
+        status = "ok" if hop.get("ip") else "no reply"
+        lines.append(str(hop.get("ttl", "")).ljust(5)
+                     + ip.ljust(21) + str(rtt).ljust(12) + status)
+    if rec["reached"]:
+        suffix = f" - {rec['note']}" if rec.get("note") else ""
+        lines.append(f"Reached: yes{suffix}")
+    else:
+        lines.append(f"Reached: no (last responding hop {rec['last_ok']}, "
+                     f"break at TTL {rec['break_at']})")
+    return "\n".join(lines)
+
+
+def _monitor_log_path(ctx: Any) -> str:
+    directory = os.path.join(ctx.store.base_dir, "monitor")
+    os.makedirs(directory, exist_ok=True)
+    return os.path.join(directory, "path.jsonl")
+
+
+def _op_monitor_path(ctx: Any, value: str) -> str:
+    import json
+    import time
+    parts = (value or "").split()
+    if not parts:
+        return ("usage: monitor path <target> [interface <if>] "
+                "[source <ip>] [count N] [interval S] [max-hops N]")
+    target = parts[0]
+    opts = {}
+    i = 1
+    while i < len(parts):
+        key = parts[i]
+        if i + 1 < len(parts):
+            opts[key] = parts[i + 1]
+            i += 2
+        else:
+            i += 1
+    count = int(opts.get("count", 1))
+    interval = int(opts.get("interval", 10))
+    max_hops = int(opts.get("max-hops", 30))
+    iface = opts.get("interface", "")
+    source = opts.get("source", "")
+    path = _monitor_log_path(ctx)
+    outputs = []
+    for round_no in range(1, count + 1):
+        rec = _path_record(target, iface, source, max_hops)
+        outputs.append(f"=== round {round_no}/{count} ===")
+        outputs.append(_format_path(rec))
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        if round_no < count:
+            time.sleep(interval)
+    outputs.append(f"history: {path}")
+    return "\n".join(outputs)
+
+
+def _op_show_monitor_path(ctx: Any, value: str) -> str:
+    import json
+    path = os.path.join(ctx.store.base_dir, "monitor", "path.jsonl")
+    try:
+        with open(path, encoding="utf-8") as f:
+            records = [json.loads(line) for line in f if line.strip()]
+    except (OSError, ValueError):
+        return "No path history."
+    if value:
+        records = [r for r in records if r.get("target") == value]
+    if not records:
+        return "No path history."
+    latest = {}
+    for rec in records:
+        key = (rec.get("target"), rec.get("interface"))
+        latest[key] = rec
+    lines = ["Target".ljust(18) + "Interface".ljust(12)
+             + "Last seen".ljust(21) + "Hops".ljust(6)
+             + "Reached".ljust(9) + "Break"]
+    for (_target, iface), rec in sorted(latest.items()):
+        lines.append(str(rec.get("target")).ljust(18)
+                     + str(iface).ljust(12)
+                     + str(rec.get("time")).ljust(21)
+                     + str(len(rec.get("hops", []))).ljust(6)
+                     + ("yes" if rec.get("reached") else "no").ljust(9)
+                     + str(rec.get("break_at", "")))
+    return "\n".join(lines)
 
 
 def _op_show_system_cpu(ctx: Any, value: Any) -> str:

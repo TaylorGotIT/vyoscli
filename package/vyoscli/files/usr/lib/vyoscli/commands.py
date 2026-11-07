@@ -55,6 +55,8 @@ from .op_show import (
     _op_show_login,
     _op_ping_tcp,
     _op_ping_udp,
+    _op_monitor_path,
+    _op_show_monitor_path,
     _op_show_system_cpu,
     _op_show_system_image,
     _op_show_system_image_storage,
@@ -329,6 +331,10 @@ def build_tree(store: Any) -> CommandTree:
             action=_op_show_policy_local_route)
     tree.op("show login", help="Show current login details",
             action=_op_show_login)
+    tree.op("monitor path", help="Trace and record path per uplink",
+            action=_op_monitor_path)
+    tree.op("show monitor path", help="Show recorded path status",
+            action=_op_show_monitor_path)
     tree.op("show system cpu", help="Show CPU information",
             action=_op_show_system_cpu)
     tree.op("show system image", help="Show installed image",
