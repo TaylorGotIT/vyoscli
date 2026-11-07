@@ -55,6 +55,7 @@ from .op_show import (
     _op_show_login,
     _op_disconnect_user,
     _op_disconnect_ssh,
+    _op_disconnect_tty,
     _bgp_neighbor_ips,
     _op_show_bgp_neighbors,
     _op_show_bgp_neighbor_received_routes,
@@ -325,6 +326,8 @@ def build_tree(store: Any) -> CommandTree:
                       value_type="str", action=_op_disconnect_user))
     ssh_disc.add(Node(name="ip", help="Disconnect by IP address",
                       value_type="str", action=_op_disconnect_ssh))
+    ssh_disc.add(Node(name="tty", help="Disconnect by TTY (e.g. pts/1)",
+                      value_type="str", action=_op_disconnect_tty))
     tree.op("show login user", help="Show logged-in users",
             action=_op_show_login_user)
 

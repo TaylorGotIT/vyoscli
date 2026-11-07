@@ -782,8 +782,16 @@ def _op_disconnect_user(ctx: Any, value: str) -> str:
 
 def _op_disconnect_ssh(ctx: Any, value: str) -> str:
     if not value:
-        return "usage: disconnect ssh <ip-address>"
+        return "usage: disconnect ssh <ip-address|tty>"
+    if value.startswith("tty") or value.startswith("pts/"):
+        return _disconnect_sessions(lambda s: s["tty"] == value)
     return _disconnect_sessions(lambda s: s["ip"] == value)
+
+
+def _op_disconnect_tty(ctx: Any, value: str) -> str:
+    if not value:
+        return "usage: disconnect ssh tty <tty>"
+    return _disconnect_sessions(lambda s: s["tty"] == value)
 
 
 def _op_show_login(ctx: Any, value: Any) -> str:
