@@ -3327,13 +3327,14 @@ class ConfigStore:
     @staticmethod
     def _set_frr_daemons(enable_bgpd: bool, enable_ospfd: bool = False,
                          enable_ripd: bool = False,
-                         enable_bfd: bool = False) -> None:
+                         enable_bfd: bool = False) -> bool:
         path = "/etc/frr/daemons"
         try:
             with open(path, encoding="utf-8") as f:
                 text = f.read()
         except OSError:
-            return
+            return False
+        before = text
 
         def put(body: str, key: str, value: str) -> str:
             pattern = re.compile(rf"^{re.escape(key)}=.*$", re.M)
@@ -3348,6 +3349,7 @@ class ConfigStore:
         text = put(text, "bfdd", "yes" if enable_bfd else "no")
         with open(path, "w", encoding="utf-8") as f:
             f.write(text)
+        return text != before
 
     def _apply_bgp(self, old, new):
         new_b = (new.get("protocols") or {}).get("bgp") or {}
@@ -3389,10 +3391,18 @@ class ConfigStore:
             with open("/etc/frr/frr.conf", "w", encoding="utf-8") as f:
                 f.write(text)
             os.chmod("/etc/frr/frr.conf", 0o640)
-            self._set_frr_daemons(bool(new_b.get("local-as")),
-                                  bool(ospf), bool(rip), bool(bfd))
-            subprocess.run(["/etc/init.d/frr", "start"],
-                           capture_output=True, text=True, timeout=25)
+            changed = self._set_frr_daemons(bool(new_b.get("local-as")),
+                                           bool(ospf), bool(rip), bool(bfd))
+            if changed:
+                # restarting FRR can take longer than the CLI timeout; do it
+                # detached so the commit does not hang.
+                subprocess.Popen(["/etc/init.d/frr", "restart"],
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL,
+                                 start_new_session=True)
+            else:
+                subprocess.run(["/etc/init.d/frr", "start"],
+                               capture_output=True, text=True, timeout=25)
             subprocess.run(["vtysh", "-b"], capture_output=True,
                            text=True, timeout=30)
             if new_b.get("local-as"):
