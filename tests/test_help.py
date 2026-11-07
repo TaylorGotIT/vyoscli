@@ -26,6 +26,21 @@ class HelpTest(unittest.TestCase):
         text = self.cli._help_text("set interfaces bridge ")
         self.assertIn("<br-name>", text)
 
+    def test_run_show_completion(self):
+        self.cli.ctx.mode = "cfg"
+        pairs = dict(self.cli._matches_with_help(["run", "show", "int"]))
+        self.assertIn("interfaces", pairs)
+
+    def test_run_show_ethernet_completion(self):
+        self.cli.ctx.mode = "cfg"
+        node = (self.cli.tree.op_root.children["show"].children["interfaces"]
+                .children["ethernet"])
+        node._completion = lambda: ["eth0", "eth1"]
+        pairs = dict(self.cli._matches_with_help(
+            ["run", "show", "interfaces", "ethernet", ""]))
+        self.assertIn("eth0", pairs)
+        self.assertIn("eth1", pairs)
+
     def test_ping_tcp_completion_has_ip_port(self):
         self.cli.ctx.mode = "op"
         pairs = dict(self.cli._matches_with_help(["ping", "tcp", ""]))

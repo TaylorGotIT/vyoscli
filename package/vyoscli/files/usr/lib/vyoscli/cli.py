@@ -173,6 +173,10 @@ class Cli:
         if self.ctx.mode == "op":
             root = self.tree.op_root
             head = tokens[:-1]
+        elif self.ctx.mode == "cfg" and tokens and tokens[0] == "run":
+            # config mode: run show ... completes against op mode
+            root = self.tree.op_root
+            head = tokens[1:-1]
         else:
             root = self.tree.cfg_root
             head = tokens[:-1]
