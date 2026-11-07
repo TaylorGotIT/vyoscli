@@ -922,6 +922,15 @@ def _range_text(values) -> str:
 def _parse_host_port(value: str):
     parts = (value or "").split()
     try:
+        if parts and parts[0] == "ip":
+            host = parts[1]
+            if "port" in parts:
+                port = int(parts[parts.index("port") + 1])
+            elif len(parts) >= 3:
+                port = int(parts[2])
+            else:
+                return None, None, "usage: ping {proto} ip <x.x.x.x> port <1-65535>"
+            return host, port, ""
         if "ip" in parts and "port" in parts:
             host = parts[parts.index("ip") + 1]
             port = int(parts[parts.index("port") + 1])

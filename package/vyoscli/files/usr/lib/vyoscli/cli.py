@@ -240,10 +240,40 @@ class Cli:
                 return name + " "
         return filtered[state]
 
+    def _ping_completion(self, tokens: List[str]):
+        """Hierarchical hints for ping tcp/udp; None when not applicable."""
+        if len(tokens) < 2 or tokens[0] != "ping":
+            return None
+        if tokens[1] not in ("tcp", "udp"):
+            return None
+        args = tokens[2:-1]
+        if not args:
+            return [("ip", "IP address"), ("port", "Port number")]
+        if args[0] == "ip":
+            if len(args) == 1:
+                return [("<x.x.x.x>", "IP address")]
+            if len(args) == 2:
+                return [("port", "Port number")]
+            if len(args) == 3 and args[2] == "port":
+                return [("<1-65535>", "Port number")]
+            return []
+        if args[0] == "port":
+            if len(args) == 1:
+                return [("<1-65535>", "Port number")]
+            return []
+        if len(args) == 1:
+            return [("<1-65535>", "Port number")]
+        if len(args) == 2:
+            return []
+        return []
+
     def _matches_with_help(self, tokens: List[str]) -> List[tuple]:
         """VyOS-style candidates for the next token: name -> help."""
         if not tokens:
             return []
+        special = self._ping_completion(tokens)
+        if special is not None:
+            return special
         if self.ctx.mode == "op":
             root = self.tree.op_root
             head = tokens[:-1]

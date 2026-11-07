@@ -47,6 +47,24 @@ class HelpTest(unittest.TestCase):
         self.assertEqual(cfg(self.cli,
                              "set policy local-route rule 10 set table 110")[0], "")
 
+    def test_ping_tcp_hierarchical_hints(self):
+        self.cli.ctx.mode = "op"
+        base = dict(self.cli._matches_with_help(["ping", "tcp", ""]))
+        self.assertIn("ip", base)
+        self.assertIn("port", base)
+        after_ip = dict(self.cli._matches_with_help(
+            ["ping", "tcp", "192.0.2.1", ""]))
+        self.assertIn("<1-65535>", after_ip)
+        keyword = dict(self.cli._matches_with_help(
+            ["ping", "tcp", "ip", ""]))
+        self.assertIn("<x.x.x.x>", keyword)
+        after_kw_ip = dict(self.cli._matches_with_help(
+            ["ping", "tcp", "ip", "192.0.2.1", ""]))
+        self.assertIn("port", after_kw_ip)
+        after_port = dict(self.cli._matches_with_help(
+            ["ping", "tcp", "ip", "192.0.2.1", "port", ""]))
+        self.assertIn("<1-65535>", after_port)
+
     def test_run_show_completion(self):
         self.cli.ctx.mode = "cfg"
         pairs = dict(self.cli._matches_with_help(["run", "show", "int"]))
