@@ -426,6 +426,9 @@ class Cli:
         if verb == "set":
             if node.value_type:
                 value = " ".join(value_tokens)
+                if not value and node.value_type == "bool":
+                    self.store.set_value(structural, True)
+                    return ""
                 if not value:
                     return f"set: missing value for {' '.join(structural)}"
                 err = validate_value(node.value_type, value)

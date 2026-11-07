@@ -233,6 +233,15 @@ class CompletionTest(unittest.TestCase):
         self.assertEqual(pairs["<x.x.x.x/xx>"], "IPv4 address/prefix")
 
 
+class BoolPresenceTest(unittest.TestCase):
+    def test_set_bool_without_value_is_true(self):
+        from harness import new_cli
+        cli = new_cli()
+        cli._run_cfg(["set", "service", "ssh", "disable"])
+        self.assertTrue(cli.store.get(["service", "ssh", "disable"],
+                                      candidate=True))
+
+
 class EntrypointTest(unittest.TestCase):
     def test_sync_entrypoint_reports_without_uci(self):
         env = dict(os.environ, PYTHONPATH=LIB, VYOSCLI_ETC=new_store_dir())
