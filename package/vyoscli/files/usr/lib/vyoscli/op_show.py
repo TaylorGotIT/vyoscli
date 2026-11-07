@@ -921,12 +921,16 @@ def _range_text(values) -> str:
 
 def _parse_host_port(value: str):
     parts = (value or "").split()
-    if len(parts) < 2:
-        return None, None, "usage: ping {proto} <ip> <port>"
     try:
-        return parts[0], int(parts[1]), ""
-    except ValueError:
+        if "ip" in parts and "port" in parts:
+            host = parts[parts.index("ip") + 1]
+            port = int(parts[parts.index("port") + 1])
+            return host, port, ""
+        if len(parts) >= 2:
+            return parts[0], int(parts[1]), ""
+    except (ValueError, IndexError):
         return None, None, "port must be a number"
+    return None, None, "usage: ping {proto} ip <x.x.x.x> port <1-65535>"
 
 
 def _op_ping_tcp(ctx: Any, value: str) -> str:
@@ -1124,146 +1128,6 @@ def _monitor_log_path(ctx: Any) -> str:
     directory = os.path.join(ctx.store.base_dir, "monitor")
     os.makedirs(directory, exist_ok=True)
     return os.path.join(directory, "path.jsonl")
-
-
-def _op_monitor_path(ctx: Any, value: str) -> str:
-    import json
-    import time
-    parts = (value or "").split()
-    if not parts:
-        return ("usage: monitor path <target> [interface <if>] "
-                "[source <ip>] [count N] [interval S] [max-hops N]")
-    target = parts[0]
-    opts = {}
-    i = 1
-    while i < len(parts):
-        key = parts[i]
-        if i + 1 < len(parts):
-            opts[key] = parts[i + 1]
-            i += 2
-        else:
-            i += 1
-    count = int(opts.get("count", 1))
-    interval = int(opts.get("interval", 10))
-    max_hops = int(opts.get("max-hops", 30))
-    iface = opts.get("interface", "")
-    source = opts.get("source", "")
-    path = _monitor_log_path(ctx)
-    outputs = []
-    for round_no in range(1, count + 1):
-        rec = _path_record(target, iface, source, max_hops)
-        outputs.append(f"=== round {round_no}/{count} ===")
-        outputs.append(_format_path(rec))
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-        if round_no < count:
-            time.sleep(interval)
-    outputs.append(f"history: {path}")
-    return "\n".join(outputs)
-
-
-def _op_show_monitor_path(ctx: Any, value: str) -> str:
-    import json
-    path = os.path.join(ctx.store.base_dir, "monitor", "path.jsonl")
-    try:
-        with open(path, encoding="utf-8") as f:
-            records = [json.loads(line) for line in f if line.strip()]
-    except (OSError, ValueError):
-        return "No path history."
-    if value:
-        records = [r for r in records if r.get("target") == value]
-    if not records:
-        return "No path history."
-    latest = {}
-    for rec in records:
-        key = (rec.get("target"), rec.get("interface"))
-        latest[key] = rec
-    lines = ["Target".ljust(18) + "Interface".ljust(12)
-             + "Last seen".ljust(21) + "Hops".ljust(6)
-             + "Reached".ljust(9) + "Break"]
-    for (_target, iface), rec in sorted(latest.items()):
-        lines.append(str(rec.get("target")).ljust(18)
-                     + str(iface).ljust(12)
-                     + str(rec.get("time")).ljust(21)
-                     + str(len(rec.get("hops", []))).ljust(6)
-                     + ("yes" if rec.get("reached") else "no").ljust(9)
-                     + str(rec.get("break_at", "")))
-    return "\n".join(lines)
-
-
-def _parse_ts(text: str):
-    from datetime import datetime
-    if not text or text == "-":
-        return None
-    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S"):
-        try:
-            return datetime.strptime(text, fmt)
-        except ValueError:
-            pass
-    return None
-
-
-def _down_text(since: str) -> tuple:
-    from datetime import datetime
-    ts = _parse_ts(since)
-    if ts is None:
-        return "-", "-"
-    now = datetime.now(ts.tzinfo) if ts.tzinfo else datetime.now()
-    secs = max(0, int((now - ts).total_seconds()))
-    if secs < 60:
-        dur = f"{secs}s"
-    elif secs < 3600:
-        dur = f"{secs // 60}m{secs % 60:02d}s"
-    else:
-        dur = f"{secs // 3600}h{(secs % 3600) // 60:02d}m"
-    return since, dur
-
-
-def _mtr_reports(path: str) -> list:
-    import re
-    blocks = []
-    hops = []
-    started = "-"
-    try:
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                if line.startswith("Start:"):
-                    if hops:
-                        blocks.append((started, hops))
-                    hops = []
-                    started = line.split(":", 1)[1].strip()
-                    continue
-                m = re.match(r"^\s*(\d+)\.\|--\s+(\S+)\s+"
-                             r"([\d.]+)%?\s+(\d+)\s+([\d.]+)", line)
-                if m:
-                    hops.append({"ttl": int(m.group(1)),
-                                 "host": m.group(2),
-                                 "loss": float(m.group(3)),
-                                 "snt": int(m.group(4)),
-                                 "avg": m.group(5)})
-    except OSError:
-        pass
-    if hops:
-        blocks.append((started, hops))
-    return blocks
-
-
-def _mtr_down(blocks: list, target: str) -> tuple:
-    def reached(hops):
-        return any(hop.get("host") == target for hop in hops)
-
-    if not blocks:
-        return "-", "-", "-"
-    if reached(blocks[-1][1]):
-        return "-", "-", ""
-    idx = len(blocks) - 1
-    while idx >= 0 and not reached(blocks[idx][1]):
-        idx -= 1
-    since = blocks[idx + 1][0] if idx + 1 < len(blocks) else blocks[0][0]
-    since, dur = _down_text(since)
-    hops = blocks[-1][1]
-    break_ttl = str(hops[-1]["ttl"] + 1) if hops else "-"
-    return since, dur, break_ttl
 
 
 def _op_show_service_mtr(ctx: Any, value: str) -> str:

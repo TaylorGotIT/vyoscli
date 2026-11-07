@@ -191,8 +191,11 @@ class Cli:
 
         completer = getattr(node, "_completion", None)
         if callable(completer):
-            for name in completer():
-                out.append((name, node.help or ""))
+            for item in completer():
+                if isinstance(item, (tuple, list)) and len(item) == 2:
+                    out.append((str(item[0]), str(item[1])))
+                else:
+                    out.append((str(item), node.help or ""))
 
         if node.dynamic is not None and callable(node.dynamic):
             tpl = getattr(node, "_dyn_template", None)
@@ -210,7 +213,7 @@ class Cli:
 
         if (self.ctx.mode == "op" and node.action is not None
                 and not node.children and not node.value_type
-                and node.dynamic is None):
+                and node.dynamic is None and not callable(completer)):
             out.append(("<Enter>", "Execute the current command"))
         return out
 

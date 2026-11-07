@@ -26,6 +26,12 @@ class HelpTest(unittest.TestCase):
         text = self.cli._help_text("set interfaces bridge ")
         self.assertIn("<br-name>", text)
 
+    def test_ping_tcp_completion_has_ip_port(self):
+        self.cli.ctx.mode = "op"
+        pairs = dict(self.cli._matches_with_help(["ping", "tcp", ""]))
+        self.assertEqual(pairs.get("ip"), "IP address")
+        self.assertEqual(pairs.get("port"), "Port number")
+
     def test_completion_attribute_lists_ifnames(self):
         self.cli.ctx.mode = "op"
         node = (self.cli.tree.op_root.children["show"].children["interfaces"]

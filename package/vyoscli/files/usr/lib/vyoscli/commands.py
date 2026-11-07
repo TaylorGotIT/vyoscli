@@ -55,9 +55,7 @@ from .op_show import (
     _op_show_login,
     _op_ping_tcp,
     _op_ping_udp,
-    _op_monitor_path,
     _op_show_service_mtr,
-    _op_show_monitor_path,
     _op_show_system_cpu,
     _op_show_system_image,
     _op_show_system_image_storage,
@@ -82,17 +80,31 @@ from .op_show import (
 def _op_ping(ctx: Any, value: str) -> str:
     if not value:
         return "ping: host required"
-    try:
-        out = subprocess.run(["ping", "-c", "4", "-W", "2", value],
-                             capture_output=True, text=True, timeout=15)
-        return out.stdout or out.stderr or "(no output)"
-    except FileNotFoundError:
+    import sys
+    if not sys.stdin.isatty():
         try:
-            out = subprocess.run(["ping", "-n", "4", value],
+            out = subprocess.run(["ping", "-c", "4", "-W", "2", value],
                                  capture_output=True, text=True, timeout=15)
-            return out.stdout
+            return out.stdout or out.stderr or "(no output)"
         except Exception as e:  # noqa: BLE001
             return f"ping failed: {e}"
+    try:
+        proc = subprocess.Popen(["ping", value], stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True)
+    except Exception as e:  # noqa: BLE001
+        return f"ping failed: {e}"
+    try:
+        for line in proc.stdout:
+            print(line, end="", flush=True)
+    except KeyboardInterrupt:
+        proc.terminate()
+        print("\n--- ping stopped ---")
+    finally:
+        try:
+            proc.wait(timeout=2)
+        except Exception:  # noqa: BLE001
+            proc.kill()
+    return ""
 
 
 # ---------- container images (operational) ----------
@@ -291,10 +303,16 @@ def build_tree(store: Any) -> CommandTree:
     tree.op_root.children["show"].add(show_sys)
 
     tree.op("ping", help="Ping a host", value_type="host", action=_op_ping)
-    tree.op("ping tcp", help="TCP port check: ping tcp <ip> <port>",
-            action=_op_ping_tcp)
-    tree.op("ping udp", help="UDP port check: ping udp <ip> <port>",
-            action=_op_ping_udp)
+    tcp_ping = tree.op("ping tcp",
+                       help="TCP port check: ping tcp ip <x.x.x.x> port <1-65535>",
+                       action=_op_ping_tcp)
+    tcp_ping._completion = lambda: [("ip", "IP address"),
+                                    ("port", "Port number")]
+    udp_ping = tree.op("ping udp",
+                       help="UDP port check: ping udp ip <x.x.x.x> port <1-65535>",
+                       action=_op_ping_udp)
+    udp_ping._completion = lambda: [("ip", "IP address"),
+                                    ("port", "Port number")]
 
     # show ip route [static|connected|summary]
     show_ip = Node(name="ip", help="IP information")
@@ -332,11 +350,9 @@ def build_tree(store: Any) -> CommandTree:
             action=_op_show_policy_local_route)
     tree.op("show login", help="Show current login details",
             action=_op_show_login)
-    tree.op("monitor path", help="Trace and record path per uplink",
-            action=_op_monitor_path)
-    tree.op("show monitor path", help="Show recorded path status",
-            action=_op_show_monitor_path)
     tree.op("show service mtr", help="Show background MTR tasks",
+            value_type="str", action=_op_show_service_mtr)
+    tree.op("show mtr", help="Show background MTR tasks",
             value_type="str", action=_op_show_service_mtr)
     tree.op("show system cpu", help="Show CPU information",
             action=_op_show_system_cpu)
