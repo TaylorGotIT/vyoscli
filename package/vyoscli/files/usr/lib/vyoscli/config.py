@@ -2039,6 +2039,13 @@ class ConfigStore:
         for ifname, cfg in eth.items():
             if not isinstance(cfg, dict) or ifname == "lo":
                 continue
+            if not cfg:
+                # Empty node left after deleting the last leaf: release only
+                # if it used to own an address (never tear down WAN for mtu).
+                if (isinstance(old_eth.get(ifname), dict)
+                        and old_eth[ifname].get("address")):
+                    self._release_iface(ifname, mapping, notes)
+                continue
             sections = self._iface_sections(ifname)
             section = sections[0] if sections else None
             if cfg.get("mtu"):
@@ -2062,7 +2069,11 @@ class ConfigStore:
             # No address means "stop managing this port": restore a taken-over
             # section, or drop our own vyos_* interface.
             if not addrs:
-                self._release_iface(ifname, mapping, notes)
+                # Only release when this port previously had an address;
+                # mtu/description-only nodes must not tear the WAN down.
+                if (isinstance(old_eth.get(ifname), dict)
+                        and old_eth[ifname].get("address")):
+                    self._release_iface(ifname, mapping, notes)
                 continue
             taken_over = False
             section = self._find_uci_section("network", "ifname", ifname)
