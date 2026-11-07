@@ -53,6 +53,8 @@ from .op_show import (
     _op_show_policy_local_route,
     _op_show_login_user,
     _op_show_login,
+    _op_disconnect_user,
+    _op_disconnect_ssh,
     _bgp_neighbor_ips,
     _op_show_bgp_neighbors,
     _op_show_bgp_neighbor_received_routes,
@@ -314,6 +316,10 @@ def build_tree(store: Any) -> CommandTree:
             action=_op_show_policy_local_route)
     tree.op("show login", help="Show current login details",
             action=_op_show_login)
+    tree.op("disconnect user", help="Disconnect a user's SSH sessions",
+            value_type="str", action=_op_disconnect_user)
+    tree.op("disconnect ssh", help="Disconnect SSH sessions from an IP",
+            value_type="str", action=_op_disconnect_ssh)
     tree.op("show login user", help="Show logged-in users",
             action=_op_show_login_user)
 

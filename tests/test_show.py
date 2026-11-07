@@ -85,6 +85,30 @@ class ContainerImageTest(unittest.TestCase):
         self.assertIn("bjdgyc/anylink", text)
 
 
+class DisconnectTest(unittest.TestCase):
+    def test_skips_current_session(self):
+        import signal as sig
+        sessions = [
+            {"drop": "100", "shell": "101", "user": "root",
+             "ip": "192.0.2.1", "tty": "pts/0"},
+            {"drop": "200", "shell": "201", "user": "bob",
+             "ip": "198.51.100.2", "tty": "pts/1"},
+        ]
+        with mock.patch.object(op_show, "_ssh_peers",
+                               return_value={"100": "192.0.2.1",
+                                             "200": "198.51.100.2"}), \
+             mock.patch.object(op_show, "_current_dropbear",
+                               return_value="100"), \
+             mock.patch.object(op_show, "_login_ssh_sessions",
+                               return_value=sessions), \
+             mock.patch("os.kill") as kill:
+            text = op_show._disconnect_sessions(lambda s: True)
+        self.assertIn("disconnected 1", text)
+        kill.assert_any_call(200, sig.SIGTERM)
+        killed_pids = [call.args[0] for call in kill.call_args_list]
+        self.assertNotIn(100, killed_pids)
+
+
 class RouteShowTest(unittest.TestCase):
     def test_prefers_vtysh(self):
         with mock.patch("shutil.which", return_value="/usr/bin/vtysh"), \

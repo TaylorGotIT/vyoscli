@@ -680,6 +680,112 @@ def _user_groups(user: str) -> list:
     return sorted(groups)
 
 
+def _login_ssh_sessions(peers: dict) -> list:
+    """Return SSH sessions: dropbear pid, shell pid, user, ip, tty."""
+    import os
+    import subprocess
+    shells = {"ash", "sh", "bash", "zsh", "ksh", "mksh", "login", "su"}
+    sessions = []
+    used_drop = set()
+    try:
+        pids = [d for d in os.listdir("/proc") if d.isdigit()]
+    except OSError:
+        pids = []
+    for pid in pids:
+        if _proc_status(pid).get("Name", "") not in shells:
+            continue
+        tty = _proc_tty(pid)
+        if not tty or tty.startswith("null"):
+            continue
+        walk = _proc_status(pid).get("PPid", "")
+        drop = ""
+        for _ in range(8):
+            if not walk or walk == "0":
+                break
+            if walk in peers:
+                drop = walk
+                break
+            walk = _proc_status(walk).get("PPid", "")
+        if not drop:
+            continue
+        used_drop.add(drop)
+        try:
+            user = (subprocess.run(["ps", "-o", "user=", "-p", pid],
+                                   capture_output=True, text=True,
+                                   timeout=5).stdout.strip() or "root")
+        except Exception:
+            user = "root"
+        sessions.append({"drop": drop, "shell": pid, "user": user,
+                         "ip": peers[drop], "tty": tty})
+    for drop, ip in peers.items():
+        if drop in used_drop:
+            continue
+        try:
+            user = (subprocess.run(["ps", "-o", "user=", "-p", drop],
+                                   capture_output=True, text=True,
+                                   timeout=5).stdout.strip() or "root")
+        except Exception:
+            user = "root"
+        sessions.append({"drop": drop, "shell": "", "user": user,
+                         "ip": ip, "tty": "ssh"})
+    return sessions
+
+
+def _current_dropbear(peers: dict) -> str:
+    import os
+    pid = str(os.getpid())
+    for _ in range(12):
+        if pid in peers:
+            return pid
+        ppid = _proc_status(pid).get("PPid", "")
+        if not ppid or ppid == "0":
+            break
+        pid = ppid
+    return ""
+
+
+def _disconnect_sessions(match) -> str:
+    import os
+    import signal
+    peers = _ssh_peers()
+    current = _current_dropbear(peers)
+    sessions = _login_ssh_sessions(peers)
+    killed = 0
+    skipped = 0
+    for sess in sessions:
+        if not match(sess):
+            continue
+        if sess["drop"] == current:
+            skipped += 1
+            continue
+        try:
+            os.kill(int(sess["drop"]), signal.SIGTERM)
+        except OSError:
+            continue
+        if sess.get("shell"):
+            try:
+                os.kill(int(sess["shell"]), signal.SIGTERM)
+            except OSError:
+                pass
+        killed += 1
+    if not killed:
+        extra = " (current session skipped)" if skipped else ""
+        return f"no matching SSH sessions{extra}"
+    return f"disconnected {killed} SSH session(s)"
+
+
+def _op_disconnect_user(ctx: Any, value: str) -> str:
+    if not value:
+        return "usage: disconnect user <username>"
+    return _disconnect_sessions(lambda s: s["user"] == value)
+
+
+def _op_disconnect_ssh(ctx: Any, value: str) -> str:
+    if not value:
+        return "usage: disconnect ssh <ip-address>"
+    return _disconnect_sessions(lambda s: s["ip"] == value)
+
+
 def _op_show_login(ctx: Any, value: Any) -> str:
     import getpass
     import os
