@@ -187,6 +187,9 @@ rr-ospfd/ripd/bfdd 依赖；真机 OSPF 在 br-lan 建立、BGP 恢复 Establish
 | 133 | WireGuard 运行时装包后 netifd 不识别 proto | UCI 正确但 ifup 报无设备，重启 network 后 wg9 正常；属安装 wireguard-tools/kmod 后未重载 netifd，重启一次即可，驱动本身正常 | 环境说明 |
 | 134 | 逐项测试：WireGuard/OpenVPN/IPsec | WireGuard wg9 在 proto 加载后创建/删除正常；OpenVPN vtun9 配置+进程启动，删除修复后 UCI/conf/进程均清理；IPsec 安装 strongswan-ipsec/charon/mod-aes/mod-sha2 后 apply 成功、服务 running。依赖已补 Makefile | Makefile / config.py |
 | 135 | IPsec 仅基础包时 apply 失败 | 仅 strongswan 无 /etc/init.d/ipsec；补 strongswan-ipsec/charon 及 aes/sha2 插件。真机 apply 成功 | Makefile |
+| 136 | Ethernet VIF 无驱动 | 补 `vif <vid>`：创建 `eth0.<vid>` VLAN link、UCI `network.<if>_<vid>`（device/proto/ipaddr），删除时清理链路和 UCI；真机 eth0.99 10.99.99.1/24 生效并清理 | `config.py:_apply_interfaces` |
+| 137 | DHCP relay 仍不驻留 | 去掉 dhcp-fwd 的 chroot/user 后不再报 ioctl，但进程启动后退出，日志 `BOOTREQUEST request from interface without clients`；需继续研究 dhcp-fwd 配置格式 | `config.py:_apply_dhcp_relay` |
+| 138 | 逐项测试：bridge/NAT dest/SSH ACL/container | br9+dum9 桥创建/删除正常；NAT destination 规则 apply（1 rule）；SSH ACL allow-list 表生效、管理会话保留并清理；container 镜像列表正常，`container c1 image alpine` 因 registry 拉取失败未创建 | 多文件 |
 tysh -c "show ip route bgp"，回退 ip route show proto bgp；真机输出 Codes 头 + B>* 条目（6204 条） | op_show.py:_op_show_ip_route_bgp |
 tysh，输出 VyOS/FRR 风格（Codes 头 + S>* 等）；FRR 未运行或表为空时回退到 ip route，静态表为空时保留 Codes 头。真机 static 显示 Codes 头，full 表为 FRR 格式 | op_show.py:_vtysh_route |
 | 78 | WAN 多线映射错误且 mwan3 不可用 | 安装 mwan3 后修正映射：设备名（eth1）先解析为 OpenWrt 网络接口名（wan），再写 mwan3.interface/member/policy/rule；真机验证 WAN/SSH 未中断，但 `mwan3 status` 中 wan 虽 online，所有 policy（含默认 balanced）均为 `unreachable`，WAN LB 不可用。已删除配置、停止 mwan3、清理 mwan3.* 漂移项；mwan3 包保留但未启用 | `config.py:_apply_wan_lb` |
