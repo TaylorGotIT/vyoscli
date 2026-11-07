@@ -1512,12 +1512,20 @@ class ConfigStore:
         new_r = (new.get("service") or {}).get("dhcp-relay") or {}
         if old_r == new_r:
             return []
-        conf = "/etc/dhcp-fwd.conf"
+        etc_root = (os.environ.get("VYOSCLI_ETC_ROOT")
+                    or ("/etc" if os.access("/etc", os.W_OK)
+                        else self.base_dir))
+        os.makedirs(etc_root, exist_ok=True)
+        conf = os.path.join(etc_root, "dhcp-fwd.conf")
         backup = os.path.join(self.base_dir, "backup", "dhcp-fwd.conf.orig")
         os.makedirs(os.path.dirname(backup), exist_ok=True)
         if os.path.exists(conf) and not os.path.exists(backup):
             shutil.copy2(conf, backup)
-        pidfile = "/var/run/dhcp-fwd.pid"
+        run_dir = (os.environ.get("VYOSCLI_RUN_DIR")
+                   or ("/var/run" if os.access("/var/run", os.W_OK)
+                       else os.path.join(self.base_dir, "run")))
+        os.makedirs(run_dir, exist_ok=True)
+        pidfile = os.path.join(run_dir, "dhcp-fwd.pid")
 
         def stop():
             try:
