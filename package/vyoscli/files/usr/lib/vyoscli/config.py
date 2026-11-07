@@ -3350,6 +3350,8 @@ class ConfigStore:
                     if not isinstance(rbody, dict):
                         continue
                     lines.append(f"route-map {name} {action} {ruleno}")
+                    if rbody.get("description"):
+                        lines.append(f" description {rbody['description']}")
                     for key, value in (rbody.get("match") or {}).items():
                         if key == "prefix-list":
                             lines.append(f" match ip address prefix-list {value}")
@@ -3395,8 +3397,28 @@ class ConfigStore:
     def _apply_bgp(self, old, new):
         new_b = (new.get("protocols") or {}).get("bgp") or {}
         old_b = (old.get("protocols") or {}).get("bgp") or {}
-        rmaps = (new.get("policy") or {}).get("route-map") or {}
-        old_rmaps = (old.get("policy") or {}).get("route-map") or {}
+        def norm_rmaps(raw):
+            out = {}
+            for name, body in (raw or {}).items():
+                if not isinstance(body, dict):
+                    continue
+                for action in ("permit", "deny"):
+                    for no, rule in (body.get(action) or {}).items():
+                        out.setdefault(name, {}).setdefault(action, {})[no] = rule
+                for no, rule in (body.get("rule") or {}).items():
+                    if not isinstance(rule, dict):
+                        continue
+                    action = rule.get("action") or "permit"
+                    rule = dict(rule)
+                    setcfg = dict(rule.get("set") or {})
+                    if "ip-next-hop" in setcfg:
+                        setcfg["next-hop"] = setcfg.pop("ip-next-hop")
+                    rule["set"] = setcfg
+                    out.setdefault(name, {}).setdefault(action, {})[no] = rule
+            return out
+
+        rmaps = norm_rmaps((new.get("policy") or {}).get("route-map") or {})
+        old_rmaps = norm_rmaps((old.get("policy") or {}).get("route-map") or {})
         new_protos = new.get("protocols") or {}
         old_protos = old.get("protocols") or {}
         ospf = new_protos.get("ospf") or {}

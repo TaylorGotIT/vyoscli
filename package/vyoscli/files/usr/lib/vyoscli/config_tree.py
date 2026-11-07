@@ -2092,6 +2092,117 @@ TREE = json.loads(r'''[
 "name": "origin",
 "help": "Set BGP origin (igp|egp|incomplete)",
 "type": "str"
+},
+{
+"name": "ip-next-hop",
+"help": "BGP next-hop",
+"type": "ipv4"
+}
+]
+}
+]
+},
+{
+"name": "rule",
+"help": "Route-map rule",
+"dyn": true,
+"tpl_help": "Rule number (1-999999)",
+"children": [
+{
+"name": "action",
+"help": "Action: permit|deny",
+"type": "str"
+},
+{
+"name": "description",
+"help": "Description",
+"type": "str"
+},
+{
+"name": "match",
+"help": "Match condition",
+"children": [
+{
+"name": "community",
+"help": "Match community-list",
+"children": [
+{
+"name": "community-list",
+"help": "Community-list number",
+"type": "str"
+}
+]
+},
+{
+"name": "prefix-list",
+"help": "Match an IPv4 prefix-list",
+"type": "str"
+},
+{
+"name": "as-path",
+"help": "Match an AS path list",
+"type": "str"
+},
+{
+"name": "metric",
+"help": "Match route metric",
+"type": "int"
+},
+{
+"name": "tag",
+"help": "Match route tag",
+"type": "int"
+}
+]
+},
+{
+"name": "set",
+"help": "Set attribute",
+"children": [
+{
+"name": "community",
+"help": "BGP community (e.g. 65001:100)",
+"type": "str"
+},
+{
+"name": "local-preference",
+"help": "BGP local-preference",
+"type": "int"
+},
+{
+"name": "med",
+"help": "BGP MED",
+"type": "int"
+},
+{
+"name": "next-hop",
+"help": "Set next-hop",
+"type": "ipv4"
+},
+{
+"name": "metric",
+"help": "Set route metric",
+"type": "int"
+},
+{
+"name": "tag",
+"help": "Set route tag",
+"type": "int"
+},
+{
+"name": "weight",
+"help": "Set BGP weight",
+"type": "int"
+},
+{
+"name": "origin",
+"help": "Set BGP origin (igp|egp|incomplete)",
+"type": "str"
+},
+{
+"name": "ip-next-hop",
+"help": "BGP next-hop",
+"type": "ipv4"
 }
 ]
 }

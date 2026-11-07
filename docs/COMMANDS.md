@@ -372,6 +372,7 @@
 | `policy route-map <name> permit <name> match prefix-list` | Match an IPv4 prefix-list | `policy route-map <name> permit <name> match prefix-list text` |
 | `policy route-map <name> permit <name> match tag` | Match route tag | `policy route-map <name> permit <name> match tag 100` |
 | `policy route-map <name> permit <name> set community` | BGP community (e.g. 65001:100) | `policy route-map <name> permit <name> set community text` |
+| `policy route-map <name> permit <name> set ip-next-hop` | BGP next-hop | `policy route-map <name> permit <name> set ip-next-hop 192.0.2.1` |
 | `policy route-map <name> permit <name> set local-preference` | BGP local-preference | `policy route-map <name> permit <name> set local-preference 100` |
 | `policy route-map <name> permit <name> set med` | BGP MED | `policy route-map <name> permit <name> set med 100` |
 | `policy route-map <name> permit <name> set metric` | Set route metric | `policy route-map <name> permit <name> set metric 100` |
@@ -379,6 +380,22 @@
 | `policy route-map <name> permit <name> set origin` | Set BGP origin (igp\|egp\|incomplete) | `policy route-map <name> permit <name> set origin text` |
 | `policy route-map <name> permit <name> set tag` | Set route tag | `policy route-map <name> permit <name> set tag 100` |
 | `policy route-map <name> permit <name> set weight` | Set BGP weight | `policy route-map <name> permit <name> set weight 100` |
+| `policy route-map <name> rule <id> action` | Action: permit\|deny | `policy route-map <name> rule <id> action text` |
+| `policy route-map <name> rule <id> description` | Description | `policy route-map <name> rule <id> description text` |
+| `policy route-map <name> rule <id> match as-path` | Match an AS path list | `policy route-map <name> rule <id> match as-path text` |
+| `policy route-map <name> rule <id> match community community-list` | Community-list number | `policy route-map <name> rule <id> match community community-list text` |
+| `policy route-map <name> rule <id> match metric` | Match route metric | `policy route-map <name> rule <id> match metric 100` |
+| `policy route-map <name> rule <id> match prefix-list` | Match an IPv4 prefix-list | `policy route-map <name> rule <id> match prefix-list text` |
+| `policy route-map <name> rule <id> match tag` | Match route tag | `policy route-map <name> rule <id> match tag 100` |
+| `policy route-map <name> rule <id> set community` | BGP community (e.g. 65001:100) | `policy route-map <name> rule <id> set community text` |
+| `policy route-map <name> rule <id> set ip-next-hop` | BGP next-hop | `policy route-map <name> rule <id> set ip-next-hop 192.0.2.1` |
+| `policy route-map <name> rule <id> set local-preference` | BGP local-preference | `policy route-map <name> rule <id> set local-preference 100` |
+| `policy route-map <name> rule <id> set med` | BGP MED | `policy route-map <name> rule <id> set med 100` |
+| `policy route-map <name> rule <id> set metric` | Set route metric | `policy route-map <name> rule <id> set metric 100` |
+| `policy route-map <name> rule <id> set next-hop` | Set next-hop | `policy route-map <name> rule <id> set next-hop 192.0.2.1` |
+| `policy route-map <name> rule <id> set origin` | Set BGP origin (igp\|egp\|incomplete) | `policy route-map <name> rule <id> set origin text` |
+| `policy route-map <name> rule <id> set tag` | Set route tag | `policy route-map <name> rule <id> set tag 100` |
+| `policy route-map <name> rule <id> set weight` | Set BGP weight | `policy route-map <name> rule <id> set weight 100` |
 | `policy route-redirect <name> rule <id> dport` | Destination port to match | `policy route-redirect <name> rule <id> dport 8080` |
 | `policy route-redirect <name> rule <id> redirect-to` | Redirect to IP:port | `policy route-redirect <name> rule <id> redirect-to text` |
 
