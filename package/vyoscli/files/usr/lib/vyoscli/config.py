@@ -3575,14 +3575,19 @@ class ConfigStore:
         return notes
 
     def _apply_ssh_acl(self, old, new):
-        old_acl = (((old.get("service") or {}).get("ssh") or {})
-                   .get("access-control") or {})
-        new_acl = (((new.get("service") or {}).get("ssh") or {})
-                   .get("access-control") or {})
-        if old_acl == new_acl:
+        def acl_of(cfg):
+            ssh = (cfg.get("service") or {}).get("ssh") or {}
+            return (ssh.get("access-control") or {}, ssh.get("acl") or {})
+
+        old_ac, old_acl = acl_of(old)
+        new_ac, new_acl = acl_of(new)
+        if (old_ac, old_acl) == (new_ac, new_acl):
             return []
         path = os.path.join(self.base_dir, "ssh-acl.nft")
-        if not (new_acl.get("allow") or new_acl.get("deny")):
+        permits = _as_list(new_acl.get("permit"))
+        allows = _as_list((new_ac.get("allow") or {}).get("address"))
+        denies = _as_list((new_ac.get("deny") or {}).get("address"))
+        if not (permits or allows or denies):
             try:
                 subprocess.run(["nft", "delete", "table", "inet", "vyos_ssh"],
                                capture_output=True, text=True, timeout=10)
@@ -3595,13 +3600,20 @@ class ConfigStore:
             return ["ssh-acl: removed"]
         ssh = (new.get("service") or {}).get("ssh") or {}
         port = ssh.get("port") or 22
-        lines = ["table inet vyos_ssh {",
-                 "  chain input { type filter hook input priority -20; "
-                 "policy accept;"]
-        for addr in _as_list((new_acl.get("allow") or {}).get("address")):
-            lines.append(f"    tcp dport {port} ip saddr {addr} accept")
-        for addr in _as_list((new_acl.get("deny") or {}).get("address")):
-            lines.append(f"    tcp dport {port} ip saddr {addr} drop")
+        lines = ["table inet vyos_ssh {"]
+        if permits:
+            lines.append("  set permit { type ipv4_addr; flags interval; "
+                         "elements = { " + ", ".join(permits) + " } }")
+        lines.append("  chain input { type filter hook input priority -20; "
+                     "policy accept;")
+        if permits:
+            lines.append(f"    tcp dport {port} ip saddr @permit accept")
+            lines.append(f"    tcp dport {port} drop")
+        else:
+            for addr in allows:
+                lines.append(f"    tcp dport {port} ip saddr {addr} accept")
+            for addr in denies:
+                lines.append(f"    tcp dport {port} ip saddr {addr} drop")
         lines += ["  }", "}"]
         text = "\n".join(lines) + "\n"
         os.makedirs(self.base_dir, exist_ok=True)
@@ -3614,7 +3626,9 @@ class ConfigStore:
             return [f"ssh-acl: nft unavailable ({e})"]
         if proc.returncode != 0:
             return [f"ssh-acl apply failed: {(proc.stderr or '').strip()[:160]}"]
-        return [f"ssh-acl: {text.count('accept') + text.count('drop')} rule(s)"]
+        if permits:
+            return [f"ssh-acl: allow-list {len(permits)} prefix(es)"]
+        return [f"ssh-acl: {len(allows) + len(denies)} rule(s)"]
 
     def _apply_ssh(self, old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
         old_s = (old.get("service") or {}).get("ssh") or {}

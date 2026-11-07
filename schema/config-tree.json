@@ -2705,6 +2705,23 @@
         ]
        }
       ]
+     },
+     {
+      "name": "acl",
+      "help": "SSH access control list (allow-list)",
+      "children": [
+       {
+        "name": "permit",
+        "help": "Permit source prefix",
+        "type": "ipv4net",
+        "repeatable": true
+       }
+      ]
+     },
+     {
+      "name": "disable-host-validation",
+      "help": "Disable SSH host validation",
+      "type": "bool"
      }
     ]
    },

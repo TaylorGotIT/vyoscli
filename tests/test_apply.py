@@ -472,6 +472,23 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn(["nft", "delete", "table", "inet", "vyos_ssh"],
                       self.fake.calls)
 
+    def test_ssh_acl_permit_allowlist(self):
+        cfg(self.cli,
+            "set service ssh acl permit 192.0.2.0/24",
+            "set service ssh acl permit 198.51.100.0/24")
+        self.commit()
+        path = os.path.join(self.cli.store.base_dir, "ssh-acl.nft")
+        text = open(path, encoding="utf-8").read()
+        self.assertIn("set permit", text)
+        self.assertIn("192.0.2.0/24", text)
+        self.assertIn("198.51.100.0/24", text)
+        self.assertIn("tcp dport 22 ip saddr @permit accept", text)
+        self.assertIn("tcp dport 22 drop", text)
+        cfg(self.cli, "delete service ssh acl permit")
+        self.commit()
+        self.assertIn(["nft", "delete", "table", "inet", "vyos_ssh"],
+                      self.fake.calls)
+
     def test_local_route_and_static_table(self):
         cfg(self.cli,
             "set policy local-route rule 6600 source 192.0.2.10",
