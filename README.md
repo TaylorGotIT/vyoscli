@@ -117,6 +117,14 @@ python3 scripts/make-ipk.py                  # 带完整 Depends
 小闪存设备可删掉 `Makefile` 中 `DEPENDS` 用不到的行；缺包时对应功能输出
 `... apply failed`，其余配置不受影响。
 
+依赖处理策略：
+
+- **核心包**只依赖 `python3/python3-readline/ip-full`；
+- 其他功能按需安装，`show dependencies [feature]` 按功能列出 OK/MISSING 和安装命令；
+- 不自动安装依赖（避免 commit 时做网络 IO，尤其在改 WAN 时）；
+- 可选 `vyoscli-full` meta 包一次装齐，详见
+  [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)。
+
 ---
 
 ## 快速开始

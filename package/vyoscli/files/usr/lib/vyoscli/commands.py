@@ -257,7 +257,7 @@ def build_tree(store: Any) -> CommandTree:
 
     # show version / interface
     tree.op("show version", help="Show system version", action=_op_show_version)
-    tree.op("show dependencies", help="Check required packages", action=_op_show_dependencies)
+    tree.op("show dependencies", help="Check required packages by feature", value_type="str", action=_op_show_dependencies)
     tree.op("show interfaces", help="Show interface summary",
             action=_op_show_interfaces)
     # show interface ethernet <ifname>

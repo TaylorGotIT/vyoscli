@@ -3,53 +3,87 @@ import os
 from typing import Any
 
 
-REQUIRED_PACKAGES = [
-    ("python3", "python3"),
-    ("python3-readline", "python3-readline"),
-    ("ip-full", "ip"),
-    ("smartdns", "smartdns"),
-    ("adguardhome", "AdGuardHome"),
-    ("frr", "vtysh"),
-    ("kmod-tcp-bbr", "kmod-tcp-bbr"),
-    ("kmod-tcp-hybla", "kmod-tcp-hybla"),
-    ("kmod-wireguard", "wg"),
-    ("wireguard-tools", "wg"),
-    ("openvpn-openssl", "openvpn"),
-    ("strongswan-minimal", "ipsec"),
-    ("conserver", "conserver"),
-    ("podman", "podman"),
-    ("kmod-gre", "kmod-gre"),
-    ("kmod-ipip", "kmod-ipip"),
-    ("kmod-vxlan", "kmod-vxlan"),
-    ("tc", "tc"),
-    ("sqm-scripts", "sqm"),
+FEATURE_DEPS = [
+    ("core", "python3 python3-readline ip-full".split()),
+    ("bgp", "frr frr-ospfd frr-ripd frr-bfdd".split()),
+    ("wireguard", "kmod-wireguard wireguard-tools".split()),
+    ("openvpn", ["openvpn-openssl"]),
+    ("ipsec", "strongswan-ipsec strongswan-charon strongswan-mod-aes "
+              "strongswan-mod-sha2".split()),
+    ("l2tp", ["xl2tpd"]),
+    ("container", "podman netavark iptables-nft ip6tables-nft "
+                  "kmod-ipt-nat iptables-mod-nat-extra "
+                  "kmod-ipt-conntrack iptables-mod-conntrack-extra "
+                  "kmod-ipt-extra iptables-mod-extra".split()),
+    ("lldp", ["lldpd"]),
+    ("mtr", ["mtr"]),
+    ("dns", ["dnsmasq"]),
+    ("smartdns", ["smartdns"]),
+    ("adguard", ["adguardhome"]),
+    ("sqm", "sqm-scripts tc".split()),
+    ("snmp", ["snmpd"]),
+    ("console", ["conserver"]),
+    ("users", "shadow-useradd shadow-chpasswd".split()),
 ]
+
+
+def _installed_packages():
+    import subprocess
+    try:
+        r = subprocess.run(["opkg", "list-installed"], capture_output=True,
+                           text=True, timeout=8)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    names = set()
+    for line in (r.stdout or "").splitlines():
+        parts = line.split()
+        if parts:
+            names.add(parts[0])
+    return names
 
 
 def _op_show_dependencies(ctx: Any, value: Any) -> str:
     import shutil
-    import subprocess
-    out = ["Package Status:"]
-    out.append(f"{'Package':<25} {'Status':<10}")
-    out.append(f"{'-'*25} {'-'*10}")
+    wanted = (value or "").strip()
+    installed = _installed_packages()
+    rows = []
     missing = []
-    for pkg, bin_name in REQUIRED_PACKAGES:
-        # Check if installed via opkg
-        r = subprocess.run(["opkg", "list-installed", pkg], capture_output=True, text=True, timeout=5)
-        installed = pkg in r.stdout
-        if installed:
-            status = "OK"
-        else:
-            status = "MISSING"
-            missing.append(pkg)
-        out.append(f"{pkg:<25} {status:<10}")
+    for feature, packages in FEATURE_DEPS:
+        if wanted and wanted != feature:
+            continue
+        for pkg in packages:
+            binary = {
+                "frr-ospfd": "ospfd", "frr-ripd": "ripd",
+                "frr-bfdd": "bfdd", "adguardhome": "AdGuardHome",
+                "sqm-scripts": "sqm", "conserver": "conserver",
+            }.get(pkg, pkg)
+            if installed is not None and pkg in installed:
+                ok = True
+            else:
+                # dnsmasq-full/mtr-json etc. may provide the binary under a
+                # different package name.
+                ok = shutil.which(binary) is not None
+            rows.append((feature, pkg, "OK" if ok else "MISSING"))
+            if not ok:
+                missing.append(pkg)
+    if not rows:
+        return (f"No such feature: {wanted}\n"
+                f"Features: {', '.join(f for f, _ in FEATURE_DEPS)}")
+    out = ["Feature      Package                        Status",
+           "-----------  -----------------------------  --------"]
+    for feature, pkg, status in rows:
+        out.append(f"{feature:<12} {pkg:<29} {status}")
     out.append("")
     if missing:
-        out.append(f"Missing: {', '.join(missing)}")
-        out.append("Install with:")
-        out.append(f"  opkg install {' '.join(missing)}")
+        out.append("Missing:")
+        for feature, pkg, status in rows:
+            if status == "MISSING":
+                out.append(f"  {feature}: {pkg}")
+        out.append("")
+        out.append("Install missing packages with:")
+        out.append(f"  opkg install {' '.join(dict.fromkeys(missing))}")
     else:
-        out.append("All dependencies installed.")
+        out.append("All selected dependencies are installed.")
     return "\n".join(out)
 
 

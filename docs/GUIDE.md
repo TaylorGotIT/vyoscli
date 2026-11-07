@@ -51,6 +51,22 @@ Possible completions:
 
 ---
 
+### 依赖检查
+
+```bash
+show dependencies              # 所有功能分组
+show dependencies bgp          # 只看 BGP
+show dependencies container
+```
+
+- 核心只依赖 `python3/python3-readline/ip-full`；
+- BGP、WireGuard、IPsec、容器、LLDP、MTR 等按需安装；
+- 不自动安装依赖；缺包时 commit 会在对应段给出 `apply failed`，
+  装包后重新 `commit`/`sync` 即可；
+- 完整策略与包列表见 [DEPENDENCIES.md](DEPENDENCIES.md)。
+
+---
+
 ## 2. 配置事务
 
 ```bash
