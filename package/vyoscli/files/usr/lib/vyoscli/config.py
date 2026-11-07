@@ -1213,14 +1213,17 @@ class ConfigStore:
                 notes.append(f"path-monitor {name}: stopped")
                 continue
             interval = max(5, int(cfg.get("interval") or 60))
-            probe = f"monitor path {shlex.quote(str(cfg['target']))}"
+            count = max(1, int(cfg.get("count") or 10))
+            cmd = ["mtr", "-r", "-n", "-c", str(count), "-i", "1"]
             if cfg.get("interface"):
-                probe += f" interface {shlex.quote(str(cfg['interface']))}"
-            probe += f" max-hops {int(cfg.get('max-hops') or 16)}"
+                cmd += ["-I", str(cfg["interface"])]
+            if cfg.get("max-hops"):
+                cmd += ["-m", str(cfg["max-hops"])]
+            cmd.append(str(cfg["target"]))
             log = os.path.join(monitor_dir, f"{name}.log")
-            script = (f"while true; do printf '%s\\n\\nexit\\n' "
-                      f"{shlex.quote(probe)} | vyoscli >> {shlex.quote(log)} "
-                      f"2>&1; sleep {interval}; done")
+            run_cmd = " ".join(shlex.quote(x) for x in cmd)
+            script = (f"while true; do {run_cmd} >> {shlex.quote(log)} 2>&1; "
+                      f"echo >> {shlex.quote(log)}; sleep {interval}; done")
             proc = subprocess.Popen(["/bin/sh", "-c", script],
                                     stdout=subprocess.DEVNULL,
                                     stderr=subprocess.DEVNULL,

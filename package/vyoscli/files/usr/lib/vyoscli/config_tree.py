@@ -2953,6 +2953,11 @@ TREE = json.loads(r'''[
 "name": "max-hops",
 "help": "Maximum TTL to probe",
 "type": "int"
+},
+{
+"name": "count",
+"help": "MTR probes per report",
+"type": "int"
 }
 ]
 }
