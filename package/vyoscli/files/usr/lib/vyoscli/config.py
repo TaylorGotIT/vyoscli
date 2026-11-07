@@ -85,6 +85,8 @@ DEFAULT_RUNNING: Dict[str, Any] = {
     },
     "policy": {
         "route-redirect": {},   # name -> {rule: {num: {dport, redirect-to}}}
+        "route-map": {},        # name -> {permit: {rule: {set, match}}}
+        "community-list": {},   # num -> {rule: {regex, description, action}}
     },
     "vrf": {
         "name": {},   # name -> {table: int}
@@ -107,8 +109,6 @@ DEFAULT_RUNNING: Dict[str, Any] = {
             "peer-group": {},  # name -> {remote-as, update-source, route-map-import, soft-reconfiguration}
             "network": [],   # prefixes
         },
-        "route-map": {},   # name -> {permit: {rule: {set: {}, match: {}}}},
-        "community-list": {},  # num -> {rule: {regex, description, action}},
     },
     "service": {
         "ntp": {"server": []},
@@ -3336,8 +3336,8 @@ class ConfigStore:
     def _apply_bgp(self, old, new):
         new_b = (new.get("protocols") or {}).get("bgp") or {}
         old_b = (old.get("protocols") or {}).get("bgp") or {}
-        rmaps = (new.get("protocols") or {}).get("route-map") or {}
-        old_rmaps = (old.get("protocols") or {}).get("route-map") or {}
+        rmaps = (new.get("policy") or {}).get("route-map") or {}
+        old_rmaps = (old.get("policy") or {}).get("route-map") or {}
         new_protos = new.get("protocols") or {}
         old_protos = old.get("protocols") or {}
         ospf = new_protos.get("ospf") or {}

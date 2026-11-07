@@ -352,6 +352,19 @@
 | `policy prefix-list <name> rule <id> ge` | Minimum prefix length | `policy prefix-list <name> rule <id> ge 100` |
 | `policy prefix-list <name> rule <id> le` | Maximum prefix length | `policy prefix-list <name> rule <id> le 100` |
 | `policy prefix-list <name> rule <id> prefix` | Prefix to match | `policy prefix-list <name> rule <id> prefix 192.0.2.1/24` |
+| `policy route-map <name> permit <name> match as-path` | Match an AS path list | `policy route-map <name> permit <name> match as-path text` |
+| `policy route-map <name> permit <name> match community community-list` | Community-list number | `policy route-map <name> permit <name> match community community-list text` |
+| `policy route-map <name> permit <name> match metric` | Match route metric | `policy route-map <name> permit <name> match metric 100` |
+| `policy route-map <name> permit <name> match prefix-list` | Match an IPv4 prefix-list | `policy route-map <name> permit <name> match prefix-list text` |
+| `policy route-map <name> permit <name> match tag` | Match route tag | `policy route-map <name> permit <name> match tag 100` |
+| `policy route-map <name> permit <name> set community` | BGP community (e.g. 65001:100) | `policy route-map <name> permit <name> set community text` |
+| `policy route-map <name> permit <name> set local-preference` | BGP local-preference | `policy route-map <name> permit <name> set local-preference 100` |
+| `policy route-map <name> permit <name> set med` | BGP MED | `policy route-map <name> permit <name> set med 100` |
+| `policy route-map <name> permit <name> set metric` | Set route metric | `policy route-map <name> permit <name> set metric 100` |
+| `policy route-map <name> permit <name> set next-hop` | Set next-hop | `policy route-map <name> permit <name> set next-hop 192.0.2.1` |
+| `policy route-map <name> permit <name> set origin` | Set BGP origin (igp\|egp\|incomplete) | `policy route-map <name> permit <name> set origin text` |
+| `policy route-map <name> permit <name> set tag` | Set route tag | `policy route-map <name> permit <name> set tag 100` |
+| `policy route-map <name> permit <name> set weight` | Set BGP weight | `policy route-map <name> permit <name> set weight 100` |
 | `policy route-redirect <name> rule <id> dport` | Destination port to match | `policy route-redirect <name> rule <id> dport 8080` |
 | `policy route-redirect <name> rule <id> redirect-to` | Redirect to IP:port | `policy route-redirect <name> rule <id> redirect-to text` |
 
@@ -387,19 +400,6 @@
 | `protocols rip default-information` | Originate a default route | `protocols rip default-information true` |
 | `protocols rip network` | Network to advertise | `protocols rip network 192.0.2.1/24` |
 | `protocols rip version` | RIP version (1 or 2) | `protocols rip version 100` |
-| `protocols route-map <name> permit <name> match as-path` | Match an AS path list | `protocols route-map <name> permit <name> match as-path text` |
-| `protocols route-map <name> permit <name> match community community-list` | Community-list number | `protocols route-map <name> permit <name> match community community-list text` |
-| `protocols route-map <name> permit <name> match metric` | Match route metric | `protocols route-map <name> permit <name> match metric 100` |
-| `protocols route-map <name> permit <name> match prefix-list` | Match an IPv4 prefix-list | `protocols route-map <name> permit <name> match prefix-list text` |
-| `protocols route-map <name> permit <name> match tag` | Match route tag | `protocols route-map <name> permit <name> match tag 100` |
-| `protocols route-map <name> permit <name> set community` | BGP community (e.g. 65001:100) | `protocols route-map <name> permit <name> set community text` |
-| `protocols route-map <name> permit <name> set local-preference` | BGP local-preference | `protocols route-map <name> permit <name> set local-preference 100` |
-| `protocols route-map <name> permit <name> set med` | BGP MED | `protocols route-map <name> permit <name> set med 100` |
-| `protocols route-map <name> permit <name> set metric` | Set route metric | `protocols route-map <name> permit <name> set metric 100` |
-| `protocols route-map <name> permit <name> set next-hop` | Set next-hop | `protocols route-map <name> permit <name> set next-hop 192.0.2.1` |
-| `protocols route-map <name> permit <name> set origin` | Set BGP origin (igp\|egp\|incomplete) | `protocols route-map <name> permit <name> set origin text` |
-| `protocols route-map <name> permit <name> set tag` | Set route tag | `protocols route-map <name> permit <name> set tag 100` |
-| `protocols route-map <name> permit <name> set weight` | Set BGP weight | `protocols route-map <name> permit <name> set weight 100` |
 | `protocols static route <prefix> blackhole` | Silently drop packets | `protocols static route <prefix> blackhole true` |
 | `protocols static route <prefix> interface` | Egress interface | `protocols static route <prefix> interface text` |
 | `protocols static route <prefix> next-hop` | Next-hop gateway IPv4 | `protocols static route <prefix> next-hop 192.0.2.1` |
