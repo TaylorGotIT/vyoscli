@@ -55,6 +55,18 @@ def _page_height() -> int:
         return 23
 
 
+def _with_default(node, text: str) -> str:
+    default = getattr(node, "_default", None)
+    if default is None:
+        return text
+    low = (text or "").lower()
+    if "default:" in low or "(default" in low:
+        return text
+    shown = ("true" if default is True else
+             "false" if default is False else default)
+    return (text + " " if text else "") + f"(default: {shown})"
+
+
 def _value_hint(node) -> str:
     """Context-aware placeholder for free-text leaves."""
     name = (node.name or "").lower()
@@ -296,7 +308,7 @@ class Cli:
         for child_name, child in node.children.items():
             if getattr(child, "_synthetic", False):
                 continue  # listed by the dynamic candidates below
-            out.append((child_name, child.help or ""))
+            out.append((child_name, _with_default(child, child.help or "")))
 
         completer = getattr(node, "_completion", None)
         if callable(completer):
@@ -325,7 +337,7 @@ class Cli:
                 hint = _value_hint(node)
             else:
                 hint = VALUE_TYPES.get(node.value_type, "<value>")
-            out.append((hint, node.help or "value"))
+            out.append((hint, _with_default(node, node.help or "value")))
 
         if (self.ctx.mode == "op" and node.action is not None
                 and not node.children and not node.value_type

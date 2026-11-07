@@ -44,6 +44,8 @@ Possible completions:
 ```
 
 - 多候选 Tab / `?` 输出 `Possible completions:` + 两列对齐。
+- 有默认值的叶子会在说明后显示 `(default: X)`，例如
+  `set service mtr t1 ?` 的 count/interval/max-hops。
 - 唯一匹配直接补全；值占位符（`<x.x.x.x>`、`<1-65535>`）在下一行显示提示，不插入命令。
 - `show` 输出过长时分页：空格下一页、`b` 上一页、`q` 退出。
 

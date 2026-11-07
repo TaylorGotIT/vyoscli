@@ -241,6 +241,8 @@ def _attach_data(parent: Node, item: dict, action, path: tuple = (),
     if item.get("type") and not children:
         node.value_type = item["type"]
         node.action = action
+        if "default" in item:
+            node._default = item["default"]  # type: ignore[attr-defined]
         if item.get("repeatable"):
             node._repeatable = True  # type: ignore[attr-defined]
         parent.add(node)

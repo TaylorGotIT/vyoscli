@@ -1055,7 +1055,8 @@ TREE = json.loads(r'''[
 {
 "name": "mtu",
 "help": "MTU (default 1500)",
-"type": "int"
+"type": "int",
+"default": 1500
 },
 {
 "name": "speed",
@@ -2240,12 +2241,14 @@ TREE = json.loads(r'''[
 {
 "name": "holdtime",
 "help": "Hold time",
-"type": "int"
+"type": "int",
+"default": 90
 },
 {
 "name": "keepalive",
 "help": "Keepalive",
-"type": "int"
+"type": "int",
+"default": 30
 }
 ]
 },
@@ -2710,7 +2713,8 @@ TREE = json.loads(r'''[
 {
 "name": "enabled",
 "help": "Enable AdGuardHome",
-"type": "bool"
+"type": "bool",
+"default": false
 },
 {
 "name": "listen-address",
@@ -2720,7 +2724,8 @@ TREE = json.loads(r'''[
 {
 "name": "port",
 "help": "DNS listen port (default 53)",
-"type": "port"
+"type": "port",
+"default": 53
 },
 {
 "name": "upstream",
@@ -2730,7 +2735,8 @@ TREE = json.loads(r'''[
 {
 "name": "web-port",
 "help": "Web UI port (default 3000)",
-"type": "port"
+"type": "port",
+"default": 3000
 }
 ]
 },
@@ -2748,7 +2754,8 @@ TREE = json.loads(r'''[
 {
 "name": "data-bits",
 "help": "Data bits (7 or 8, default 8)",
-"type": "int"
+"type": "int",
+"default": 8
 },
 {
 "name": "description",
@@ -2773,7 +2780,8 @@ TREE = json.loads(r'''[
 {
 "name": "stop-bits",
 "help": "Stop bits (1 or 2, default 1)",
-"type": "int"
+"type": "int",
+"default": 1
 }
 ]
 },
@@ -2905,7 +2913,8 @@ TREE = json.loads(r'''[
 {
 "name": "port",
 "help": "DNS listen port (default 53)",
-"type": "port"
+"type": "port",
+"default": 53
 }
 ]
 },
@@ -3023,7 +3032,8 @@ TREE = json.loads(r'''[
 {
 "name": "port",
 "help": "Listen port (default 5333)",
-"type": "port"
+"type": "port",
+"default": 5333
 },
 {
 "name": "server",
@@ -3098,17 +3108,20 @@ TREE = json.loads(r'''[
 {
 "name": "password-auth",
 "help": "Allow password login (true/false)",
-"type": "bool"
+"type": "bool",
+"default": true
 },
 {
 "name": "port",
 "help": "Listen port (default 22)",
-"type": "port"
+"type": "port",
+"default": 22
 },
 {
 "name": "root-login",
 "help": "Allow root SSH login (true/false)",
-"type": "bool"
+"type": "bool",
+"default": true
 },
 {
 "name": "access-control",
@@ -3247,7 +3260,8 @@ TREE = json.loads(r'''[
 {
 "name": "port",
 "help": "Listen port (default 161)",
-"type": "port"
+"type": "port",
+"default": 161
 }
 ]
 },
@@ -3279,7 +3293,8 @@ TREE = json.loads(r'''[
 {
 "name": "default-lifetime",
 "help": "Default lifetime (seconds)",
-"type": "int"
+"type": "int",
+"default": 1800
 },
 {
 "name": "no-send-advert",
@@ -3359,17 +3374,20 @@ TREE = json.loads(r'''[
 {
 "name": "count",
 "help": "Probes per report",
-"type": "int"
+"type": "int",
+"default": 10
 },
 {
 "name": "interval",
 "help": "Seconds between reports",
-"type": "int"
+"type": "int",
+"default": 60
 },
 {
 "name": "max-hops",
 "help": "Maximum TTL",
-"type": "int"
+"type": "int",
+"default": 30
 },
 {
 "name": "disable",
@@ -4043,7 +4061,8 @@ TREE = json.loads(r'''[
 {
 "name": "port",
 "help": "UDP port (default 1701)",
-"type": "port"
+"type": "port",
+"default": 1701
 },
 {
 "name": "local-ip",
