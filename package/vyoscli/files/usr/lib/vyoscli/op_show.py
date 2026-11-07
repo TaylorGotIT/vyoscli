@@ -591,11 +591,48 @@ def _op_show_dhcp_server_static(ctx: Any, value: Any) -> str:
     return "\n".join(lines)
 
 
-def _op_show_login_user(ctx: Any, value: Any) -> str:
+def _proc_status(pid: str) -> dict:
+    out = {}
+    try:
+        with open(f"/proc/{pid}/status", encoding="utf-8") as f:
+            for line in f:
+                key, _, value = line.partition(":")
+                if key in ("Name", "Uid", "PPid"):
+                    out[key] = value.strip()
+    except OSError:
+        pass
+    return out
+
+
+def _proc_tty(pid: str) -> str:
+    import os
+    try:
+        target = os.readlink(f"/proc/{pid}/fd/0")
+    except OSError:
+        return ""
+    if target.startswith("/dev/"):
+        return target[5:]
+    return ""
+
+
+def _proc_start(pid: str) -> str:
+    import time
+    try:
+        with open(f"/proc/{pid}/stat", encoding="utf-8") as f:
+            fields = f.read().split()
+        with open("/proc/stat", encoding="utf-8") as f:
+            btime = int(f.read().split("btime ")[1].split()[0])
+        return time.strftime("%Y-%m-%d %H:%M:%S",
+                             time.localtime(btime + int(fields[21]) / 100.0))
+    except (OSError, ValueError, IndexError):
+        return "-"
+
+
+def _ssh_peers() -> dict:
+    """pid -> peer IP for established :22 connections."""
     import re
     import subprocess
-    rows = []
-    seen = set()
+    peers = {}
     for args in (["ss", "-tnp"], ["netstat", "-tnp"]):
         try:
             out = subprocess.run(args, capture_output=True, text=True,
@@ -604,53 +641,87 @@ def _op_show_login_user(ctx: Any, value: Any) -> str:
             continue
         for line in out.splitlines():
             parts = line.split()
-            if len(parts) < 5:
+            if len(parts) < 5 or not parts[3].endswith(":22"):
                 continue
-            local, peer = parts[3], parts[4]
-            if not local.endswith(":22"):
-                continue
-            ip = peer.rsplit(":", 1)[0]
-            if ip in ("0.0.0.0", "::", "[::]"):
-                continue
+            ip = parts[4].rsplit(":", 1)[0]
             m = re.search(r"pid=(\d+)", line) or re.search(r"(\d+)/", line)
-            pid = m.group(1) if m else ""
-            key = (ip, pid)
-            if key in seen:
-                continue
-            seen.add(key)
-            user, started = "root", "-"
-            if pid:
-                try:
-                    user = (subprocess.run(["ps", "-o", "user=", "-p", pid],
-                                           capture_output=True, text=True,
-                                           timeout=5).stdout.strip() or "root")
-                    started = (subprocess.run(
-                        ["ps", "-o", "lstart=", "-p", pid],
-                        capture_output=True, text=True,
-                        timeout=5).stdout.strip() or "-")
-                except Exception:
-                    pass
-            if started == "-" and pid:
-                try:
-                    with open(f"/proc/{pid}/stat", encoding="utf-8") as f:
-                        fields = f.read().split()
-                    with open("/proc/stat", encoding="utf-8") as f:
-                        btime = int(f.read().split("btime ")[1].split()[0])
-                    import time
-                    started = time.strftime(
-                        "%Y-%m-%d %H:%M:%S",
-                        time.localtime(btime + int(fields[21]) / 100.0))
-                except Exception:
-                    pass
-            rows.append((user, ip, "ssh", started))
-        if rows:
+            if m and ip not in ("0.0.0.0", "::", "[::]"):
+                peers[m.group(1)] = ip
+        if peers:
             break
+    return peers
+
+
+def _op_show_login_user(ctx: Any, value: Any) -> str:
+    import os
+    import subprocess
+    shells = {"ash", "sh", "bash", "zsh", "ksh", "mksh", "login", "su"}
+    peers = _ssh_peers()
+    users = {}
+    rows = []
+    seen = set()
+    try:
+        pids = [d for d in os.listdir("/proc") if d.isdigit()]
+    except OSError:
+        pids = []
+    for pid in pids:
+        name = _proc_status(pid).get("Name", "")
+        if name not in shells:
+            continue
+        tty = _proc_tty(pid)
+        if not tty or tty.startswith("null"):
+            continue
+        ppid = _proc_status(pid).get("PPid", "")
+        uid = _proc_status(pid).get("Uid", "").split()[0] if _proc_status(pid).get("Uid") else ""
+        user = users.get(uid)
+        if user is None:
+            try:
+                user = (subprocess.run(["ps", "-o", "user=", "-p", pid],
+                                       capture_output=True, text=True,
+                                       timeout=5).stdout.strip() or "root")
+            except Exception:
+                user = "root"
+            if uid:
+                users[uid] = user
+        ip = "-"
+        walk = ppid
+        for _ in range(8):
+            if not walk or walk == "0":
+                break
+            if walk in peers:
+                ip = peers[walk]
+                break
+            walk = _proc_status(walk).get("PPid", "")
+        key = (user, tty, ip)
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append((user, ip, tty, _proc_start(pid)))
+
+    # Non-interactive SSH sessions have no login shell on a pty; add them
+    # from the connection table so `ssh host cmd` still shows up.
+    for pid, ip in peers.items():
+        if any(row[1] == ip for row in rows):
+            continue
+        try:
+            user = (subprocess.run(["ps", "-o", "user=", "-p", pid],
+                                   capture_output=True, text=True,
+                                   timeout=5).stdout.strip() or "root")
+        except Exception:
+            user = "root"
+        key = (user, "ssh", ip)
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append((user, ip, "ssh", _proc_start(pid)))
+
     if not rows:
         return "No users logged in."
+    rows.sort(key=lambda r: (r[0], r[2]))
     lines = ["Username".ljust(12) + "IP Address".ljust(18)
-             + "TTY".ljust(8) + "Login Time"]
+             + "TTY".ljust(10) + "Login Time"]
     for user, ip, tty, started in rows:
-        lines.append(user.ljust(12) + ip.ljust(18) + tty.ljust(8) + started)
+        lines.append(user.ljust(12) + ip.ljust(18) + tty.ljust(10) + started)
     return "\n".join(lines)
 
 
