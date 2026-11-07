@@ -40,6 +40,23 @@ ADDR = """\
 """
 
 
+class ShowArpTest(unittest.TestCase):
+    def test_formats_ip_neigh_as_vyos_table(self):
+        def fake_run(args, **kwargs):
+            return types.SimpleNamespace(stdout=(
+                "192.168.75.241 dev eth1 lladdr 94:d2:bc:5d:e6:0c REACHABLE\n"
+                "192.168.75.244 dev eth1 lladdr 2c:f0:5d:3c:0a:41 STALE\n"
+                "fe80::1 dev eth1 lladdr aa:bb:cc:dd:ee:ff router REACHABLE\n"))
+        with mock.patch("subprocess.run", side_effect=fake_run):
+            text = op_show._op_show_arp(None, "")
+        self.assertIn("Address", text)
+        self.assertIn("HWaddress", text)
+        self.assertIn("192.168.75.241", text)
+        self.assertIn("94:d2:bc:5d:e6:0c", text)
+        self.assertIn("eth1", text)
+        self.assertNotIn("fe80", text)
+
+
 class PagerTest(unittest.TestCase):
     def test_non_tty_prints_everything(self):
         import io

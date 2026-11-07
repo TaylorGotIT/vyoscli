@@ -350,6 +350,36 @@ def _vtysh_show(command: str) -> str:
     return out or "BGP is not running (frr/bgpd not started)"
 
 
+def _op_show_arp(ctx: Any, value: Any) -> str:
+    import subprocess
+    try:
+        out = subprocess.run(["ip", "neigh", "show"], capture_output=True,
+                             text=True, timeout=5).stdout
+    except Exception:
+        out = ""
+    rows = []
+    for line in out.splitlines():
+        parts = line.split()
+        if not parts or ":" in parts[0]:
+            continue  # IPv4 ARP only
+        addr = parts[0]
+        mac = ""
+        iface = ""
+        state = parts[-1] if parts else ""
+        if "lladdr" in parts:
+            mac = parts[parts.index("lladdr") + 1]
+        if "dev" in parts:
+            iface = parts[parts.index("dev") + 1]
+        flags = "M" if state == "PERMANENT" else ("C" if mac else "")
+        rows.append((addr, "ether", mac or "--", flags, "", iface))
+    lines = ["Address".ljust(25) + "HWtype".ljust(8) + "HWaddress".ljust(20)
+             + "Flags Mask".ljust(22) + "Iface"]
+    for addr, hwtype, mac, flags, mask, iface in rows:
+        lines.append(addr.ljust(25) + hwtype.ljust(8) + mac.ljust(20)
+                     + flags.ljust(6) + mask.ljust(16) + iface)
+    return "\n".join(lines)
+
+
 def _op_show_bgp_summary(ctx: Any, value: Any) -> str:
     return _vtysh_show("show bgp ipv4 unicast summary")
 
