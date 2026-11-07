@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from harness import new_cli  # noqa: E402
+from harness import cfg, new_cli  # noqa: E402
 
 
 class HelpTest(unittest.TestCase):
@@ -25,6 +25,19 @@ class HelpTest(unittest.TestCase):
     def test_dynamic_placeholder_has_context(self):
         text = self.cli._help_text("set interfaces bridge ")
         self.assertIn("<br-name>", text)
+
+    def test_table_hint_and_range(self):
+        text = self.cli._help_text(
+            "set policy local-route rule 10 set table ")
+        self.assertIn("<1-4294967295>", text)
+        bad = [o for o in cfg(self.cli,
+                              "set policy local-route rule 10 set table 0",
+                              "set policy local-route rule 10 set table 4294967296")
+               if o.startswith("set:")]
+        self.assertEqual(len(bad), 2)
+        self.assertIn("out of range", bad[0])
+        self.assertEqual(cfg(self.cli,
+                             "set policy local-route rule 10 set table 110")[0], "")
 
     def test_run_show_completion(self):
         self.cli.ctx.mode = "cfg"

@@ -30,8 +30,8 @@ import json
 TREE = json.loads(r\'\'\''''
 
 ALLOWED_TYPES = {"str", "string", "host", "ipv4", "ipv4net", "ipv4_cidr",
-                 "ipv6", "ipv6net", "port", "integer", "int", "boolean",
-                 "bool"}
+                 "ipv6", "ipv6net", "port", "integer", "int", "table",
+                 "boolean", "bool"}
 
 
 def validate(items, path=()):

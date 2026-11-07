@@ -1891,7 +1891,7 @@ TREE = json.loads(r'''[
 {
 "name": "table",
 "help": "Routing table ID",
-"type": "int"
+"type": "table"
 }
 ]
 }
@@ -2128,7 +2128,7 @@ TREE = json.loads(r'''[
 "name": "table",
 "help": "Policy routing table",
 "dyn": true,
-"tpl_help": "Routing table ID",
+"tpl_help": "Routing table ID (1-4294967295)",
 "children": [
 {
 "name": "route",
@@ -3674,7 +3674,7 @@ TREE = json.loads(r'''[
 {
 "name": "table",
 "help": "Routing table ID",
-"type": "int"
+"type": "table"
 }
 ]
 }

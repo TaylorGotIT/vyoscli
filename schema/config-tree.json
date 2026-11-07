@@ -1883,7 +1883,7 @@
          {
           "name": "table",
           "help": "Routing table ID",
-          "type": "int"
+          "type": "table"
          }
         ]
        }
@@ -2120,7 +2120,7 @@
       "name": "table",
       "help": "Policy routing table",
       "dyn": true,
-      "tpl_help": "Routing table ID",
+      "tpl_help": "Routing table ID (1-4294967295)",
       "children": [
        {
         "name": "route",
@@ -3666,7 +3666,7 @@
      {
       "name": "table",
       "help": "Routing table ID",
-      "type": "int"
+      "type": "table"
      }
     ]
    }

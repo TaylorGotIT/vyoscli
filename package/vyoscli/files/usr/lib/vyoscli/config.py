@@ -1062,6 +1062,14 @@ class ConfigStore:
         wanted = []
         notes = []
         for table, body in new_t.items():
+            try:
+                table_id = int(table)
+            except (TypeError, ValueError):
+                table_id = 0
+            if not 1 <= table_id <= 4294967295:
+                notes.append(f"static-table {table}: invalid table ID "
+                             f"(1-4294967295)")
+                continue
             routes = (body or {}).get("route") or {}
             for prefix, route in routes.items():
                 if not isinstance(route, dict):

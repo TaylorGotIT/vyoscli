@@ -346,7 +346,7 @@
 | `policy community-list <list-num> rule <id> action` | permit/deny | `policy community-list <list-num> rule <id> action permit` |
 | `policy community-list <list-num> rule <id> description` | Description | `policy community-list <list-num> rule <id> description text` |
 | `policy community-list <list-num> rule <id> regex` | Community regex | `policy community-list <list-num> rule <id> regex text` |
-| `policy local-route rule <id> set table` | Routing table ID | `policy local-route rule <id> set table 100` |
+| `policy local-route rule <id> set table` | Routing table ID | `policy local-route rule <id> set table <value>` |
 | `policy local-route rule <id> source` | Source IPv4 address | `policy local-route rule <id> source 192.0.2.1` |
 | `policy prefix-list <name> rule <id> action` | permit \| deny | `policy prefix-list <name> rule <id> action text` |
 | `policy prefix-list <name> rule <id> ge` | Minimum prefix length | `policy prefix-list <name> rule <id> ge 100` |
@@ -635,4 +635,4 @@
 
 | 命令 | 说明 | 示例 |
 |---|---|---|
-| `vrf name <vrf> table` | Routing table ID | `vrf name <vrf> table 100` |
+| `vrf name <vrf> table` | Routing table ID | `vrf name <vrf> table <value>` |
