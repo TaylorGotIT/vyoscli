@@ -46,6 +46,9 @@ from .op_show import (
     _op_show_system_login,
     _op_show_ip_route,
     _op_show_bgp,
+    _bgp_neighbor_ips,
+    _op_show_bgp_neighbors,
+    _op_show_bgp_neighbor_received_routes,
     _op_show_arp,
     _op_show_bgp_summary,
     _op_show_ip_route_static,
@@ -276,6 +279,16 @@ def build_tree(store: Any) -> CommandTree:
     show_bgp.add(Node(name="table", help="Show BGP table",
                       action=_op_show_bgp))
     show_bgp.action = _op_show_bgp
+    neighbors = Node(name="neighbors", help="BGP neighbors")
+    tpl = Node(name="", help="Show detailed BGP IPv4 unicast neighbor information",
+               value_type="string", action=_op_show_bgp_neighbors)
+    tpl.dynamic = _bgp_neighbor_ips
+    tpl.add(Node(name="received-routes",
+                 help="Show routes received from this neighbor",
+                 action=_op_show_bgp_neighbor_received_routes))
+    neighbors.add(tpl)
+    neighbors.action = _op_show_bgp_neighbors
+    show_bgp.add(neighbors)
     show_ip.add(show_bgp)
     tree.op_root.children["show"].add(show_ip)
     tree.op("show arp", help="Show ARP table", action=_op_show_arp)

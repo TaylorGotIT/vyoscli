@@ -293,6 +293,18 @@ class Cli:
                 pos = max(pos - height + 1, 0)
 
     def _run_op(self, tokens: List[str]) -> str:
+        # show ip bgp neighbors <ip> received[-routes] needs the parent IP,
+        # which the tree action signature does not carry; dispatch it here.
+        if (len(tokens) == 6 and tokens[0] == "show" and tokens[1] == "ip"
+                and tokens[2] == "bgp" and tokens[3] == "neighbors"
+                and tokens[5] in ("received", "received-routes")):
+            from .op_show import _op_show_bgp_neighbor_received_routes
+            return _op_show_bgp_neighbor_received_routes(self.ctx, tokens[4])
+        if (len(tokens) == 5 and tokens[0] == "show" and tokens[1] == "ip"
+                and tokens[2] == "bgp" and tokens[3] == "neighbors"):
+            from .op_show import _op_show_bgp_neighbors
+            return _op_show_bgp_neighbors(self.ctx, tokens[4])
+
         node, remaining, _matched, _canon = self.tree.op_root.walk(tokens)
         # fully matched node with action?
         if node.action is not None and not remaining:

@@ -420,6 +420,30 @@ def _op_show_bgp_summary(ctx: Any, value: Any) -> str:
     return _vtysh_show("show bgp ipv4 unicast summary")
 
 
+def _bgp_neighbor_ips() -> list:
+    import re
+    out = _vtysh_show("show bgp ipv4 unicast summary")
+    ips = []
+    for line in out.splitlines():
+        m = re.match(r"^(\d{1,3}(?:\.\d{1,3}){3})\s", line)
+        if m:
+            ips.append(m.group(1))
+    return ips
+
+
+def _op_show_bgp_neighbors(ctx: Any, value: Any) -> str:
+    if not value:
+        return _vtysh_show("show bgp ipv4 unicast summary")
+    return _vtysh_show(f"show bgp neighbor {value}")
+
+
+def _op_show_bgp_neighbor_received_routes(ctx: Any, value: Any) -> str:
+    if not value:
+        return "Usage: show ip bgp neighbors <ip> received-routes"
+    return _vtysh_show(
+        f"show bgp ipv4 unicast neighbors {value} received-routes")
+
+
 def _op_show_bgp(ctx: Any, value: Any) -> str:
     return _vtysh_show("show bgp ipv4 unicast")
 
