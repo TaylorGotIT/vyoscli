@@ -1650,14 +1650,17 @@ class ConfigStore:
             lines.append(f"server ip {server}")
         with open(conf, "w", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
+        import time
         try:
-            proc = subprocess.run(["dhcp-fwd", "-c", conf],
-                                  capture_output=True, text=True, timeout=10)
-        except (OSError, subprocess.SubprocessError) as e:
+            subprocess.Popen(["dhcp-fwd", "-n", "-c", conf],
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+            time.sleep(0.5)
+        except OSError as e:
             return [f"dhcp-relay: start failed ({e})"]
-        if proc.returncode != 0:
-            return [f"dhcp-relay: start failed: "
-                    f"{(proc.stderr or '').strip()[:160]}"]
+        if not os.path.exists(pidfile):
+            return ["dhcp-relay: process exited (check /var/log/dhcp-fwd.log)"]
         return [f"dhcp-relay: {len(servers)} server(s), "
                 f"{len(interfaces)} client iface(s)"]
 

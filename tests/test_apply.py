@@ -544,8 +544,8 @@ class CommitBackendTest(unittest.TestCase):
             "set service dhcp-relay interface br-lan",
             "set service dhcp-relay upstream-interface br-wan")
         self.commit()
-        calls = self.fake.calls
-        self.assertTrue(any(cmd[:2] == ["dhcp-fwd", "-c"] for cmd in calls))
+        conf = os.path.join(os.environ["VYOSCLI_ETC_ROOT"], "dhcp-fwd.conf")
+        self.assertIn("server ip 192.0.2.10", open(conf, encoding="utf-8").read())
         cfg(self.cli, "delete service dhcp-relay")
         self.commit()
 

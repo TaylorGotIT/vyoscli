@@ -190,6 +190,7 @@ rr-ospfd/ripd/bfdd 依赖；真机 OSPF 在 br-lan 建立、BGP 恢复 Establish
 | 136 | Ethernet VIF 无驱动 | 补 `vif <vid>`：创建 `eth0.<vid>` VLAN link、UCI `network.<if>_<vid>`（device/proto/ipaddr），删除时清理链路和 UCI；真机 eth0.99 10.99.99.1/24 生效并清理 | `config.py:_apply_interfaces` |
 | 137 | DHCP relay 仍不驻留 | 去掉 dhcp-fwd 的 chroot/user 后不再报 ioctl，但进程启动后退出，日志 `BOOTREQUEST request from interface without clients`；需继续研究 dhcp-fwd 配置格式 | `config.py:_apply_dhcp_relay` |
 | 138 | 逐项测试：bridge/NAT dest/SSH ACL/container | br9+dum9 桥创建/删除正常；NAT destination 规则 apply（1 rule）；SSH ACL allow-list 表生效、管理会话保留并清理；container 镜像列表正常，`container c1 image alpine` 因 registry 拉取失败未创建 | 多文件 |
+| 139 | DHCP relay/container 收尾 | dhcp-fwd 改为 `-n` 前台由 Popen 托管并去掉 chroot/user；配置生成正确但真机进程仍退出，待继续查。container 默认 netavark 缺 iptables/ip6tables，`network host` 时 busybox 可启动并清理。VIF 驱动已生效 | `config.py` / `tests/test_apply.py` |
 tysh -c "show ip route bgp"，回退 ip route show proto bgp；真机输出 Codes 头 + B>* 条目（6204 条） | op_show.py:_op_show_ip_route_bgp |
 tysh，输出 VyOS/FRR 风格（Codes 头 + S>* 等）；FRR 未运行或表为空时回退到 ip route，静态表为空时保留 Codes 头。真机 static 显示 Codes 头，full 表为 FRR 格式 | op_show.py:_vtysh_route |
 | 78 | WAN 多线映射错误且 mwan3 不可用 | 安装 mwan3 后修正映射：设备名（eth1）先解析为 OpenWrt 网络接口名（wan），再写 mwan3.interface/member/policy/rule；真机验证 WAN/SSH 未中断，但 `mwan3 status` 中 wan 虽 online，所有 policy（含默认 balanced）均为 `unreachable`，WAN LB 不可用。已删除配置、停止 mwan3、清理 mwan3.* 漂移项；mwan3 包保留但未启用 | `config.py:_apply_wan_lb` |
