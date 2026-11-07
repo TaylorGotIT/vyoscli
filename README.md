@@ -10,6 +10,8 @@ Tab/`?` 补全、`show` 分页、配置快照与漂移检测。
 `container name/network` 等。纯 Python，不依赖 UCI 之外的框架；
 没有 UCI 对应项时才退化为 `ip`/`nft`/`tc`/FRR 等原生命令。
 
+**当前版本：0.2.0**（变更见 [CHANGELOG.md](CHANGELOG.md)）。
+
 - 完整命令参考：[docs/COMMANDS.md](docs/COMMANDS.md)（593 条，自动生成）
 - 操作/配置指南：[docs/GUIDE.md](docs/GUIDE.md)
 - DHCP 测试模板：[docs/DHCP-TEST.md](docs/DHCP-TEST.md)
