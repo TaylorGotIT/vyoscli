@@ -1003,13 +1003,16 @@ def _op_ping_udp(ctx: Any, value: str) -> str:
             elapsed = (time.perf_counter() - start) * 1000
             return (f"udp {host}:{port}: {label} reply {len(data)} byte(s), "
                     f"time={elapsed:.1f} ms")
-        except ConnectionRefusedError:
-            return f"udp {host}:{port}: port closed (ICMP unreachable)"
-        except socket.timeout:
+        except (socket.timeout, ConnectionRefusedError):
+            # Pure UDP has no handshake; a missing reply is inconclusive.
+            # Do not derive state from ICMP errors here.
             return (f"udp {host}:{port}: no reply to {label} probe "
                     f"(open|filtered, or service does not answer)")
         finally:
             sock.close()
+    except ConnectionRefusedError:
+        return (f"udp {host}:{port}: no reply to {label} probe "
+                f"(open|filtered, or service does not answer)")
     except OSError as e:  # noqa: BLE001
         return f"udp {host}:{port}: {e}"
 
