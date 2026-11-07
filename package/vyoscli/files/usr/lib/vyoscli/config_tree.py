@@ -84,7 +84,7 @@ TREE = json.loads(r'''[
 "name": "rule",
 "help": "Firewall rule (by order number)",
 "dyn": true,
-"tpl_help": "Per-rule",
+"tpl_help": "Rule number (1-999999)",
 "children": [
 {
 "name": "dest-port",
@@ -1525,7 +1525,7 @@ TREE = json.loads(r'''[
 "name": "rule",
 "help": "Source NAT rule",
 "dyn": true,
-"tpl_help": "Per-rule",
+"tpl_help": "Rule number (1-999999)",
 "children": [
 {
 "name": "out-interface",
@@ -1607,7 +1607,7 @@ TREE = json.loads(r'''[
 "name": "rule",
 "help": "Destination NAT rule",
 "dyn": true,
-"tpl_help": "Per-rule",
+"tpl_help": "Rule number (1-999999)",
 "children": [
 {
 "name": "inbound-interface",
@@ -1759,7 +1759,7 @@ TREE = json.loads(r'''[
 "name": "rule",
 "help": "Rule number",
 "dyn": true,
-"tpl_help": "Per-rule",
+"tpl_help": "Rule number (1-999999)",
 "children": [
 {
 "name": "action",
@@ -1817,7 +1817,7 @@ TREE = json.loads(r'''[
 "name": "rule",
 "help": "Rule number",
 "dyn": true,
-"tpl_help": "Per-rule",
+"tpl_help": "Rule number (1-999999)",
 "children": [
 {
 "name": "action",
@@ -1853,7 +1853,7 @@ TREE = json.loads(r'''[
 "name": "rule",
 "help": "Rule number",
 "dyn": true,
-"tpl_help": "Per-rule",
+"tpl_help": "Rule number (1-999999)",
 "children": [
 {
 "name": "action",
@@ -4082,7 +4082,7 @@ TREE = json.loads(r'''[
 "name": "rule",
 "help": "Source NAT rule",
 "dyn": true,
-"tpl_help": "Per-rule",
+"tpl_help": "Rule number (1-999999)",
 "children": [
 {
 "name": "out-interface",
@@ -4164,7 +4164,7 @@ TREE = json.loads(r'''[
 "name": "rule",
 "help": "Destination NAT rule",
 "dyn": true,
-"tpl_help": "Per-rule",
+"tpl_help": "Rule number (1-999999)",
 "children": [
 {
 "name": "inbound-interface",

@@ -76,7 +76,7 @@
     "name": "rule",
     "help": "Firewall rule (by order number)",
     "dyn": true,
-    "tpl_help": "Per-rule",
+    "tpl_help": "Rule number (1-999999)",
     "children": [
      {
       "name": "dest-port",
@@ -1517,7 +1517,7 @@
       "name": "rule",
       "help": "Source NAT rule",
       "dyn": true,
-      "tpl_help": "Per-rule",
+      "tpl_help": "Rule number (1-999999)",
       "children": [
        {
         "name": "out-interface",
@@ -1599,7 +1599,7 @@
       "name": "rule",
       "help": "Destination NAT rule",
       "dyn": true,
-      "tpl_help": "Per-rule",
+      "tpl_help": "Rule number (1-999999)",
       "children": [
        {
         "name": "inbound-interface",
@@ -1751,7 +1751,7 @@
       "name": "rule",
       "help": "Rule number",
       "dyn": true,
-      "tpl_help": "Per-rule",
+      "tpl_help": "Rule number (1-999999)",
       "children": [
        {
         "name": "action",
@@ -1809,7 +1809,7 @@
       "name": "rule",
       "help": "Rule number",
       "dyn": true,
-      "tpl_help": "Per-rule",
+      "tpl_help": "Rule number (1-999999)",
       "children": [
        {
         "name": "action",
@@ -1845,7 +1845,7 @@
       "name": "rule",
       "help": "Rule number",
       "dyn": true,
-      "tpl_help": "Per-rule",
+      "tpl_help": "Rule number (1-999999)",
       "children": [
        {
         "name": "action",
@@ -4074,7 +4074,7 @@
       "name": "rule",
       "help": "Source NAT rule",
       "dyn": true,
-      "tpl_help": "Per-rule",
+      "tpl_help": "Rule number (1-999999)",
       "children": [
        {
         "name": "out-interface",
@@ -4156,7 +4156,7 @@
       "name": "rule",
       "help": "Destination NAT rule",
       "dyn": true,
-      "tpl_help": "Per-rule",
+      "tpl_help": "Rule number (1-999999)",
       "children": [
        {
         "name": "inbound-interface",
