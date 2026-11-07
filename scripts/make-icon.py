@@ -40,7 +40,7 @@ def main() -> None:
            fill=(255, 255, 255, 255), anchor="mm")
 
     # VyOS-colored circle: the CLI layer
-    cx, cy, r = 512, 620, 300
+    cx, cy, r = 512, 620, 330
     shadow = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     ImageDraw.Draw(shadow).ellipse((cx - r, cy - r + 20, cx + r, cy + r + 20),
                                    fill=(0, 30, 55, 120))
@@ -70,13 +70,21 @@ def main() -> None:
                          x0 + gw + 28 + cursor_w, baseline),
                         radius=5, fill=CYAN + (255,))
 
-    # vyoscli wordmark
-    wf = ImageFont.truetype(FONT_BOLD, 108)
-    vw = d.textlength("vyos", font=wf)
-    cw = d.textlength("cli", font=wf)
-    sx = cx - (vw + cw) / 2
-    d.text((sx, 728), "vyos", font=wf, fill=(255, 176, 32, 255))
-    d.text((sx + vw, 728), "cli", font=wf, fill=(255, 209, 102, 255))
+    # vyoscli wordmark, large and sitting along the lower arc (upright)
+    wf = ImageFont.truetype(FONT_BOLD, 126)
+    colors = [(255, 176, 32, 255)] * 4 + [(255, 209, 102, 255)] * 3
+    text = "vyoscli"
+    widths = [d.textlength(ch, font=wf) + 2 for ch in text]
+    total = sum(widths)
+    sx = cx - total / 2
+    base_y, sag = 850, 14
+    cur = sx
+    for ch, width, color in zip(text, widths, colors):
+        x = cur + width / 2
+        norm = (x - cx) / (total / 2)
+        y = base_y - sag * norm * norm
+        d.text((x, y), ch, font=wf, fill=color, anchor="ms")
+        cur += width
 
     # outer frame
     d.rounded_rectangle((24, 24, S - 24, S - 24), radius=220,
