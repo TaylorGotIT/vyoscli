@@ -28,6 +28,9 @@ def new_cli(store_dir: str | None = None) -> Cli:
     """Fresh CLI bound to a throw-away config directory, in config mode."""
     directory = store_dir or new_store_dir()
     os.environ["VYOSCLI_ETC"] = directory
+    os.environ["VYOSCLI_VAR_LIB"] = os.path.join(directory, "var-lib")
+    os.environ["VYOSCLI_ETC_ROOT"] = os.path.join(directory, "etc")
+    os.environ["VYOSCLI_SKIP_PORT_CHECK"] = "1"
     cli = Cli(directory)
     cli.ctx.mode = "cfg"
     return cli

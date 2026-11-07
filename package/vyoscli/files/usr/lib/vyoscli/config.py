@@ -726,6 +726,8 @@ class ConfigStore:
 
     # ---------- apply: old running -> new running ----------
     def _address_port_in_use(self, ip: str, port: int) -> bool:
+        if os.environ.get("VYOSCLI_SKIP_PORT_CHECK") == "1":
+            return False
         """Return True if binding (ip, port) conflicts with an existing listener."""
         try:
             r = subprocess.run(["ss", "-tulnp"], capture_output=True, text=True, timeout=5)
@@ -1103,7 +1105,8 @@ class ConfigStore:
         new_m = mss_map(new)
         if old_m == new_m:
             return []
-        native = os.path.isdir("/etc/nftables.d")
+        native = (os.path.isdir("/etc/nftables.d")
+                  and os.access("/etc/nftables.d", os.W_OK))
         include_dir = "/etc/nftables.d" if native else self.base_dir
         path = os.path.join(include_dir, "20-vyos-mss.nft")
         # Drop the legacy standalone table if a previous version made one.
@@ -1425,7 +1428,8 @@ class ConfigStore:
             return []
         backup = os.path.join(self.base_dir, "backup", "l2tp")
         os.makedirs(backup, exist_ok=True)
-        etc = "/etc" if os.path.isdir("/etc") else self.base_dir
+        etc = (os.environ.get("VYOSCLI_ETC_ROOT")
+               or ("/etc" if os.access("/etc", os.W_OK) else self.base_dir))
         files = {
             "conf": os.path.join(etc, "xl2tpd", "xl2tpd.conf"),
             "options": os.path.join(etc, "ppp", "options.xl2tpd"),
@@ -1538,11 +1542,13 @@ class ConfigStore:
         upstreams = _as_list(new_r.get("upstream-interface"))
         if not servers or not interfaces or not upstreams:
             return ["dhcp-relay: need server, interface and upstream-interface"]
-        os.makedirs("/var/lib/dhcp-fwd", exist_ok=True)
+        var_lib = os.environ.get("VYOSCLI_VAR_LIB", "/var/lib")
+        chroot_dir = os.path.join(var_lib, "dhcp-fwd")
+        os.makedirs(chroot_dir, exist_ok=True)
         lines = [
             "user dhcp-fwd",
             "group dhcp-fwd",
-            "chroot /var/lib/dhcp-fwd",
+            f"chroot {chroot_dir}",
             "logfile /var/log/dhcp-fwd.log",
             "pidfile " + pidfile,
             "",
