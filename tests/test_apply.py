@@ -487,7 +487,7 @@ class CommitBackendTest(unittest.TestCase):
         cfg(self.cli, "delete interfaces ethernet eth0 tcp-mss",
             "delete interfaces ethernet eth0 mtu")
         self.commit()
-        self.assertIn(["ip", "link", "set", "eth0", "mtu", "1500"],
+        self.assertNotIn(["ip", "link", "set", "eth0", "mtu", "1500"],
                       self.fake.calls)
         self.assertFalse(os.path.exists(path))
 

@@ -2062,9 +2062,9 @@ class ConfigStore:
                         self._uci("commit", "network")
                     except subprocess.CalledProcessError:
                         pass
-                subprocess.run(["ip", "link", "set", str(ifname), "mtu",
-                                "1500"], capture_output=True, text=True,
-                               timeout=10)
+                # Do not touch the live link here: resetting MTU on the
+                # management/WAN port can drop DHCP and lock us out.
+                # netifd applies the default at the next reload/reboot.
             addrs = _as_list(cfg.get("address"))
             # No address means "stop managing this port": restore a taken-over
             # section, or drop our own vyos_* interface.
