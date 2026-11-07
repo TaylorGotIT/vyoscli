@@ -328,13 +328,47 @@ def _op_show_system_login(ctx: Any, value: Any) -> str:
         return "n/a"
 
 
-def _op_show_ip_route(ctx: Any, value: Any) -> str:
+_ROUTE_CODES = """Codes: K - kernel route, C - connected, L - local, S - static,
+       R - RIP, O - OSPF, I - IS-IS, B - BGP, E - EIGRP, N - NHRP,
+       T - Table, v - VNC, V - VNC-Direct, A - Babel, F - PBR,
+       f - OpenFabric, t - Table-Direct,
+       > - selected route, * - FIB route, q - queued, r - rejected, b - backup
+       t - trapped, o - offload failure"""
+
+
+def _ip_route_fallback(kind: str) -> str:
     import subprocess
+    args = ["ip", "route", "show"]
+    if kind == "static":
+        args += ["proto", "static"]
+    elif kind == "connected":
+        args += ["proto", "kernel"]
     try:
-        r = subprocess.run(["ip", "route"], capture_output=True, text=True)
-        return r.stdout.strip()
+        return subprocess.run(args, capture_output=True, text=True,
+                              timeout=10).stdout.strip() or "n/a"
     except Exception:
         return "n/a"
+
+
+def _vtysh_route(command: str, fallback) -> str:
+    """Prefer FRR (VyOS output); fall back to ip route when FRR is absent."""
+    import shutil
+    import subprocess
+    if shutil.which("vtysh"):
+        try:
+            r = subprocess.run(["vtysh", "-c", command], capture_output=True,
+                               text=True, timeout=20)
+            out = (r.stdout or "").strip()
+            if out and "failed to connect" not in out and "Exiting:" not in out:
+                return out
+        except Exception:
+            pass
+    return fallback()
+
+
+def _op_show_ip_route(ctx: Any, value: Any) -> str:
+    return _vtysh_route("show ip route",
+                        lambda: _ip_route_fallback("all"))
 
 
 def _vtysh_show(command: str) -> str:
@@ -389,28 +423,27 @@ def _op_show_bgp(ctx: Any, value: Any) -> str:
 
 
 def _op_show_ip_route_static(ctx: Any, value: Any) -> str:
+    import shutil
     import subprocess
-    try:
-        r = subprocess.run(["ip", "route", "show", "proto", "static"], capture_output=True, text=True)
-        return r.stdout.strip()
-    except Exception:
-        return "n/a"
+    if shutil.which("vtysh"):
+        try:
+            r = subprocess.run(["vtysh", "-c", "show ip route static"],
+                               capture_output=True, text=True, timeout=20)
+            out = (r.stdout or "").strip()
+            if out and "failed to connect" not in out and "Exiting:" not in out:
+                return out
+            if not out:
+                return _ROUTE_CODES
+        except Exception:
+            pass
+    return _ip_route_fallback("static")
 
 
 def _op_show_ip_route_connected(ctx: Any, value: Any) -> str:
-    import subprocess
-    try:
-        r = subprocess.run(["ip", "route", "show", "proto", "kernel"], capture_output=True, text=True)
-        return r.stdout.strip()
-    except Exception:
-        return "n/a"
+    return _vtysh_route("show ip route connected",
+                        lambda: _ip_route_fallback("connected"))
 
 
 def _op_show_ip_route_summary(ctx: Any, value: Any) -> str:
-    import subprocess
-    try:
-        r = subprocess.run(["ip", "route"], capture_output=True, text=True)
-        lines = r.stdout.strip().splitlines()
-        return f"Total routes: {len(lines)}"
-    except Exception:
-        return "n/a"
+    return _vtysh_route("show ip route summary",
+                        lambda: _ip_route_fallback("all"))

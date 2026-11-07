@@ -40,6 +40,25 @@ ADDR = """\
 """
 
 
+class RouteShowTest(unittest.TestCase):
+    def test_prefers_vtysh(self):
+        with mock.patch("shutil.which", return_value="/usr/bin/vtysh"), \
+             mock.patch("subprocess.run",
+                        return_value=types.SimpleNamespace(
+                            stdout="S>* 0.0.0.0/0", stderr="", returncode=0)):
+            text = op_show._op_show_ip_route_static(None, "")
+        self.assertIn("S>* 0.0.0.0/0", text)
+
+    def test_falls_back_to_ip_route(self):
+        with mock.patch("shutil.which", return_value=None), \
+             mock.patch("subprocess.run",
+                        return_value=types.SimpleNamespace(
+                            stdout="default via 192.168.75.1", stderr="",
+                            returncode=0)):
+            text = op_show._op_show_ip_route(None, "")
+        self.assertIn("default via", text)
+
+
 class ShowArpTest(unittest.TestCase):
     def test_formats_ip_neigh_as_vyos_table(self):
         def fake_run(args, **kwargs):
