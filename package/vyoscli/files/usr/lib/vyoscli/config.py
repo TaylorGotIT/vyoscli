@@ -2806,6 +2806,9 @@ class ConfigStore:
                 pass
             return ["firewall: VyOS-style rules removed"]
         text = render_firewall_nft(new_fw)
+        # Replace the table so deleted groups/rules do not linger as sets.
+        subprocess.run(["nft", "delete", "table", "inet", "vyos_fw"],
+                       capture_output=True, text=True, timeout=10)
         os.makedirs(self.base_dir, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write(text)
@@ -3439,6 +3442,8 @@ class ConfigStore:
                             self._uci("delete", f"network.{section}")
                         except subprocess.CalledProcessError:
                             pass
+                    subprocess.run(["ip", "link", "del", str(gone)],
+                                   capture_output=True, text=True, timeout=10)
                 for dm, cfg in new_dm.items():
                     if not isinstance(cfg, dict):
                         continue
@@ -4134,6 +4139,34 @@ class ConfigStore:
         else:
             notes.append(f"user {name}: cannot lock/unlock (no usermod/passwd)")
 
+    def _delete_user(self, name: str, notes: List[str]) -> None:
+        if not name or name == "root":
+            return
+        try:
+            subprocess.run(["userdel", "-r", str(name)], capture_output=True,
+                           text=True, timeout=10)
+            notes.append(f"user {name}: removed")
+            return
+        except FileNotFoundError:
+            pass
+        except subprocess.SubprocessError:
+            pass
+        # OpenWrt often has no userdel: edit the account files directly.
+        import shutil
+        for path in ("/etc/passwd", "/etc/shadow", "/etc/group"):
+            try:
+                with open(path, encoding="utf-8") as f:
+                    lines = f.read().splitlines()
+            except OSError:
+                continue
+            keep = [line for line in lines
+                    if not line.startswith(str(name) + ":")]
+            if len(keep) != len(lines):
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write("\n".join(keep) + "\n")
+        shutil.rmtree(f"/home/{name}", ignore_errors=True)
+        notes.append(f"user {name}: removed")
+
     def _apply_login(self, old, new):
         old_login = (old.get("system") or {}).get("login") or {}
         new_login = (new.get("system") or {}).get("login") or {}
@@ -4169,6 +4202,10 @@ class ConfigStore:
                     os.chmod(path, 0o600)
                     subprocess.run(["chown", "-R", name, ssh_dir],
                                    capture_output=True, timeout=5)
+            removed = (set((old_login.get("user") or {}))
+                       - set((new_login.get("user") or {})))
+            for name in removed:
+                self._delete_user(name, notes)
             notes.append(f"login: {len(new_login.get('user') or {})} user(s)")
         except Exception as e:  # noqa: BLE001
             notes.append(f"login apply failed: {e}")

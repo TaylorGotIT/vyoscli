@@ -1254,6 +1254,83 @@ def _op_show_service_mtr(ctx: Any, value: str) -> str:
     return "\n".join(lines)
 
 
+def _parse_ts(text: str):
+    from datetime import datetime
+    if not text or text == "-":
+        return None
+    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            pass
+    return None
+
+
+def _down_text(since: str) -> tuple:
+    from datetime import datetime
+    ts = _parse_ts(since)
+    if ts is None:
+        return "-", "-"
+    now = datetime.now(ts.tzinfo) if ts.tzinfo else datetime.now()
+    secs = max(0, int((now - ts).total_seconds()))
+    if secs < 60:
+        dur = f"{secs}s"
+    elif secs < 3600:
+        dur = f"{secs // 60}m{secs % 60:02d}s"
+    else:
+        dur = f"{secs // 3600}h{(secs % 3600) // 60:02d}m"
+    return since, dur
+
+
+def _mtr_reports(path: str) -> list:
+    import re
+    blocks = []
+    hops = []
+    started = "-"
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("Start:"):
+                    if hops:
+                        blocks.append((started, hops))
+                    hops = []
+                    started = line.split(":", 1)[1].strip()
+                    continue
+                m = re.match(r"^\s*(\d+)\.\|--\s+(\S+)\s+"
+                             r"([\d.]+)%?\s+(\d+)\s+([\d.]+)", line)
+                if m:
+                    hops.append({"ttl": int(m.group(1)),
+                                 "host": m.group(2),
+                                 "loss": float(m.group(3)),
+                                 "snt": int(m.group(4)),
+                                 "avg": m.group(5)})
+    except OSError:
+        pass
+    if hops:
+        blocks.append((started, hops))
+    return blocks
+
+
+def _mtr_down(blocks: list, target: str) -> tuple:
+    def reached(hops):
+        return any(hop.get("host") == target for hop in hops)
+
+    if not blocks:
+        return "-", "-", "-"
+    if reached(blocks[-1][1]):
+        return "-", "-", ""
+    idx = len(blocks) - 1
+    while idx >= 0 and not reached(blocks[idx][1]):
+        idx -= 1
+    since = blocks[idx + 1][0] if idx + 1 < len(blocks) else blocks[0][0]
+    since, dur = _down_text(since)
+    hops = blocks[-1][1]
+    break_ttl = str(hops[-1]["ttl"] + 1) if hops else "-"
+    return since, dur, break_ttl
+
+
+
+
 def _op_show_system_cpu(ctx: Any, value: Any) -> str:
     vendor = model = ""
     procs = []
