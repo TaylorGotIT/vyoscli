@@ -232,6 +232,7 @@ class Cli:
                 import sys
                 width = max((len(n) for n in names), default=len(name))
                 sys.stdout.write("\r\x1b[K")
+                print("Possible completions:")
                 print(f"  {name.ljust(width)}  {help_map.get(name, '')}")
                 sys.stdout.write(self._prompt() + buf)
                 sys.stdout.flush()
@@ -343,6 +344,7 @@ class Cli:
             tokens.append("")
         help_map = dict(self._matches_with_help(tokens))
         print()
+        print("Possible completions:")
         width = max(len(m) for m in matches)
         for m in matches:
             print(f"  {m.ljust(width + 2)}{help_map.get(m, '')}")
@@ -592,8 +594,9 @@ class Cli:
         if not names:
             return f"  (no completions for '{prefix.strip()}')"
         width = max(len(name) for name, _ in names)
-        return "\n".join(f"  {name.ljust(width + 2)}{help_text}"
-                         for name, help_text in names)
+        body = "\n".join(f"  {name.ljust(width + 2)}{help_text}"
+                          for name, help_text in names)
+        return "Possible completions:\n" + body
 
     # ------------ main loop ------------
     def cmdloop(self) -> None:
