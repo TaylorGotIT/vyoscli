@@ -818,6 +818,7 @@ class ConfigStore:
             ("vrf", self._apply_vrf),
             ("static-routes", self._apply_static_routes),
             ("static-tables", self._apply_static_tables),
+            ("failover-routes", self._apply_failover),
             ("local-route", self._apply_local_route),
             ("tcp-mss", self._apply_tcp_mss),
             ("mtr", self._apply_mtr),
@@ -1587,6 +1588,127 @@ class ConfigStore:
         except Exception as e:  # noqa: BLE001
             notes.append(f"l2tp apply failed: {e}")
         return notes
+
+    def _apply_failover(self, old, new):
+        old_f = ((old.get("protocols") or {}).get("failover") or {})
+        new_f = ((new.get("protocols") or {}).get("failover") or {})
+        old_routes = old_f.get("route") or {}
+        new_routes = new_f.get("route") or {}
+        if old_routes == new_routes:
+            return []
+        run_dir = os.path.join(self.base_dir, "run")
+        fos_dir = os.path.join(self.base_dir, "failover")
+        os.makedirs(run_dir, exist_ok=True)
+        os.makedirs(fos_dir, exist_ok=True)
+        pidfile = os.path.join(run_dir, "failover.pid")
+        cfg_path = os.path.join(fos_dir, "routes.json")
+        script_path = os.path.join(fos_dir, "monitor.py")
+        log_path = os.path.join(fos_dir, "monitor.log")
+
+        def stop():
+            try:
+                with open(pidfile, encoding="utf-8") as f:
+                    pid = int(f.read().strip())
+                os.killpg(pid, 15)
+            except (OSError, ValueError):
+                pass
+            try:
+                os.remove(pidfile)
+            except OSError:
+                pass
+
+        stop()
+        for prefix in set(old_routes) - set(new_routes):
+            subprocess.run(["ip", "route", "del", str(prefix)],
+                           capture_output=True, text=True, timeout=10)
+        if not new_routes:
+            return ["failover: stopped"]
+
+        data = {}
+        for prefix, body in new_routes.items():
+            if not isinstance(body, dict):
+                continue
+            hops = body.get("next-hop") or {}
+            if not isinstance(hops, dict):
+                continue
+            clean = {}
+            for nh, cfg in hops.items():
+                if not isinstance(cfg, dict):
+                    continue
+                check = cfg.get("check") or {}
+                clean[nh] = {
+                    "interface": cfg.get("interface") or "",
+                    "metric": cfg.get("metric") or 1,
+                    "onlink": bool(cfg.get("onlink")),
+                    "check": {
+                        "target": check.get("target") or "",
+                        "interface": check.get("interface") or "",
+                    },
+                }
+            if clean:
+                data[prefix] = clean
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+        script = r"""#!/usr/bin/env python3
+import json
+import subprocess
+import time
+
+CFG = %r
+
+
+def run(cmd):
+    subprocess.run(cmd, stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL)
+
+
+while True:
+    try:
+        with open(CFG, encoding="utf-8") as f:
+            routes = json.load(f)
+    except Exception:
+        time.sleep(5)
+        continue
+    for prefix, hops in routes.items():
+        chosen = None
+        for nh, cfg in sorted(hops.items(),
+                              key=lambda kv: int(kv[1].get("metric") or 1)):
+            target = (cfg.get("check") or {}).get("target")
+            if target:
+                cmd = ["ping", "-c", "1", "-W", "1"]
+                if (cfg.get("check") or {}).get("interface"):
+                    cmd += ["-I", cfg["check"]["interface"]]
+                cmd.append(target)
+                if subprocess.run(cmd, stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL).returncode != 0:
+                    continue
+            chosen = (nh, cfg)
+            break
+        if chosen:
+            nh, cfg = chosen
+            cmd = ["ip", "route", "replace", prefix, "via", nh]
+            if cfg.get("interface"):
+                cmd += ["dev", cfg["interface"]]
+            if cfg.get("metric"):
+                cmd += ["metric", str(cfg["metric"])]
+            if cfg.get("onlink"):
+                cmd.append("onlink")
+            run(cmd)
+        else:
+            run(["ip", "route", "del", prefix])
+    time.sleep(5)
+""" % cfg_path
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(script)
+        os.chmod(script_path, 0o755)
+        log = open(log_path, "a", encoding="utf-8")
+        proc = subprocess.Popen(["python3", script_path],
+                                stdout=log, stderr=log,
+                                start_new_session=True)
+        with open(pidfile, "w", encoding="utf-8") as f:
+            f.write(str(proc.pid))
+        return [f"failover: {len(data)} route(s) monitored"]
 
     def _apply_dhcp_relay(self, old, new):
         old_r = (old.get("service") or {}).get("dhcp-relay") or {}
@@ -3529,8 +3651,13 @@ class ConfigStore:
                                   bool(ospf), bool(rip), bool(bfd))
             # frr reads frr.conf at daemon start; a plain start is a no-op
             # when it is already running, so restart to apply changes.
-            subprocess.run(["/etc/init.d/frr", "restart"],
-                           capture_output=True, text=True, timeout=60)
+            # procd restart can take longer than the CLI timeout; run it
+            # detached so the commit returns and BGP reconnects in background.
+            subprocess.Popen(["/etc/init.d/frr", "restart"],
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+            notes.append("bgp: frr restarting to apply config")
             subprocess.run(["vtysh", "-b"], capture_output=True,
                            text=True, timeout=30)
             if new_b.get("local-as"):

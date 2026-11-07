@@ -428,6 +428,12 @@
 | `protocols bgp <name> peer-group <name> update-source` | Update source | `protocols bgp <name> peer-group <name> update-source 192.0.2.1` |
 | `protocols bgp <name> timers holdtime` | Hold time | `protocols bgp <name> timers holdtime 100` |
 | `protocols bgp <name> timers keepalive` | Keepalive | `protocols bgp <name> timers keepalive 100` |
+| `protocols failover route <prefix> next-hop <name> check interface` | Interface to use | `protocols failover route <prefix> next-hop <name> check interface text` |
+| `protocols failover route <prefix> next-hop <name> check target` | Address to check | `protocols failover route <prefix> next-hop <name> check target 192.0.2.1` |
+| `protocols failover route <prefix> next-hop <name> check vrf` | VRF instance name | `protocols failover route <prefix> next-hop <name> check vrf text` |
+| `protocols failover route <prefix> next-hop <name> interface` | Gateway interface name | `protocols failover route <prefix> next-hop <name> interface text` |
+| `protocols failover route <prefix> next-hop <name> metric` | Route metric (1-255) | `protocols failover route <prefix> next-hop <name> metric 100` |
+| `protocols failover route <prefix> next-hop <name> onlink` | Next hop is directly connected | `protocols failover route <prefix> next-hop <name> onlink true` |
 | `protocols ospf area <name> network` | Network to advertise in this area | `protocols ospf area <name> network 192.0.2.1/24` |
 | `protocols ospf area <name> type` | normal \| stub \| nssa | `protocols ospf area <name> type text` |
 | `protocols ospf default-information` | Originate a default route | `protocols ospf default-information true` |

@@ -195,12 +195,23 @@ set interfaces vxlan vx0 remote 198.51.100.2
 
 ## 5. 路由
 
-### 静态路由
+### 静态路由 / Failover
 
 ```bash
 set protocols static route 10.0.0.0/8 next-hop 192.168.1.1
 set protocols static table 110 route 0.0.0.0/0 next-hop 192.168.1.1
+
+# 健康检查 failover 路由
+set protocols failover route 1.1.1.1/32 next-hop 192.168.75.1 check target 223.5.5.5
+set protocols failover route 1.1.1.1/32 next-hop 192.168.75.1 check interface eth1
+set protocols failover route 1.1.1.1/32 next-hop 192.168.75.1 metric 10
 ```
+
+- `check target` 通过指定接口 ping 目标；失败时自动撤销该前缀的路由，恢复后重新安装。
+- 同一前缀可配置多个 `next-hop`，按 `metric` 从小到大选择第一个检查成功的。
+- 监控脚本：`/etc/vyoscli/failover/monitor.py`，每 5 秒一轮；
+  日志 `/etc/vyoscli/failover/monitor.log`。
+- 当前叶子值后不能继续接子路径，`check target` 和 `check interface` 需分两条 `set`。
 
 `show ip route static` 在 FRR 无静态路由时回退到内核 `proto static`，显示 `S>*`。
 

@@ -2633,6 +2633,64 @@ TREE = json.loads(r'''[
 ]
 }
 ]
+},
+{
+"name": "failover",
+"help": "Failover routes",
+"children": [
+{
+"name": "route",
+"help": "Failover route",
+"dyn": true,
+"tpl_help": "Route prefix",
+"children": [
+{
+"name": "next-hop",
+"help": "Next hop",
+"dyn": true,
+"tpl_help": "Next-hop IP",
+"children": [
+{
+"name": "check",
+"help": "Check target options",
+"children": [
+{
+"name": "target",
+"help": "Address to check",
+"type": "ipv4"
+},
+{
+"name": "interface",
+"help": "Interface to use",
+"type": "str"
+},
+{
+"name": "vrf",
+"help": "VRF instance name",
+"type": "str"
+}
+]
+},
+{
+"name": "interface",
+"help": "Gateway interface name",
+"type": "str"
+},
+{
+"name": "metric",
+"help": "Route metric (1-255)",
+"type": "int"
+},
+{
+"name": "onlink",
+"help": "Next hop is directly connected",
+"type": "bool"
+}
+]
+}
+]
+}
+]
 }
 ]
 },

@@ -306,11 +306,16 @@ set protocols bgp 65000 neighbor 192.168.75.218 address-family ipv4-unicast rout
 
 MED 数值小优先：eth5(0) → eth4(100) → eth0(200)。
 
-### 静态路由 / OSPF / RIP
+### 静态路由 / Failover / OSPF / RIP
 
 ```bash
 set protocols static route 10.0.0.0/8 next-hop 192.168.1.1
 set protocols static table 110 route 0.0.0.0/0 next-hop 192.168.1.1
+
+# 带健康检查的 failover 路由（检查失败约 5 秒内撤路由）
+set protocols failover route 1.1.1.1/32 next-hop 192.168.75.1 check target 223.5.5.5
+set protocols failover route 1.1.1.1/32 next-hop 192.168.75.1 check interface eth1
+set protocols failover route 1.1.1.1/32 next-hop 192.168.75.1 metric 10
 
 set protocols ospf router-id 192.168.1.1
 set protocols ospf area 0 network 192.168.1.0/24
@@ -318,6 +323,10 @@ set protocols ospf area 0 network 192.168.1.0/24
 set protocols rip version 2
 set protocols rip network 192.168.1.0/24
 ```
+
+> 当前 CLI 的叶子值后不能继续接子路径；`check target`、`check interface`
+> 请分两条 `set`。failover 监控脚本在 `/etc/vyoscli/failover/monitor.py`，
+> 每 5 秒检测一次，多个 next-hop 按 metric 从小到大选择。
 
 ### Policy：route-map / community-list / local-route
 
