@@ -942,24 +942,43 @@ def _parse_host_port(value: str):
     return None, None, "usage: ping {proto} ip <x.x.x.x> port <1-65535>"
 
 
-def _op_ping_tcp(ctx: Any, value: str) -> str:
+def _tcp_probe(host: str, port: int):
     import socket
     import time
-    host, port, err = _parse_host_port(value)
-    if err:
-        return err.replace("{proto}", "tcp")
     start = time.perf_counter()
     try:
         with socket.create_connection((host, port), timeout=2):
             pass
         elapsed = (time.perf_counter() - start) * 1000
-        return f"Connected to {host}:{port}: time={elapsed:.1f} ms"
+        return True, f"Connected to {host}:{port}: time={elapsed:.1f} ms"
     except ConnectionRefusedError:
-        return f"tcp {host}:{port}: connection refused (port closed)"
+        return False, f"tcp {host}:{port}: connection refused (port closed)"
     except socket.timeout:
-        return f"tcp {host}:{port}: timeout (filtered)"
+        return False, f"tcp {host}:{port}: timeout (filtered)"
     except OSError as e:  # noqa: BLE001
-        return f"tcp {host}:{port}: {e}"
+        return False, f"tcp {host}:{port}: {e}"
+
+
+def _op_ping_tcp(ctx: Any, value: str) -> str:
+    import sys
+    import time
+    host, port, err = _parse_host_port(value)
+    if err:
+        return err.replace("{proto}", "tcp")
+    if not sys.stdin.isatty():
+        return _tcp_probe(host, port)[1]
+    seq = ok = 0
+    try:
+        while True:
+            seq += 1
+            good, msg = _tcp_probe(host, port)
+            ok += 1 if good else 0
+            print(f"[{seq}] {msg}", flush=True)
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print(f"\n--- tcp ping stopped: {seq} sent, {ok} ok, "
+              f"{seq - ok} failed ---")
+    return ""
 
 
 def _udp_payload(port: int, extra: str):
@@ -991,19 +1010,9 @@ def _udp_payload(port: int, extra: str):
     return b"\x00", "generic"
 
 
-def _op_ping_udp(ctx: Any, value: str) -> str:
+def _udp_probe(host: str, port: int, payload: bytes, label: str):
     import socket
     import time
-    parts = (value or "").split()
-    if len(parts) < 2:
-        return "usage: ping udp <ip> <port> [payload|hex:...]"
-    host = parts[0]
-    try:
-        port = int(parts[1])
-    except ValueError:
-        return "port must be a number"
-    extra = " ".join(parts[2:])
-    payload, label = _udp_payload(port, extra)
     start = time.perf_counter()
     try:
         info = socket.getaddrinfo(host, port, type=socket.SOCK_DGRAM)[0]
@@ -1015,20 +1024,43 @@ def _op_ping_udp(ctx: Any, value: str) -> str:
             sock.send(payload)
             data = sock.recv(2048)
             elapsed = (time.perf_counter() - start) * 1000
-            return (f"udp {host}:{port}: {label} reply {len(data)} byte(s), "
-                    f"time={elapsed:.1f} ms")
+            return True, (f"udp {host}:{port}: {label} reply "
+                          f"{len(data)} byte(s), time={elapsed:.1f} ms")
         except (socket.timeout, ConnectionRefusedError):
-            # Pure UDP has no handshake; a missing reply is inconclusive.
-            # Do not derive state from ICMP errors here.
-            return (f"udp {host}:{port}: no reply to {label} probe "
-                    f"(open|filtered, or service does not answer)")
+            return False, (f"udp {host}:{port}: no reply to {label} probe "
+                           f"(open|filtered, or service does not answer)")
         finally:
             sock.close()
-    except ConnectionRefusedError:
-        return (f"udp {host}:{port}: no reply to {label} probe "
-                f"(open|filtered, or service does not answer)")
     except OSError as e:  # noqa: BLE001
-        return f"udp {host}:{port}: {e}"
+        return False, f"udp {host}:{port}: {e}"
+
+
+def _op_ping_udp(ctx: Any, value: str) -> str:
+    import sys
+    import time
+    parts = (value or "").split()
+    host, port, err = _parse_host_port(value)
+    if err:
+        return err.replace("{proto}", "udp")
+    if "port" in parts:
+        extra = " ".join(parts[parts.index("port") + 2:])
+    else:
+        extra = " ".join(parts[2:])
+    payload, label = _udp_payload(port, extra)
+    if not sys.stdin.isatty():
+        return _udp_probe(host, port, payload, label)[1]
+    seq = ok = 0
+    try:
+        while True:
+            seq += 1
+            good, msg = _udp_probe(host, port, payload, label)
+            ok += 1 if good else 0
+            print(f"[{seq}] {msg}", flush=True)
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print(f"\n--- udp ping stopped: {seq} sent, {ok} replied, "
+              f"{seq - ok} no reply ---")
+    return ""
 
 
 def _trace_hops(target: str, iface: str = "", source: str = "",
