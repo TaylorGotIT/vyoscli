@@ -3017,6 +3017,15 @@ class ConfigStore:
         notes = []
         try:
             os.makedirs("/etc/openvpn", exist_ok=True)
+            for gone in set(old_ov) - set(new_ov):
+                try:
+                    self._uci("delete", f"openvpn.{gone}")
+                except subprocess.CalledProcessError:
+                    pass
+                try:
+                    os.remove(f"/etc/openvpn/{gone}.conf")
+                except OSError:
+                    pass
             for vtun, cfg in new_ov.items():
                 if not isinstance(cfg, dict):
                     continue

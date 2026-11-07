@@ -180,8 +180,11 @@ import vyoscli.cli          ≈ 0.07 s
 | 127 | login user 创建/删除不完整 | 本机无 adduser/useradd/chpasswd，安装 shadow-useradd/shadow-chpasswd 后可创建；删除增加 userdel 回退（直接清理 passwd/shadow/group + home）。真机 add/delete testuser 均生效 | `config.py:_apply_login` / `_delete_user` |
 | 128 | 逐项测试：policy/firewall/NAT/dummy/mtr/login | policy 列表+route-map 渲染 FRR；firewall 组+rule 生成 nft；NAT masquerade eth0 生效并清理；dummy 创建/删除；mtr 任务 7 跳并清理；login user 创建/删除。全部无残留 | 多文件 |
 | 129 | firewall apply 不替换旧表 | apply 前 delete inet vyos_fw，避免删除 group 后旧 set 残留 | config.py |
-| 130 | FRR daemon 开关不生效 / 重启阻塞 | OSPF 设置后 ospfd 未启动；改为 daemon 集变化时后台 restart FRR，并补充 rr-ospfd/ripd/bfdd 依赖；真机 OSPF 在 br-lan 建立、BGP 恢复 Established | config.py / Makefile |
+| 130 | FRR daemon 开关不生效 / 重启阻塞 | OSPF 设置后 ospfd 未启动；改为 daemon 集变化时后台 restart FRR，并补充 
+rr-ospfd/ripd/bfdd 依赖；真机 OSPF 在 br-lan 建立、BGP 恢复 Established | config.py / Makefile |
 | 131 | lldp/login 依赖缺失 | lldpd、shadow-useradd、shadow-chpasswd 加入依赖；缺失时 apply 有明确 note | Makefile / config.py |
+| 132 | OpenVPN 删除不生效 | 旧实现只写新配置，不删除旧 UCI/conf，进程继续跑；删除时清理 openvpn.<vtun>、/etc/openvpn/<vtun>.conf 并 restart。真机 add/delete vtun9 验证 | config.py:_apply_openvpn |
+| 133 | WireGuard 运行时装包后 netifd 不识别 proto | UCI 正确但 ifup 报无设备，重启 network 后 wg9 正常；属安装 wireguard-tools/kmod 后未重载 netifd，重启一次即可，驱动本身正常 | 环境说明 |
 tysh -c "show ip route bgp"，回退 ip route show proto bgp；真机输出 Codes 头 + B>* 条目（6204 条） | op_show.py:_op_show_ip_route_bgp |
 tysh，输出 VyOS/FRR 风格（Codes 头 + S>* 等）；FRR 未运行或表为空时回退到 ip route，静态表为空时保留 Codes 头。真机 static 显示 Codes 头，full 表为 FRR 格式 | op_show.py:_vtysh_route |
 | 78 | WAN 多线映射错误且 mwan3 不可用 | 安装 mwan3 后修正映射：设备名（eth1）先解析为 OpenWrt 网络接口名（wan），再写 mwan3.interface/member/policy/rule；真机验证 WAN/SSH 未中断，但 `mwan3 status` 中 wan 虽 online，所有 policy（含默认 balanced）均为 `unreachable`，WAN LB 不可用。已删除配置、停止 mwan3、清理 mwan3.* 漂移项；mwan3 包保留但未启用 | `config.py:_apply_wan_lb` |
