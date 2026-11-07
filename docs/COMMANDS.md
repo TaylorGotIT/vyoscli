@@ -9,13 +9,27 @@
 
 | 命令 | 说明 | 示例 |
 |---|---|---|
-| `container <name> command` | Override container command | `container <name> command text` |
-| `container <name> environment <VAR> value` | Variable value | `container <name> environment <VAR> value text` |
-| `container <name> image` | Container image (e.g. nginx:alpine) | `container <name> image text` |
-| `container <name> network` | podman network name | `container <name> network text` |
-| `container <name> port` | Port mapping host:container (repeatable) | `container <name> port text` |
-| `container <name> restart` | Restart policy: always\|on-failure\|no | `container <name> restart always` |
-| `container <name> volume` | Bind mount host:container (repeatable) | `container <name> volume text` |
+| `container name <vrf> allow-host-networks` | Use host network | `container name <vrf> allow-host-networks true` |
+| `container name <vrf> capability` | Linux capability | `container name <vrf> capability text` |
+| `container name <vrf> command` | Override container command | `container name <vrf> command text` |
+| `container name <vrf> device <name> destination` | Container device path | `container name <vrf> device <name> destination text` |
+| `container name <vrf> device <name> source` | Host device path | `container name <vrf> device <name> source text` |
+| `container name <vrf> environment <VAR> value` | Variable value | `container name <vrf> environment <VAR> value text` |
+| `container name <vrf> image` | Container image (e.g. nginx:alpine) | `container name <vrf> image text` |
+| `container name <vrf> network` | podman network name | `container name <vrf> network text` |
+| `container name <vrf> port` | Port mapping host:container (repeatable) | `container name <vrf> port text` |
+| `container name <vrf> privileged` | Run privileged | `container name <vrf> privileged true` |
+| `container name <vrf> restart` | Restart policy: always\|on-failure\|no | `container name <vrf> restart always` |
+| `container name <vrf> volume` | Bind mount host:container (repeatable) | `container name <vrf> volume text` |
+| `container network <name> description` | Description | `container network <name> description text` |
+| `container network <name> gateway` | Gateway address | `container network <name> gateway 192.0.2.1` |
+| `container network <name> mtu` | MTU | `container network <name> mtu 100` |
+| `container network <name> no-name-server` | Disable DNS plugin | `container network <name> no-name-server true` |
+| `container network <name> prefix` | Network prefix | `container network <name> prefix 192.0.2.1/24` |
+| `container network <name> type` | Network type (bridge) | `container network <name> type text` |
+| `container registry <name> address` | Registry address | `container registry <name> address text` |
+| `container registry <name> password` | Password | `container registry <name> password text` |
+| `container registry <name> username` | Username | `container registry <name> username text` |
 
 ## set firewall
 

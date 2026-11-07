@@ -122,10 +122,10 @@ REACHABLE = [
     ("set nat destination rule 10 translation address 192.168.1.10",
      ["nat", "destination", "rule", "10", "translation", "address"],
      "192.168.1.10"),
-    ("set container web image nginx:alpine",
-     ["container", "web", "image"], "nginx:alpine"),
-    ("set container web environment TZ value Asia/Shanghai",
-     ["container", "web", "environment", "TZ", "value"], "Asia/Shanghai"),
+    ("set container name web image nginx:alpine",
+     ["container", "name", "web", "image"], "nginx:alpine"),
+    ("set container name web environment TZ value Asia/Shanghai",
+     ["container", "name", "web", "environment", "TZ", "value"], "Asia/Shanghai"),
 ]
 
 

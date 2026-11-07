@@ -4496,64 +4496,118 @@ class ConfigStore:
         return notes
 
     def _apply_containers(self, old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
-        old_c = (old.get("container") or {})
-        new_c = (new.get("container") or {})
-        if old_c == new_c:
+        def norm(root):
+            raw = root.get("container") or {}
+            names = raw.get("name") or {}
+            legacy = {k: v for k, v in raw.items()
+                      if k not in ("name", "network", "registry")
+                      and isinstance(v, dict)}
+            merged = dict(legacy)
+            merged.update(names if isinstance(names, dict) else {})
+            return merged, (raw.get("network") or {})
+
+        old_c, old_n = norm(old)
+        new_c, new_n = norm(new)
+        if old_c == new_c and old_n == new_n:
             return []
-        notes = []
+        notes: List[str] = []
         if shutil.which("podman") is None:
             return ["(podman install failed; container config kept in vyoscli JSON)"]
+
+        def podman(*args, timeout=60):
+            return subprocess.run(["podman", *args], capture_output=True,
+                                  text=True, timeout=timeout)
+
         try:
-            # Remove containers that disappeared from candidate.
+            for net in set(old_n) - set(new_n):
+                podman("network", "rm", "-f", str(net))
+                notes.append(f"removed network {net}")
+
+            for net, cfg in new_n.items():
+                if not isinstance(cfg, dict):
+                    continue
+                exists = podman("network", "inspect", str(net)).returncode == 0
+                if exists and old_n.get(net) == cfg:
+                    continue
+                if exists:
+                    podman("network", "rm", "-f", str(net))
+                cmd = ["network", "create"]
+                if cfg.get("prefix"):
+                    cmd += ["--subnet", str(cfg["prefix"])]
+                if cfg.get("gateway"):
+                    cmd += ["--gateway", str(cfg["gateway"])]
+                if cfg.get("mtu"):
+                    cmd += ["--opt", f"mtu={cfg['mtu']}"]
+                if cfg.get("type"):
+                    cmd += ["--driver", str(cfg["type"])]
+                cmd.append(str(net))
+                r = podman(*cmd)
+                if r.returncode == 0:
+                    notes.append(f"created network {net}")
+                else:
+                    notes.append(f"network {net} failed: {r.stderr.strip()[:160]}")
+
             for name in old_c:
                 if name not in new_c:
-                    subprocess.run(["podman", "rm", "-f", name],
-                                   capture_output=True, text=True, timeout=30)
+                    podman("rm", "-f", str(name))
                     notes.append(f"removed container {name}")
-            # Recreate containers whose spec changed.
+
             for name, cfg in new_c.items():
                 if not isinstance(cfg, dict):
                     continue
                 if old_c.get(name) == cfg:
-                    continue  # unchanged, leave running
-                # Force recreate on any change.
+                    continue
                 for module in ("xt_addrtype", "xt_MASQUERADE", "xt_conntrack"):
                     subprocess.run(["modprobe", module], capture_output=True,
                                    text=True, timeout=10)
-                subprocess.run(["podman", "rm", "-f", name],
-                               capture_output=True, text=True, timeout=30)
-                cmd = ["podman", "run", "-d", "--name", name,
-                       f"--restart={cfg.get('restart', 'always')}"]
-                if cfg.get("network"):
+                podman("rm", "-f", str(name))
+                if cfg.get("disable"):
+                    notes.append(f"container {name}: disabled")
+                    continue
+                image = cfg.get("image")
+                if not image:
+                    notes.append(f"container {name}: no image")
+                    continue
+                cmd = ["run", "-d", "--name", str(name),
+                       f"--restart={cfg.get('restart', 'no')}"]
+                if cfg.get("allow-host-networks"):
+                    cmd += ["--network", "host"]
+                elif cfg.get("network"):
                     net = str(cfg["network"])
                     if net not in ("host", "none", "slirp4netns"):
-                        probe = subprocess.run(
-                            ["podman", "network", "inspect", net],
-                            capture_output=True, text=True, timeout=20)
-                        if probe.returncode != 0:
-                            subprocess.run(
-                                ["podman", "network", "create", net],
-                                capture_output=True, text=True, timeout=30)
+                        if podman("network", "inspect", net).returncode != 0:
+                            podman("network", "create", net)
                     cmd += ["--network", net]
-                for p in _as_list(cfg.get("port")):
-                    cmd += ["-p", p]
-                for v in _as_list(cfg.get("volume")):
-                    cmd += ["-v", v]
-                for k, v in (cfg.get("environment") or {}).items():
-                    cmd += ["-e", f"{k}={v}"]
+                if cfg.get("privileged"):
+                    cmd.append("--privileged")
+                for cap in _as_list(cfg.get("capability")):
+                    cmd += ["--cap-add", str(cap)]
+                for dname, dev in (cfg.get("device") or {}).items():
+                    if not isinstance(dev, dict):
+                        continue
+                    src = dev.get("source") or dname
+                    dst = dev.get("destination") or src
+                    cmd += ["--device", f"{src}:{dst}"]
+                for port in _as_list(cfg.get("port")):
+                    cmd += ["-p", str(port)]
+                for vol in _as_list(cfg.get("volume")):
+                    cmd += ["-v", str(vol)]
+                for key, value in (cfg.get("environment") or {}).items():
+                    cmd += ["-e", f"{key}={value}"]
+                cmd.append(str(image))
                 if cfg.get("command"):
-                    cmd += [cfg["image"], cfg["command"]]
-                else:
-                    cmd += [cfg["image"]]
-                r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+                    cmd.append(str(cfg["command"]))
+                r = subprocess.run(["podman", *cmd], capture_output=True,
+                                   text=True, timeout=120)
                 if r.returncode == 0:
-                    notes.append(f"started container {name} ({cfg.get('image')})")
+                    notes.append(f"started container {name} ({image})")
                 else:
-                    notes.append(f"container {name} failed: {r.stderr.strip()[:200]}")
+                    notes.append(f"container {name} failed: "
+                                 f"{r.stderr.strip()[:200]}")
         except Exception as e:  # noqa: BLE001
             notes.append(f"container apply failed: {e}")
         return notes
-    # ---------- history ----------
+
     def _snapshot_current_running(self) -> str:
         now = datetime.now()
         ts = now.strftime("%Y-%m-%d_%H-%M-%S") + f"_{now.microsecond // 1000:03d}"

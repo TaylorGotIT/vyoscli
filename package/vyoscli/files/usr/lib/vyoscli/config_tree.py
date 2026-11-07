@@ -10,8 +10,12 @@ TREE = json.loads(r'''[
 {
 "name": "container",
 "help": "Podman containers",
+"children": [
+{
+"name": "name",
+"help": "Container name",
 "dyn": true,
-"tpl_help": "Per-container options",
+"tpl_help": "Container name",
 "children": [
 {
 "name": "command",
@@ -55,6 +59,103 @@ TREE = json.loads(r'''[
 "name": "volume",
 "help": "Bind mount host:container (repeatable)",
 "type": "str"
+},
+{
+"name": "allow-host-networks",
+"help": "Use host network",
+"type": "bool"
+},
+{
+"name": "privileged",
+"help": "Run privileged",
+"type": "bool"
+},
+{
+"name": "capability",
+"help": "Linux capability",
+"type": "str",
+"repeatable": true
+},
+{
+"name": "device",
+"help": "Device mapping",
+"dyn": true,
+"tpl_help": "Device name",
+"children": [
+{
+"name": "source",
+"help": "Host device path",
+"type": "str"
+},
+{
+"name": "destination",
+"help": "Container device path",
+"type": "str"
+}
+]
+}
+]
+},
+{
+"name": "network",
+"help": "Container network",
+"dyn": true,
+"tpl_help": "Network name",
+"children": [
+{
+"name": "description",
+"help": "Description",
+"type": "str"
+},
+{
+"name": "gateway",
+"help": "Gateway address",
+"type": "ipv4"
+},
+{
+"name": "mtu",
+"help": "MTU",
+"type": "int"
+},
+{
+"name": "no-name-server",
+"help": "Disable DNS plugin",
+"type": "bool"
+},
+{
+"name": "prefix",
+"help": "Network prefix",
+"type": "ipv4net"
+},
+{
+"name": "type",
+"help": "Network type (bridge)",
+"type": "str"
+}
+]
+},
+{
+"name": "registry",
+"help": "Registry",
+"dyn": true,
+"tpl_help": "Registry name",
+"children": [
+{
+"name": "address",
+"help": "Registry address",
+"type": "str"
+},
+{
+"name": "username",
+"help": "Username",
+"type": "str"
+},
+{
+"name": "password",
+"help": "Password",
+"type": "str"
+}
+]
 }
 ]
 },
