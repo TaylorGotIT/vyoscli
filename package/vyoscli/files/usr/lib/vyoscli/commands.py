@@ -318,8 +318,13 @@ def build_tree(store: Any) -> CommandTree:
             action=_op_show_login)
     tree.op("disconnect user", help="Disconnect a user's SSH sessions",
             value_type="str", action=_op_disconnect_user)
-    tree.op("disconnect ssh", help="Disconnect SSH sessions from an IP",
-            value_type="str", action=_op_disconnect_ssh)
+    ssh_disc = tree.op("disconnect ssh",
+                       help="Disconnect SSH sessions",
+                       value_type="str", action=_op_disconnect_ssh)
+    ssh_disc.add(Node(name="user", help="Disconnect by username",
+                      value_type="str", action=_op_disconnect_user))
+    ssh_disc.add(Node(name="ip", help="Disconnect by IP address",
+                      value_type="str", action=_op_disconnect_ssh))
     tree.op("show login user", help="Show logged-in users",
             action=_op_show_login_user)
 
