@@ -343,6 +343,8 @@ def _ip_route_fallback(kind: str) -> str:
         args += ["proto", "static"]
     elif kind == "connected":
         args += ["proto", "kernel"]
+    elif kind == "bgp":
+        args += ["proto", "bgp"]
     try:
         return subprocess.run(args, capture_output=True, text=True,
                               timeout=10).stdout.strip() or "n/a"
@@ -442,6 +444,11 @@ def _op_show_ip_route_static(ctx: Any, value: Any) -> str:
 def _op_show_ip_route_connected(ctx: Any, value: Any) -> str:
     return _vtysh_route("show ip route connected",
                         lambda: _ip_route_fallback("connected"))
+
+
+def _op_show_ip_route_bgp(ctx: Any, value: Any) -> str:
+    return _vtysh_route("show ip route bgp",
+                        lambda: _ip_route_fallback("bgp"))
 
 
 def _op_show_ip_route_summary(ctx: Any, value: Any) -> str:

@@ -49,6 +49,15 @@ class RouteShowTest(unittest.TestCase):
             text = op_show._op_show_ip_route_static(None, "")
         self.assertIn("S>* 0.0.0.0/0", text)
 
+    def test_bgp_route_prefers_vtysh(self):
+        with mock.patch("shutil.which", return_value="/usr/bin/vtysh"), \
+             mock.patch("subprocess.run",
+                        return_value=types.SimpleNamespace(
+                            stdout="B>* 1.0.1.0/24 via 192.168.75.1",
+                            stderr="", returncode=0)):
+            text = op_show._op_show_ip_route_bgp(None, "")
+        self.assertIn("B>* 1.0.1.0/24", text)
+
     def test_falls_back_to_ip_route(self):
         with mock.patch("shutil.which", return_value=None), \
              mock.patch("subprocess.run",

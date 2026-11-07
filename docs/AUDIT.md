@@ -134,7 +134,9 @@ import vyoscli.cli          ≈ 0.07 s
 | 81 | 缺 soft-reconfiguration / show ip bgp | 新增 `protocols bgp neighbor <peer> soft-reconfiguration inbound`（渲染到 IPv4 AF，真机显示 Inbound soft reconfiguration allowed）；新增 op 命令 `show ip bgp summary` / `show ip bgp table`，直接调用 vtysh 输出。真机 OpenWrt 已收到 ExaBGP 6204 条前缀并装表 | `schema/config-tree.json` / `config.py:render_frr_conf` / `op_show.py` / `commands.py` |
 | 82 | show 输出一次性刷屏 | 所有命令输出统一走 VyOS 风格分页器：TTY 下按终端高度分页，空格/回车下一页、b 上一页、q 退出；非 TTY（管道/脚本）不分页。真机 pty 验证 --More-- 与 q 退出，6204 条路由只输出一页 | cli.py:_print_output |
 | 83 | 缺 show arp | 新增 show arp，解析 ip neigh 输出为 VyOS 表格（Address / HWtype / HWaddress / Flags Mask / Iface），仅 IPv4；真机输出与 VyOS 对齐 | op_show.py:_op_show_arp / commands.py |
-| 84 | show ip route 输出是 Linux 格式 | show ip route / static / connected / summary 优先调用 tysh，输出 VyOS/FRR 风格（Codes 头 + S>* 等）；FRR 未运行或表为空时回退到 ip route，静态表为空时保留 Codes 头。真机 static 显示 Codes 头，full 表为 FRR 格式 | op_show.py:_vtysh_route |
+| 84 | show ip route 输出是 Linux 格式 | show ip route / static / connected / summary 优先调用 
+| 85 | 缺 show ip route bgp | 新增 show ip route bgp，优先 tysh -c "show ip route bgp"，回退 ip route show proto bgp；真机输出 Codes 头 + B>* 条目（6204 条） | op_show.py:_op_show_ip_route_bgp |
+tysh，输出 VyOS/FRR 风格（Codes 头 + S>* 等）；FRR 未运行或表为空时回退到 ip route，静态表为空时保留 Codes 头。真机 static 显示 Codes 头，full 表为 FRR 格式 | op_show.py:_vtysh_route |
 | 78 | WAN 多线映射错误且 mwan3 不可用 | 安装 mwan3 后修正映射：设备名（eth1）先解析为 OpenWrt 网络接口名（wan），再写 mwan3.interface/member/policy/rule；真机验证 WAN/SSH 未中断，但 `mwan3 status` 中 wan 虽 online，所有 policy（含默认 balanced）均为 `unreachable`，WAN LB 不可用。已删除配置、停止 mwan3、清理 mwan3.* 漂移项；mwan3 包保留但未启用 | `config.py:_apply_wan_lb` |
 
 另外：`op/delete` 的 bridge 实现有两套（`_apply_interfaces` 与 `_apply_interface_roles`），

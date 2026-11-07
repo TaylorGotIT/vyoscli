@@ -51,6 +51,7 @@ from .op_show import (
     _op_show_ip_route_static,
     _op_show_ip_route_connected,
     _op_show_ip_route_summary,
+    _op_show_ip_route_bgp,
 )
 
 # ---------- ping ----------
@@ -265,6 +266,8 @@ def build_tree(store: Any) -> CommandTree:
                         action=_op_show_ip_route_connected))
     show_route.add(Node(name="summary", help="Route table summary",
                         action=_op_show_ip_route_summary))
+    show_route.add(Node(name="bgp", help="Show BGP routes",
+                        action=_op_show_ip_route_bgp))
     show_route.action = _op_show_ip_route
     show_ip.add(show_route)
     show_bgp = Node(name="bgp", help="BGP information")
