@@ -1469,6 +1469,35 @@ def _op_show_bgp(ctx: Any, value: Any) -> str:
     return _vtysh_show("show bgp ipv4 unicast")
 
 
+def _kernel_static_table() -> str:
+    import subprocess
+    try:
+        out = subprocess.run(["ip", "-4", "route", "show", "proto",
+                              "static"], capture_output=True, text=True,
+                             timeout=10).stdout
+    except Exception:
+        return ""
+    rows = []
+    for line in out.splitlines():
+        parts = line.split()
+        if not parts:
+            continue
+        prefix = parts[0]
+        nh = ""
+        dev = ""
+        if "via" in parts:
+            nh = parts[parts.index("via") + 1]
+        if "dev" in parts:
+            dev = parts[parts.index("dev") + 1]
+        row = f"S>* {prefix} [1/0]"
+        if nh:
+            row += f" via {nh}"
+        if dev:
+            row += f", {dev}"
+        rows.append(row)
+    return "\n".join([_ROUTE_CODES] + rows) if rows else ""
+
+
 def _op_show_ip_route_static(ctx: Any, value: Any) -> str:
     import shutil
     import subprocess
@@ -1479,11 +1508,10 @@ def _op_show_ip_route_static(ctx: Any, value: Any) -> str:
             out = (r.stdout or "").strip()
             if out and "failed to connect" not in out and "Exiting:" not in out:
                 return out
-            if not out:
-                return _ROUTE_CODES
         except Exception:
             pass
-    return _ip_route_fallback("static")
+    kernel = _kernel_static_table()
+    return kernel or _ROUTE_CODES
 
 
 def _op_show_ip_route_connected(ctx: Any, value: Any) -> str:

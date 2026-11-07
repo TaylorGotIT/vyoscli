@@ -209,17 +209,19 @@ def render_firewall_nft(fw: Dict[str, Any]) -> str:
     lines = ["table inet vyos_fw {"]
     groups = fw.get("group") or {}
 
-    def group_set(kind: str, set_type: str, prefix: str, field: str) -> None:
+    def group_set(kind: str, set_type: str, prefix: str, field: str,
+                  interval: bool = False) -> None:
         for name, cfg in (groups.get(kind) or {}).items():
             values = _as_list((cfg or {}).get(field))
             if not values:
                 continue
             elements = ", ".join(str(v) for v in values)
+            flags = " flags interval;" if interval else ""
             lines.append(f"  set {prefix}_{_fw_slug(name)} {{ type {set_type}; "
-                         f"elements = {{ {elements} }} }}")
+                         f"{flags} elements = {{ {elements} }} }}")
 
-    group_set("address-group", "ipv4_addr", "addr4", "address")
-    group_set("ipv6-address-group", "ipv6_addr", "addr6", "address")
+    group_set("address-group", "ipv4_addr", "addr4", "address", interval=True)
+    group_set("ipv6-address-group", "ipv6_addr", "addr6", "address", interval=True)
     group_set("port-group", "inet_service", "port", "port")
     group_set("interface-group", "ifname", "if", "interface")
 
