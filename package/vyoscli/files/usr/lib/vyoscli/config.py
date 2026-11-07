@@ -3431,6 +3431,9 @@ class ConfigStore:
                         continue
                     # netifd needs a dummy *device*; an interface alone points
                     # at a device that never exists.
+                    subprocess.run(["ip", "link", "add", str(dm),
+                                    "type", "dummy"], capture_output=True,
+                                   text=True, timeout=10)
                     self._uci("set", f"network.{dm}_dev=device")
                     self._uci("set", f"network.{dm}_dev.type=dummy")
                     self._uci("set", f"network.{dm}_dev.name={dm}")
@@ -3712,7 +3715,14 @@ class ConfigStore:
 
                     # range 0 { start, stop } -> start offset / limit
                     ranges = cfg.get("range") or {}
-                    rng = ranges.get("0") if isinstance(ranges, dict) else None
+                    rng = None
+                    if isinstance(ranges, dict):
+                        for candidate in ranges.values():
+                            if (isinstance(candidate, dict)
+                                    and candidate.get("start")
+                                    and candidate.get("stop")):
+                                rng = candidate
+                                break
                     if isinstance(rng, dict) and rng.get("start") and rng.get("stop"):
                         try:
                             start = ipaddress.IPv4Address(rng["start"])
@@ -3737,19 +3747,19 @@ class ConfigStore:
                         pass
                     if cfg.get("default-router"):
                         self._uci("add_list",
-                                  f"dhcp.{sec}.dhcp_option=router,{cfg['default-router']}")
+                                  f"dhcp.{sec}.dhcp_option=3,{cfg['default-router']}")
                     dns = cfg.get("name-server") or []
                     if isinstance(dns, str):
                         dns = [dns]
                     for server in dns:
                         self._uci("add_list",
-                                  f"dhcp.{sec}.dhcp_option=option:dns,{server}")
+                                  f"dhcp.{sec}.dhcp_option=6,{server}")
                     if cfg.get("domain-name"):
                         self._uci("add_list",
-                                  f"dhcp.{sec}.dhcp_option=domain,{cfg['domain-name']}")
+                                  f"dhcp.{sec}.dhcp_option=15,{cfg['domain-name']}")
                     if cfg.get("domain-search"):
                         self._uci("add_list",
-                                  f"dhcp.{sec}.dhcp_option=option:domain-search,"
+                                  f"dhcp.{sec}.dhcp_option=119,"
                                   f"{cfg['domain-search']}")
 
                     for mname, mapping in (cfg.get("static-mapping") or {}).items():

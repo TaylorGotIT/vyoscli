@@ -196,7 +196,7 @@ class CommitBackendTest(unittest.TestCase):
         self.assertIn(["uci", "set", f"{sec}.interface=eth1"], calls)
         self.assertIn(["uci", "set", f"{sec}.start=100"], calls)
         self.assertIn(["uci", "set", f"{sec}.limit=101"], calls)
-        self.assertIn(["uci", "add_list", f"{sec}.dhcp_option=router,192.168.50.1"],
+        self.assertIn(["uci", "add_list", f"{sec}.dhcp_option=3,192.168.50.1"],
                       calls)
 
     def test_dhcp_without_matching_interface_is_reported(self):
