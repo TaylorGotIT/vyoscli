@@ -1,10 +1,38 @@
 # vyoscli — 类 VyOS 的 OpenWrt CLI
 
-用 Python 实现的 VyOS 风格命令行，以 opkg 包形式安装到 OpenWrt。
+用 Python 实现的 VyOS 风格命令行，以 opkg 包安装到 OpenWrt。
 保留 VyOS 的核心交互模型：**操作模式 / 配置模式**分离、
-**candidate → commit → running** 事务、Tab 补全、`?` 内联帮助、`commit confirmed` 自动回滚。
+**candidate → commit → running** 事务、`commit confirmed` 自动回滚、
+Tab/`?` 补全、`show` 分页、配置快照与漂移检测。
 
-纯 Python 包，不依赖 UCI 之外的框架；没有 UCI 对应项时才退化为 `ip`/`nft`/`tc` 等原生命令。
+命令树对齐 **VyOS 1.5** 的主要结构：`interfaces`、`policy`、
+`protocols bgp <asn>`、`protocols bfd`、`service dhcp-server`、
+`container name/network` 等。纯 Python，不依赖 UCI 之外的框架；
+没有 UCI 对应项时才退化为 `ip`/`nft`/`tc`/FRR 等原生命令。
+
+- 完整命令参考：[docs/COMMANDS.md](docs/COMMANDS.md)（593 条，自动生成）
+- 操作/配置指南：[docs/GUIDE.md](docs/GUIDE.md)
+- DHCP 测试模板：[docs/DHCP-TEST.md](docs/DHCP-TEST.md)
+- 功能差距与测试记录：[docs/AUDIT.md](docs/AUDIT.md)、[docs/VYOS-GAP.md](docs/VYOS-GAP.md)
+
+---
+
+## 特性
+
+| 能力 | 说明 |
+|---|---|
+| 双模式 CLI | `root@host:~$` 操作模式 / `root@host#` 配置模式，`run` 可在配置模式跑 op 命令 |
+| candidate 事务 | `set/delete` 只改 candidate，`commit` 才生效并写盘 |
+| 安全提交 | `commit confirmed N` 超时自动回滚，`commit confirm` 取消定时器 |
+| 快照/回滚 | 每次 commit 前保存快照（保留 20 个），`rollback [ts]` |
+| 漂移检测 | `show system drift` 对比提交指纹与当前 UCI |
+| 开机对账 | `init.d/vyoscli` 后台执行 `vyoscli --sync`，只重放漂移段 |
+| VyOS 补全 | Tab / `?` 输出 `Possible completions:` + 两列对齐；支持 `run show ...` |
+| 分页 | 所有 `show` 输出支持空格下一页、`b` 上一页、`q` 退出 |
+| 原生后端 | UCI/netifd、fw4/nftables、FRR、dnsmasq、podman、strongSwan、xl2tpd 等 |
+| 真机验证 | 关键功能均有设备测试记录，详见 AUDIT.md |
+
+---
 
 ## 目录结构
 
@@ -12,50 +40,41 @@
 package/vyoscli/
 ├── Makefile                      # OpenWrt 包定义（opkg）
 ├── files/
-│   ├── usr/bin/vyoscli           # shell 启动器
+│   ├── usr/bin/vyoscli           # 启动器
 │   ├── usr/lib/vyoscli/          # Python 包
-│   │   ├── cli.py                # REPL、双模式、补全、? 帮助、命令分发
-│   │   ├── tree.py               # 命令树节点、动态节点、路径解析、值校验
-│   │   ├── commands.py           # op 命令 + 组装配置树
+│   │   ├── cli.py                # REPL、双模式、补全、分页、帮助
+│   │   ├── tree.py               # 命令树、动态节点、值校验
+│   │   ├── commands.py           # op 命令注册
 │   │   ├── schema.py             # 声明式 Spec + 树构建
-│   │   ├── config_tree.py        # 生成的完整配置树数据（353 节点）
-│   │   ├── config.py             # 配置库、事务、UCI/原生下发
-│   │   ├── op_show.py            # show * 实现
-│   │   └── __main__.py           # 入口 + 回滚定时器 / boot sync
-│   └── etc/init.d/vyoscli        # 开机对账（vyoscli --sync）
-schema/
-└── config-tree.json              # authored 命令树（唯一手改源）
-scripts/
-├── build-ipk.sh                  # SDK 内一键编译
-├── make-ipk.py                   # 无 SDK 快速打包（设备测试）
-├── build-config-tree.py          # schema/config-tree.json -> config_tree.py
-├── gen-command-reference.py      # config_tree.py -> docs/COMMANDS.md
-└── check-generated.sh            # 校验生成文档是否最新（CI 用）
-tests/                            # unittest（CLI / apply / schema，无第三方依赖）
-docs/
-├── COMMANDS.md                   # 完整命令参考（自动生成，223 条）
-├── GUIDE.md                      # 场景化配置指南
-├── VYOS-GAP.md                   # 与 VyOS 1.5 官方文档的功能差距与优先级
-├── DEPENDENCIES.md               # 依赖清单与体积
-└── AUDIT.md                      # 代码审查、已知问题、重构路线
+│   │   ├── config_tree.py        # 生成的配置树数据
+│   │   ├── config.py             # 事务、UCI/nft/FRR/podman 下发
+│   │   ├── op_show.py            # show/ping/mtr 等实现
+│   │   └── __main__.py           # 入口、回滚定时器、boot sync
+│   └── etc/init.d/vyoscli        # 开机对账
+schema/config-tree.json           # 唯一手改的命令树源
+scripts/                          # 打包、生成、校验脚本
+tests/                            # unittest
+docs/                             # 命令参考、指南、审计、依赖
 ```
+
+---
 
 ## 编译与安装
 
+### 方式一：OpenWrt SDK（推荐发布）
+
 ```bash
-# 1. 准备 SDK（版本尽量与目标固件一致；纯 Python 包对架构不敏感）
 wget https://downloads.openwrt.org/releases/24.10.0/targets/x86/64/openwrt-sdk-24.10.0-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst
 tar -I zstd -xvf openwrt-sdk-24.10.0-*.tar.zst
 
-# 2. 一键编译（无需 sudo / menuconfig）
-SDK=~/openwrt-sdk-24.10.0-x86-64_gcc-13.3.0_musl.Linux-x86_64 ./scripts/build-ipk.sh
+SDK=~/openwrt-sdk-24.10.0-x86-64_gcc-13.3.0_musl.Linux-x86_64 \
+  ./scripts/build-ipk.sh
 
-# 3. 安装到路由器
 scp bin/packages/*/base/vyoscli_*.ipk root@router:/tmp/
 ssh root@router 'opkg install /tmp/vyoscli_*.ipk'
 ```
 
-手工编译等价步骤：
+手工编译：
 
 ```bash
 cd openwrt-sdk-*/
@@ -66,206 +85,405 @@ make defconfig && make package/utils/vyoscli/compile V=s
 find bin/packages -name 'vyoscli*.ipk'
 ```
 
-### 无 SDK 快速打包（仅用于设备测试）
+### 方式二：无 SDK 快速打包（设备测试）
 
 ```bash
-python3 scripts/make-ipk.py --minimal-deps    # -> dist/vyoscli_0.1.0-r1_all.ipk
-python3 scripts/make-ipk.py                   # 带完整 Depends，等同于 Makefile
+python3 scripts/make-ipk.py --minimal-deps   # dist/vyoscli_0.1.0-r1_all.ipk
+python3 scripts/make-ipk.py                  # 带完整 Depends
 ```
 
-OpenWrt 的 `.ipk` 是 **gzip 包裹的 tar**（`./debian-binary` + `control.tar.gz` +
-`data.tar.gz`），不是 Debian 的 ar；脚本按此格式生成。`--minimal-deps` 只声明
-`libc/python3/python3-readline/ip-full`，便于在没装齐可选包的路由器上冒烟测试。
-正式发布仍建议走 SDK。
+`--minimal-deps` 只声明 `libc/python3/python3-readline/ip-full`，
+适合在没装齐可选包的路由器上冒烟；正式发布建议 SDK。
 
-依赖见 [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)。默认依赖较多（约 52 MB），
-小闪存设备请删掉 `Makefile` 中 `DEPENDS` 里用不到的行——缺包时对应功能输出
+### 依赖
+
+完整依赖见 [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)。按功能分组：
+
+| 功能 | 依赖 |
+|---|---|
+| CLI | python3、python3-readline、ip-full |
+| BGP/OSPF/RIP/BFD | frr、frr-ospfd、frr-ripd、frr-bfdd |
+| DHCP/DNS | dnsmasq、smartdns、adguardhome |
+| 防火墙/NAT | fw4、nftables、iptables-nft、kmod-ipt-* |
+| WireGuard | kmod-wireguard、wireguard-tools |
+| OpenVPN | openvpn-openssl |
+| IPsec | strongswan、strongswan-ipsec、strongswan-charon、插件 |
+| L2TP | xl2tpd、ppp-mod-pppol2tp |
+| 容器 | podman、netavark、iptables/conntrack 模块 |
+| LLDP | lldpd |
+| 用户管理 | shadow-useradd、shadow-chpasswd |
+| 路径监测 | mtr、mtr-json |
+
+小闪存设备可删掉 `Makefile` 中 `DEPENDS` 用不到的行；缺包时对应功能输出
 `... apply failed`，其余配置不受影响。
 
-## 使用
+---
 
-```
+## 快速开始
+
+```bash
 root@OpenWrt:~# vyoscli
 Welcome to vyoscli (a VyOS-style CLI for OpenWrt).
+
 root@OpenWrt:~$ configure
 root@OpenWrt# set system host-name edge-router
-root@OpenWrt# set interfaces ethernet eth0 address 203.0.113.10/24
-root@OpenWrt# set service dhcp-server shared-network-name LAN subnet 192.168.50.0/24 default-router 192.168.50.1
-root@OpenWrt# show configuration
+root@OpenWrt# set interfaces ethernet eth0 address 192.168.1.1/24
+root@OpenWrt# set service dhcp-server shared-network-name LAN interface lan
+root@OpenWrt# set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 default-router 192.168.1.1
 root@OpenWrt# compare
 root@OpenWrt# commit
+root@OpenWrt# exit
 ```
 
-远程改 SSH/防火墙等敏感配置时用两段式提交：
+远程改 SSH/防火墙/NAT 等敏感配置时用两段式提交：
 
-```
-root@OpenWrt# commit confirmed 5     # 5 分钟内不确认就自动回滚
-root@edge-router# commit confirm     # 一切正常，取消定时器
-```
-
-命令不熟时按 `?`：
-
-```
-root@OpenWrt# set interfaces ethernet ?
-  eth0  Per-interface config
-  eth1  Per-interface config
-root@OpenWrt# set firewall rule 900 ?
-  dest-port  Destination port
-  target     ACCEPT/DROP/REJECT
+```bash
+root@OpenWrt# commit confirmed 5     # 5 分钟不确认自动回滚
+root@OpenWrt# commit confirm         # 确认正常，取消定时器
 ```
 
-## 命令参考
+### Tab 与 `?`
 
-完整清单（223 条，含每条命令的说明与示例）见 **[docs/COMMANDS.md](docs/COMMANDS.md)**，
-由 `scripts/gen-command-reference.py` 从配置树自动生成。下面是最常用的部分。
+```bash
+root@OpenWrt# set 
+Possible completions:
+  container          Podman containers
+  firewall           Firewall policy
+  interfaces         Interface parameters
+  nat                Network Address Translation
+  policy             Routing policy
+  protocols          Routing protocols
+  service            System services
+  system             System parameters
+  vpn                VPN
+```
 
-### 操作模式
+```bash
+root@OpenWrt# set interfaces ethernet eth0 ?
+Possible completions:
+  address     IPv4 address/prefix
+  description Description
+  mtu         MTU (default 1500)
+  vif         VLAN interface
+  ...
+```
 
-| 命令 | 作用 | 示例 |
-|---|---|---|
-| `configure` | 进入配置模式 | `configure` |
-| `exit` / `quit` | 退出 CLI | `exit` |
-| `show version` | 系统/内核/固件版本与硬件资产 | `show version` |
-| `show dependencies` | 检查依赖包是否齐全 | `show dependencies` |
-| `show interface` | 接口摘要（地址/MAC/MTU/状态） | `show interface` |
-| `show interface ethernet <if>` | 单接口详情 | `show interface ethernet eth0` |
-| `show history` | 本次会话的命令历史 | `show history` |
-| `show log` | 系统日志（`logread`） | `show log` |
-| `show configuration` | 运行配置树形视图 | `show configuration` |
-| `show configuration commands` | 运行配置导出为 `set` 命令 | `show configuration commands` |
-| `show configuration json` | 运行配置 JSON | `show configuration json` |
-| `show system` | 系统状态摘要 | `show system` |
-| `show system uptime` | 运行时长/负载 | `show system uptime` |
-| `show system memory` | 内存占用 | `show system memory` |
-| `show system storage` | 文件系统占用 | `show system storage` |
-| `show system processes` | 进程列表 | `show system processes` |
-| `show system kernel-messages` | 内核环缓冲 | `show system kernel-messages` |
-| `show system login` | 本地用户账户 | `show system login` |
-| `show system drift` | 上次 commit 后被改动/删除的 UCI 段 | `show system drift` |
-| `show ip route` | 路由表 | `show ip route` |
-| `show ip route static` | 静态路由 | `show ip route static` |
-| `show ip route connected` | 直连路由 | `show ip route connected` |
-| `show ip route summary` | 路由条数摘要 | `show ip route summary` |
-| `show container` | 运行中的 podman 容器 | `show container` |
-| `show container image` | 本地镜像 | `show container image` |
-| `show dhcp lease` | DHCP 租约 | `show dhcp lease` |
-| `show smartdns` | smartdns 状态 | `show smartdns` |
-| `show hardware usb` | USB 设备 | `show hardware usb` |
-| `ping <host>` | 调 busybox ping | `ping 1.1.1.1` |
-| `add container image <img>` | 拉取镜像 | `add container image nginx:alpine` |
-| `delete container image <img>` | 删除镜像 | `delete container image nginx:alpine` |
-| `restart service <svc>` | 重启服务 | `restart service ssh` |
-| `reload service <svc>` | 重载服务 | `reload service firewall` |
+输出较长时自动进入分页：空格下一页、`b` 上一页、`q` 退出。
 
-> op 模式下未知命令会透传给 shell（例如 `logread -f`、`nslookup`），
-> 找不到命令时给出 `Invalid command` 与相近命令提示。
+---
 
-### 配置模式
+## 操作模型
 
-| 命令 | 作用 | 示例 |
-|---|---|---|
-| `set <path> <value>` | 在 candidate 中写值（list 类型自动追加） | `set system host-name r1` |
-| `delete <path> [value]` | 删除节点或 list 中的某一项 | `delete system name-server 8.8.8.8` |
-| `edit <path>` / `next <path>` | 进入子节点，提示符带 `[path]` | `edit interfaces ethernet eth0` |
-| `up` | 返回上一层 | `up` |
-| `show configuration` | 查看 candidate（未提交会标注） | `show configuration` |
-| `compare` | running 与 candidate 的差异 | `compare` |
-| `commit` | 应用 candidate 并落盘 | `commit` |
-| `commit confirmed [N]` | 应用并挂 N 分钟自动回滚（默认 5） | `commit confirmed 3` |
-| `commit confirm` | 取消挂起的回滚定时器 | `commit confirm` |
-| `discard` | 丢弃未提交修改 | `discard` |
-| `save` | 立即持久化 running（commit 已自动写盘） | `save` |
-| `sync` | 按 applied.json 只重放漂移的段落 | `sync` |
-| `rollback [timestamp]` | 回滚到某个 commit 快照 | `rollback` |
-| `exit` | 退回上一层 / 操作模式 | `exit` |
-
-### 配置树速览
-
-| 子树 | 常用命令示例 |
+| 命令 | 作用 |
 |---|---|
-| `system` | `set system host-name r1`<br>`set system timezone Asia/Shanghai`<br>`set system ntp ntp.aliyun.com`<br>`set system login user admin authentication plaintext-password ***` |
-| `interfaces ethernet` | `set interfaces ethernet eth0 address 192.0.2.10/24`<br>`set interfaces ethernet eth0 description uplink`<br>`set interfaces ethernet eth0 vif 100 address 192.0.2.100/24` |
-| `interfaces bridge` | `set interfaces bridge br0 member eth1`<br>`set interfaces bridge br0 vlan 10 tagged eth1` |
-| `interfaces wireguard` | `set interfaces wireguard wg0 address 10.99.0.1/24`<br>`set interfaces wireguard wg0 peer <pubkey> endpoint 1.2.3.4:51820` |
-| `interfaces tunnel/vxlan/dummy/loopback` | `set interfaces tunnel tun0 encapsulation gre`<br>`set interfaces vxlan vx0 vni 42`<br>`set interfaces dummy dum0 address 10.10.10.1/32` |
-| `protocols static` | `set protocols static route 10.0.0.0/8 next-hop 192.168.1.1` |
-| `protocols bgp` | `set protocols bgp local-as 65001`<br>`set protocols bgp neighbor 10.0.0.2 remote-as 65002`<br>`set protocols bgp network 203.0.113.0/24` |
-| `protocols route-map` | `set protocols route-map RM1 permit 10 set local-preference 200` |
-| `policy` | `set policy community-list 10 rule 10 regex 65001:*`<br>`set policy route-redirect proxy rule 10 dport 80` |
-| `vpn ipsec` | `set vpn ipsec ike-group G1 proposal 10 encryption aes256`<br>`set vpn ipsec site-to-site peer 203.0.113.5 secret ***` |
-| `service ssh` | `set service ssh port 2222`<br>`set service ssh root-login true`<br>`set service ssh access-control deny address 203.0.113.0/24` |
-| `service dhcp-server` | `set service dhcp-server shared-network-name LAN subnet 192.168.50.0/24 default-router 192.168.50.1` |
-| `service dnsmasq/smartdns/adguard` | `set service dnsmasq port 53`<br>`set service smartdns server aliyun ip 223.5.5.5` |
-| `service crontab` | `set service crontab backup schedule '0 3 * * *'`<br>`set service crontab backup script /etc/vyoscli/scripts/backup.sh` |
-| `service sqm/tcp-accelerate` | `set service sqm interface eth0`<br>`set service tcp-accelerate congestion-control bbr` |
-| `firewall` | `set firewall zone lan network lan`<br>`set firewall rule 100 dest-port 22 target ACCEPT` |
-| `nat` | `set nat source rule 100 out-interface wan`<br>`set nat destination rule 10 port 8080 to 192.168.1.10` |
-| `container` | `set container web image nginx:alpine`<br>`set container web port 8080:80` |
-| `traffic-policy` | `set traffic-policy shaper wan interface eth0` |
-| `vrf` | `set vrf name blue table 100` |
+| `configure` | 进入配置模式 |
+| `set <path> <value>` | 写入 candidate |
+| `delete <path> [value]` | 删除节点或列表项 |
+| `edit <path>` / `next <path>` | 进入子节点，提示符显示 `[path]` |
+| `up` | 返回上一层 |
+| `show configuration` | 查看 candidate |
+| `show configuration commands` | 导出为 `set` 命令 |
+| `show configuration json` | 导出 JSON |
+| `compare` | running vs candidate |
+| `commit` | 应用并写盘 |
+| `commit confirmed [N]` | 应用并挂 N 分钟回滚（默认 5） |
+| `commit confirm` | 取消回滚定时器 |
+| `discard` | 丢弃 candidate |
+| `save` | 立即持久化 running |
+| `sync` | 只重放漂移的段落 |
+| `rollback [timestamp]` | 回滚快照 |
+| `run <op command>` | 配置模式执行 op 命令 |
 
-## 配置存储
+存储位置：
 
 | 路径 | 内容 |
 |---|---|
-| `/etc/vyoscli/running.json` | 当前生效配置（commit 成功后写入） |
-| `/etc/vyoscli/candidate.json` | 未提交的修改（每条 set/delete 即时落盘） |
-| `/etc/vyoscli/applied.json` | commit 写过的 UCI section 指纹（`show system drift` 用） |
-| `/etc/vyoscli/history/<ts>.json` | 每次 commit 前的快照，保留 20 个 |
-| `/etc/vyoscli/backup/network.<section>.json` | 接管某个已有接口前的原配置备份 |
-| `/etc/vyoscli/rollback.conf` | 存在即表示有挂起的 confirmed-commit 定时器 |
+| `/etc/vyoscli/running.json` | 当前生效配置 |
+| `/etc/vyoscli/candidate.json` | 未提交修改 |
+| `/etc/vyoscli/applied.json` | 已提交 UCI 指纹 |
+| `/etc/vyoscli/history/<ts>.json` | commit 前快照（20 个） |
+| `/etc/vyoscli/backup/` | 接管已有接口/UCI 段前的备份 |
+| `/etc/vyoscli/rollback.conf` | confirmed-commit 定时器 |
 
-配置文件为 `0600`（内含 WireGuard 私钥、PSK、密码等）。
+配置为 `0600`（含 WireGuard 私钥、PSK、密码等）。
 
-开机时 `init.d/vyoscli` 会在后台执行一次 `vyoscli --sync`：与 UCI 一致时是空操作，
-配置被恢复/手工改过时只重放漂移的段落。
+---
 
-## 测试
+## 配置示例
+
+### 系统
+
+```bash
+set system host-name r1
+set system timezone Asia/Shanghai
+set system name-server 223.5.5.5
+set system ntp ntp.aliyun.com
+set system login user admin authentication plaintext-password '***'
+```
+
+### 接口：MTU / TCP MSS / VIF / 桥
+
+```bash
+set interfaces ethernet eth0 mtu 1400
+set interfaces ethernet eth0 tcp-mss 1300
+set interfaces ethernet eth0 vif 100 address 192.168.100.1/24
+
+set interfaces bridge br0 member eth1
+set interfaces bridge br0 member eth2
+set interfaces bridge br0 address 10.0.0.1/24
+
+set interfaces dummy dum0 address 10.10.10.1/24
+```
+
+- 删除 `mtu` 只清 UCI，不会现场改链路，避免管理口/WAN 失联。
+- `tcp-mss` 通过 fw4 include（`/etc/nftables.d/20-vyos-mss.nft`）在 mangle 链生效。
+
+### WireGuard
+
+```bash
+set interfaces wireguard wg0 address 10.99.0.1/24
+set interfaces wireguard wg0 private-key '...'
+set interfaces wireguard wg0 listen-port 51820
+set interfaces wireguard wg0 peer 'PEER_PUBKEY' endpoint 1.2.3.4:51820
+set interfaces wireguard wg0 peer 'PEER_PUBKEY' allowed-ips 10.99.0.2/32
+```
+
+安装 `kmod-wireguard`/`wireguard-tools` 后如果 netifd 不识别新 proto，
+重启一次 network（`/etc/init.d/network restart`）即可。
+
+### BGP（VyOS 1.5 ASN 实例）
+
+```bash
+set protocols bgp 65000 parameters router-id 192.168.75.241
+set protocols bgp 65000 timers holdtime 15
+set protocols bgp 65000 timers keepalive 5
+
+set protocols bgp 65000 address-family ipv4-unicast maximum-paths ibgp 4
+set protocols bgp 65000 address-family ipv4-unicast redistribute connected
+
+set protocols bgp 65000 neighbor 192.168.5.2 remote-as 65002
+set protocols bgp 65000 neighbor 192.168.5.2 local-as 65001
+set protocols bgp 65000 neighbor 192.168.5.2 address-family ipv4-unicast route-map export med100
+set protocols bgp 65000 neighbor 192.168.5.2 address-family ipv4-unicast soft-reconfiguration inbound
+set protocols bgp 65000 neighbor 192.168.5.2 bfd check-control-plane-failure
+
+set protocols bfd peer 192.168.5.2 echo-mode
+```
+
+生成 FRR 配置：
+
+```
+router bgp 65000
+ timers bgp 5 15
+ neighbor 192.168.5.2 remote-as 65002
+ neighbor 192.168.5.2 route-map med100 out
+ neighbor 192.168.5.2 local-as 65001
+ neighbor 192.168.5.2 bfd
+  neighbor 192.168.5.2 activate
+  neighbor 192.168.5.2 soft-reconfiguration inbound
+  maximum-paths ibgp 4
+  redistribute connected
+bfd
+ peer 192.168.5.2
+  echo-mode
+```
+
+> FRR 每次 BGP 配置提交后会重启以加载 `frr.conf`；切换期间邻居会短暂重建。
+
+### MED 三网优先级
+
+```bash
+set policy route-map med100 rule 10 action permit
+set policy route-map med100 rule 10 set metric 100
+
+set policy route-map med200 rule 10 action permit
+set policy route-map med200 rule 10 set metric 200
+
+# 无线/电台网 -> MED 100，卫星网 -> MED 200
+set protocols bgp 65000 neighbor 192.168.4.2 address-family ipv4-unicast route-map export med100
+set protocols bgp 65000 neighbor 192.168.75.218 address-family ipv4-unicast route-map export med200
+```
+
+MED 数值小优先：eth5(0) → eth4(100) → eth0(200)。
+
+### 静态路由 / OSPF / RIP
+
+```bash
+set protocols static route 10.0.0.0/8 next-hop 192.168.1.1
+set protocols static table 110 route 0.0.0.0/0 next-hop 192.168.1.1
+
+set protocols ospf router-id 192.168.1.1
+set protocols ospf area 0 network 192.168.1.0/24
+
+set protocols rip version 2
+set protocols rip network 192.168.1.0/24
+```
+
+### Policy：route-map / community-list / local-route
+
+```bash
+set policy community-list 80 rule 10 action permit
+set policy community-list 80 rule 10 regex '65000:9939'
+
+set policy route-map RM rule 100 action permit
+set policy route-map RM rule 100 description to_hk
+set policy route-map RM rule 100 match community community-list 80
+set policy route-map RM rule 100 set ip-next-hop 10.10.57.1
+set policy route-map RM rule 100 set local-preference 50
+
+set policy local-route rule 6600 source 192.168.1.1
+set policy local-route rule 6600 set table 110
+```
+
+### 防火墙 / NAT
+
+```bash
+# VyOS 风格规则（inet vyos_fw, priority -10）
+set firewall ipv4 input filter rule 100 action accept
+set firewall ipv4 input filter rule 100 protocol tcp
+set firewall ipv4 input filter rule 100 destination port 8080
+
+# 地址/端口/接口组
+set firewall group address-group AG address 203.0.113.0/24
+set firewall group port-group PG port 8080
+
+# NAT
+set nat source rule 100 out-interface eth0
+set nat source rule 100 translation address masquerade
+
+set nat destination rule 100 inbound-interface eth0
+set nat destination rule 100 destination port 8080
+set nat destination rule 100 translation address 10.0.0.10
+```
+
+### DHCP / DNS
+
+```bash
+set service dhcp-server shared-network-name LAN interface lan
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 default-router 192.168.1.1
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 name-server 192.168.1.1
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 range R1 start 192.168.1.100
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 range R1 stop 192.168.1.150
+
+show dhcp server
+show dhcp server pools
+show dhcp server leases
+show dhcp server static
+```
+
+完整测试步骤见 [docs/DHCP-TEST.md](docs/DHCP-TEST.md)。
+
+### 容器（VyOS 结构）
+
+```bash
+# 虚拟网络（不存在会自动创建）
+set container network vnet prefix 10.89.7.0/24
+set container network vnet gateway 10.89.7.1
+
+# host 网络
+set container name c1 image docker.io/library/nginx:alpine
+set container name c1 allow-host-networks
+
+# 加入虚拟网络
+set container name c2 image docker.io/library/busybox:latest
+set container name c2 network vnet
+set container name c2 volume conf source /config/c2 destination /app/conf
+set container name c2 environment TZ value Asia/Shanghai
+set container name c2 restart no
+```
+
+`container name` 还支持 `privileged`、`capability`、`device`、`port`、
+`command`、`disable`；`container network` 支持 `prefix/gateway/mtu/type/description`。
+
+### VPN
+
+```bash
+# L2TP
+set vpn l2tp local-ip 10.99.9.1
+set vpn l2tp pool-start 10.99.9.100
+set vpn l2tp pool-end 10.99.9.150
+set vpn l2tp user test password '***'
+
+# IPsec（需要 strongswan-ipsec/charon 插件）
+set vpn ipsec ike-group IKE1 proposal 10 encryption aes256
+set vpn ipsec ike-group IKE1 proposal 10 hash sha256
+set vpn ipsec esp-group ESP1 proposal 10 encryption aes256
+set vpn ipsec esp-group ESP1 proposal 10 hash sha256
+
+# OpenVPN
+set interfaces openvpn vtun9 mode server
+set interfaces openvpn vtun9 proto udp
+set interfaces openvpn vtun9 port 11999
+set interfaces openvpn vtun9 dev tun
+```
+
+### 运维/诊断
+
+```bash
+show interfaces
+show ip route static
+show ip bgp summary
+show ip bgp neighbors 192.168.5.2 received-routes
+show system uptime
+show system cpu
+show system login user
+show system connections
+show system drift
+
+ping 1.1.1.1                 # 交互式长 ping，Ctrl+C 结束
+ping tcp 1.1.1.1 443         # 或 ping tcp ip 1.1.1.1 port 443
+ping udp 1.1.1.1 53
+
+show service mtr
+set service mtr t1 target 1.1.1.1
+set service mtr t1 count 10
+set service mtr t1 interval 60
+```
+
+---
+
+## 测试与 CI
 
 ```bash
 python3 -m unittest discover -s tests -v
-```
-
-- `tests/test_cli.py`：候选配置、编辑路径、渲染回放、commit/discard/rollback、补全与 `?`
-- `tests/test_paths.py`：文档命令与命令树的可达性矩阵
-- `tests/test_apply.py`：mock `uci`/`init.d`，断言 commit 生成的确切命令
-- `tests/test_schema.py`：schema/template 的每条 spec 都可 set 且类型正确
-
-命令树只改 `schema/config-tree.json`，然后：
-
-```bash
-python3 scripts/build-config-tree.py      # 生成 config_tree.py
-python3 scripts/gen-command-reference.py  # 生成 docs/COMMANDS.md
-```
-
-`tests/test_tree_source.py` 会校验生成物与源一致。
-
-### CI
-
-`.github/workflows/ci.yml` 在每次 push / PR 上执行：
-
-1. 全量单测；
-2. `./scripts/check-generated.sh`——校验 `config_tree.py` 与 `docs/COMMANDS.md` 是否由源生成且无差异；
-3. `python3 scripts/make-ipk.py --minimal-deps` 做一次无 SDK 的打包冒烟。
-
-本地等价检查：
-
-```bash
-python3 -m unittest discover -s tests
 ./scripts/check-generated.sh
 python3 scripts/make-ipk.py --minimal-deps
 ```
 
+CI（`.github/workflows/ci.yml`）每次 push/PR：
+
+1. 全量单测（135 条）；
+2. 校验 `config_tree.py`、`docs/COMMANDS.md` 由源生成且无差异；
+3. 无 SDK 打包冒烟。
+
+修改命令树只改 `schema/config-tree.json`，然后：
+
+```bash
+python3 scripts/build-config-tree.py
+python3 scripts/gen-command-reference.py
+```
+
+---
+
 ## 已知限制
 
-完整清单见 [docs/AUDIT.md](docs/AUDIT.md)；与 VyOS 1.5 官方配置指南的逐项对比和补全优先级见 [docs/VYOS-GAP.md](docs/VYOS-GAP.md)。最需要注意的：
+- **DHCP relay**：`dhcp-fwd` 已改为前台启动并去掉 chroot，但设备上仍会退出，
+  日志 `BOOTREQUEST request from interface without clients`，暂未完全可用。
+- **container 默认网络**：netavark 依赖 iptables/conntrack/addrtype 内核模块；
+  缺模块时用 `container name ... network host` 或补齐依赖。
+- **container 镜像拉取**：默认 registry 可能不可达；建议先 `add container image`
+  或使用本地已有镜像。
+- **IPsec**：已能生成 ike/esp 组和启动 strongSwan，site-to-site/证书场景未做端到端。
+- **Wireless**：依赖射频硬件，未做端到端验证。
+- **commit 非原子**：某段下发失败时其余段仍会执行并返回说明。
+- **FRR 重启**：BGP 配置提交会重启 FRR，邻居会短暂重建。
+- VyOS 风格防火墙/NAT 使用独立 nft 表，`accept` 仍会继续走 fw4 zone 策略。
 
-- 部分叶子（`description`/`mtu`/`mac`/`vif`/`vrf` 等）目前只写入 JSON，尚未下发；
-- IPsec 的 remote-access/证书模式、wireless（需射频硬件）未做端到端验证；
-- commit 不是原子操作：某一段下发失败时其余段仍会执行，并返回成功；
-- VyOS 风格防火墙（`firewall ipv4/ipv6 ...`）渲染到 `inet vyos_fw`（priority -10）：它可以提前 drop/reject，`accept` 仍会继续走 OpenWrt fw4 的 zone 策略；
-- VyOS 风格 NAT（`nat source/destination rule`）渲染到 `inet vyos_nat`（dstnat-10/srcnat-10），会先于 fw4 的 zone masquerade 生效；
-- `service https` 提供只读 API，Bearer token 鉴权；配置 `certificate <pki 名称>` 即启用 TLS，否则为明文 HTTP，建议只监听回环或内网；
-- 动态节点在嵌套层级（如 `wireguard … peer`）只给 `<name>` 提示，不列现有实例。
+更细的测试记录、修复历史与差距见 [docs/AUDIT.md](docs/AUDIT.md) 和
+[docs/VYOS-GAP.md](docs/VYOS-GAP.md)。
 
-后续规划见 [docs/AUDIT.md](docs/AUDIT.md) 的“建议的演进方案”。
+---
+
+## License
+
+MIT

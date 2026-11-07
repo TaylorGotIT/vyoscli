@@ -1,1189 +1,497 @@
-# vyoscli 配置指南
+# vyoscli 操作与配置指南
 
-类 VyOS 的 OpenWrt CLI。目录结构对齐 [VyOS 1.5 官方文档](https://docs.vyos.io/en/1.5/configuration/index.html)。
+本文是当前实现的操作手册，命令以 `schema/config-tree.json` 为准。
+完整命令清单见 [COMMANDS.md](COMMANDS.md)；真机测试/已知问题见 [AUDIT.md](AUDIT.md)。
 
-> **实现状态**：本指南描述的是目标行为。哪些路径已经真正下发到 UCI、哪些只写 JSON、
-> 哪些还没在真机验证，见 [AUDIT.md](AUDIT.md) §5 的对照表。遇到"set 成功但没生效"，
-> 先查那张表。
-
-## 目录
-
-- [入门](#入门)
-- [System](#system)
-- [Interfaces](#interfaces)
-- [Protocols](#protocols)
-- [VPN](#vpn)
-- [Service](#service)
-- [Firewall](#firewall)
-- [NAT](#nat)
-- [VPN](#vpn)
-- [Container](#container)
-- [Traffic Policy](#traffic-policy)
-- [运维](#运维)
+> 版本：0.1.0-r1  
+> 目标：OpenWrt 23.05/24.10，Python 3.11  
+> 入口：`vyoscli`（或 `/usr/bin/vyoscli`）
 
 ---
 
-## 功能概览
+## 1. 登录与模式
 
+```bash
+root@OpenWrt:~# vyoscli
+Welcome to vyoscli (a VyOS-style CLI for OpenWrt).
 
-类 VyOS 的 OpenWrt CLI，opkg 包 `vyoscli`。
-
-## 交互模型
-
-| 特性 | 说明 |
-|---|---|
-| 双模式 | op `root@host:~$` / config `root@host#` |
-| candidate 配置 | 改配置不立即生效，存 candidate.json |
-| commit | candidate → running，自动打快照（保留 20 个） |
-| commit confirmed N | 生效但挂 N 分钟定时器，超时自动回滚 |
-| commit confirm | 取消挂起的定时器 |
-| rollback [ts] | 手动回滚到任意历史快照 |
-| discard | 丢弃未提交修改 |
-| compare | 对比 running vs candidate 差异 |
-| run xxx | cfg 模式下执行 op 命令 |
-| Tab 补全 | 两列对齐：命令名 + help 描述 |
-| 前缀匹配 | 前几个字母唯一就补全 |
-| ? 帮助 | show ?、set system ?、? 按当前节点列出可用命令 |
-| 历史持久化 | 重启后命令历史还在 |
-
-## op 模式
-
-| 命令 | 作用 |
-|---|---|
-| `configure` | 进入配置模式 |
-| `exit` / `quit` | 退出 CLI |
-| `show version` | 版本/内核/架构/硬件资产卡 |
-| `show interface` | 接口摘要（MAC/MTU/状态/描述） |
-| `show interface ethernet eth0` | 单接口详情（ip addr + 统计） |
-| `show history` | 命令历史 |
-| `show log` | 系统日志 logread |
-| `show configuration` | running 配置树形缩进 |
-| `show configuration commands` | running 配置为 `set ...` 脚本 |
-| `show configuration json` | running 配置为 JSON |
-| `show system` | uptime/cpu/memory/storage/processes/kernel-messages/login |
-| show system drift | 列出上次 commit 后被人改动/删除的 UCI section |
-| `show ip route` / `static` / `connected` / `summary` | 路由表 |
-| `show container` | podman 容器列表 |
-| `show container image` | podman 镜像列表 |
-| `show dhcp lease` | dnsmasq DHCP 租约 |
-| `show smartdns` | smartdns 状态 |
-| `add container image <name>` | podman pull |
-| `delete container image <name>` | podman rmi |
-
-## 配置树
-
-```
-set system
-  host-name <text>
-  timezone <IANA tz>                e.g. Asia/Shanghai
-  ntp <host>                         (可重复)
-  language <locale>
-  name-server <ipv4>                dnsmasq 上游
-  dns <ipv4>                        路由器自身 resolver
-  hardware vendor/model/serial
-
-set interfaces ethernet <ifname>
-  address <ipv4/pfx>                (可重复)
-  description <text>
-  mtu <n> | mac <mac> | vrf <name>
-  disable <true|false>
-  vif <vlan-id> address <ipv4/pfx>
-
-set interfaces lan|wan
-  device <ifname>
-
-set interfaces wireless <ifname>
-  mode <ap|sta>
-  ssid <text>
-  channel <num>
-  security <wpa2|wpa3|none>
-  passphrase <text>
-
-set interfaces bridge br0
-  member <ifname>
-  address <ipv4/pfx>
-
-set interfaces dummy dum0
-  address <ipv4/pfx>
-
-set interfaces tunnel tun0
-  encapsulation <gre|ipip|sit|ip6ip6>
-  source-address <ipv4>
-  remote <ipv4>
-  address <ipv4/pfx>
-
-set interfaces vxlan vxlan0
-  vni <num>
-  remote <ipv4>
-
-set interfaces wireguard wg0
-  address <ipv4/pfx>
-  private-key <key>
-  listen-port <port>
-  peer <pubkey>
-    allowed-ips <cidr>
-    endpoint <ip:port>
-
-set interfaces openvpn vtun0
-  mode <server|client>
-  proto <udp|tcp>
-  port <port>
-  dev <tun|tap>
-  ca <path> | cert <path> | key <path> | dh <path>
-  server <pool> <netmask>
-  push <"route ...">                (可重复)
-
-set protocols static route <prefix>
-  next-hop <ipv4>
-
-set protocols bgp
-  local-as <asn>
-  router-id <ipv4>
-  network <cidr>                    (可重复)
-  neighbor <ipv4>
-    remote-as <asn>
-    description <text>
-    route-map-in <name>
-    route-map-out <name>
-
-set protocols route-map <name> permit <num>
-  set local-preference <n>
-  set med <n>
-  set community <asn:nn>
-  set next-hop <ipv4>
-
-set service ssh
-  port <port>
-  root-login <true|false>
-
-set service dhcp-server shared-network-name <name>
-  interface <uci-net>               可选，缺省时按 subnet 自动匹配接口
-  subnet <cidr>
-    default-router <ipv4>
-    name-server <ipv4>              (可重复)
-    domain-name <text>
-    domain-search <text>
-    lease <seconds>
-    range <id> start <ipv4> stop <ipv4>
-    static-mapping <name> ip-address <ipv4> mac-address <mac>
-
-set service smartdns
-  enabled <true|false>
-  port <port>
-  listen-address <ipv4>
-  forbid-aaaa <true|false>
-  server <name> ip <ipv4>
-  domain-set <name> domain <domain>  (可重复)
-  domain-rule <name> domain-set <name> forward <server>
-
-set service adguard
-  enabled <true|false>
-  port <port>
-  listen-address <ipv4>
-  web-port <port>
-
-set service dnsmasq
-  port <port>
-  listen-address <ipv4>
-
-set service crontab <name>
-  schedule "<cron>"
-  script <path>
-
-set firewall zone <name>
-  network <net>
-  input/output/forward ACCEPT|DROP|REJECT
-
-set firewall forwarding <name>
-  src <zone>
-  dest <zone>
-
-set firewall rule <num>
-  name <text>
-  src <zone>
-  dest-port <port>
-  target ACCEPT|DROP|REJECT
-
-set nat source rule <num>
-  out-interface <if>
-  translation masquerade
-
-set nat destination rule <num>
-  in-interface <if>
-  port <port>
-  to <internal-ipv4>
-
-set container <name>
-  image <image>
-  network <net>
-  port <host:container>             (可重复)
-  volume <host:container>           (可重复)
-  restart <always|on-failure|no>
-  command <text>
-  environment <KEY> value <text>
-```
-
-## 底层下发
-
-| 配置 | 下发方式 | reload |
-|---|---|---|
-| interfaces ethernet/bridge/dummy | UCI network.* | netifd reload |
-| interfaces wireless | UCI wireless.vyos_* | wifi reload |
-| interfaces tunnel/vxlan | UCI interface.vyos_* | netifd reload |
-| interfaces wireguard | UCI network/network.wg0 | wg-quick up |
-| interfaces openvpn | /etc/openvpn/*.conf | openvpn init restart |
-| system host-name/timezone/ntp | UCI system.* | sysntpd restart |
-| system name-server | UCI dhcp.@dnsmasq[0].server | dnsmasq reload |
-| system dns | /tmp/resolv.conf.d/resolv.conf.head | - |
-| protocols static route | UCI network.vyos_route_* | netifd reload |
-| protocols bgp | UCI frr.vyos_bgp_* + frr.conf 标记块 | restart（核心变）/ vtysh 热加载（route-map） |
-| service ssh | UCI dropbear.* | dropbear restart |
-| service dhcp-server | UCI dhcp.vyos_dhcp_*（按 subnet 自动定位接口） | dnsmasq reload |
-| service dnsmasq | UCI dhcp.@dnsmasq[0].port/listenaddress | dnsmasq restart |
-| service smartdns | UCI smartdns.vyos_* | smartdns restart |
-| service adguard | UCI adguardhome.main | adguardhome restart |
-| service crontab | /etc/crontabs/root（标记块） | cron restart |
-| firewall | UCI firewall.vyos_* | firewall reload |
-| nat | UCI firewall.vyos_nat_* | firewall reload |
-| container | podman rm -f / podman run | - |
-
-## DNS 端口冲突检测
-
-commit 前自动检测：
-- dnsmasq / smartdns / adguard 都纳入 candidates
-- 按 IP:端口粒度判定（`ss -tulnp`）
-- 0.0.0.0 通配监听会和任何同端口冲突
-- 冲突直接拒绝 commit，running 回滚到旧值
-
-## 依赖安装策略
-
-自 0.1.x 起**不再在 commit 时自动 opkg install**（路由器在线装包容易把
-管理面卡死）。依赖统一由 Makefile 的 `DEPENDS` 或手工 `opkg install` 解决：
-
-```
-opkg install python3 python3-readline ip-full
-opkg install smartdns adguardhome frr wireguard-tools openvpn-openssl \
-             strongswan-minimal conserver podman sqm-scripts
-```
-
-`show dependencies` 会逐项检查并给出缺失列表与安装命令。
-完整清单与体积见 [DEPENDENCIES.md](DEPENDENCIES.md)；只想要精简镜像时，
-按需删掉 Makefile `DEPENDS` 里用不到的行即可（代码对缺包是容错的：
-对应 apply 会输出 `... apply failed`，其余配置照常生效）。
-
-## 目录布局
-
-```
-/etc/vyoscli/
-├── running.json         当前运行配置
-├── candidate.json       未提交修改
-├── rollback.conf        挂起的回滚定时器
-├── history/             commit 快照（保留 20 个）
-├── scripts/             用户脚本（cron 调用）
-├── lists/               域名列表等数据文件
-└── adguard/             AdGuardHome 持久化配置
-```
-
-迁移：`tar czf /tmp/vyoscli.tgz -C /etc vyoscli/`，新设备解包后 commit。
-
----
-
-## 入门
-
-```
+root@OpenWrt:~$            # 操作模式（op）
 root@OpenWrt:~$ configure
-root@OpenWrt# set ...
-root@OpenWrt# commit
+root@OpenWrt#              # 配置模式（cfg）
 root@OpenWrt# exit
+root@OpenWrt:~$ exit       # 退出 CLI
 ```
 
-远程改 SSH/firewall/VPN 必用：
+- 操作模式：`show`、`ping`、`restart`、`monitor` 等，未识别命令会透传给 shell。
+- 配置模式：`set/delete/edit/commit/rollback` 等。
+- 配置模式下可用 `run <op命令>`，例如 `run show interfaces`。
+- 提示符会显示当前 `edit` 路径，如 `root@OpenWrt# [interfaces ethernet eth0]`。
 
+### Tab 与 `?`
+
+```bash
+root@OpenWrt# set 
+Possible completions:
+  container          Podman containers
+  firewall           Firewall policy
+  interfaces         Interface parameters
+  nat                Network Address Translation
+  policy             Routing policy
+  protocols          Routing protocols
+  service            System services
+  system             System parameters
+  vpn                VPN
 ```
-root@OpenWrt# commit confirmed 3
-root@OpenWrt:~$ commit confirm
+
+- 多候选 Tab / `?` 输出 `Possible completions:` + 两列对齐。
+- 唯一匹配直接补全；值占位符（`<x.x.x.x>`、`<1-65535>`）在下一行显示提示，不插入命令。
+- `show` 输出过长时分页：空格下一页、`b` 上一页、`q` 退出。
+
+---
+
+## 2. 配置事务
+
+```bash
+root@OpenWrt# set system host-name r1
+root@OpenWrt# compare
+root@OpenWrt# commit
+root@OpenWrt# show configuration commands
+```
+
+| 操作 | 命令 | 说明 |
+|---|---|---|
+| 写值 | `set <path> <value>` | 写入 candidate，不立即生效 |
+| 删节点 | `delete <path>` | 删除子树/叶子 |
+| 删列表项 | `delete <path> <value>` | 如 `delete system name-server 8.8.8.8` |
+| 进入子树 | `edit <path>` / `next <path>` | 提示符显示路径 |
+| 返回 | `up` | 上一层 |
+| 查看 candidate | `show configuration` | 未提交内容 |
+| 差异 | `compare` | running vs candidate |
+| 提交 | `commit` | 生效 + 写 running.json + 快照 |
+| 安全提交 | `commit confirmed 5` | 5 分钟不确认自动回滚 |
+| 确认 | `commit confirm` | 取消定时器 |
+| 丢弃 | `discard` | 丢弃 candidate |
+| 回滚 | `rollback [ts]` | 回到历史快照 |
+| 同步 | `sync` | 只重放漂移段 |
+| 导出 | `show configuration json` | JSON |
+
+### 远程操作防失联
+
+改 SSH、WAN、防火墙、NAT 前：
+
+```bash
+root@OpenWrt# commit confirmed 5
+# 另开一个 SSH 会话确认能登录、业务正常
+root@OpenWrt# commit confirm
+```
+
+如果新配置导致失联，5 分钟后自动回滚到上一份 running。
+
+### 漂移与开机对账
+
+```bash
+root@OpenWrt:~$ show system drift
+No drift: committed UCI sections still match the running config.
+```
+
+有人手工改了 UCI，或配置被恢复，会显示 `changed/deleted <section>`。
+`sync` 按 `applied.json` 只重放漂移的段落；开机时 `init.d/vyoscli` 也会后台执行一次。
+
+### 快照
+
+每次 `commit` 前保存到 `/etc/vyoscli/history/<ts>.json`，保留 20 个。
+
+```bash
+root@OpenWrt# rollback
+root@OpenWrt# rollback 2026-01-01_12-00-00
 ```
 
 ---
 
-### 配置撤销
+## 3. 系统
 
-| 命令 | 说明 |
-|---|---|
-| discard | 撤销未提交的改动，回到 running 状态 |
-| sync | 按 applied.json 只重放漂移的配置段落（修 UCI 漂移，不动其它服务） |
-| rollback 1 | 回滚到上一个 commit 快照 |
-| commit confirmed 5 | 5 分钟内没确认自动回滚（远程改配置防踢下线） |
-
-## System
-
-### Hostname
-
-```
-set system host-name router-gz
-commit
-```
-
-### Timezone / NTP
-
-```
+```bash
+set system host-name r1
 set system timezone Asia/Shanghai
-set system ntp ntp.aliyun.com
-commit
-```
-
-### DNS
-
-```
-# 路由器自身 resolver
-set system dns 223.5.5.5
-
-# dnsmasq 上游（客户端用）
 set system name-server 223.5.5.5
-commit
+set system ntp ntp.aliyun.com
+set system login user admin authentication plaintext-password 'StrongPass'
 ```
 
-### Login User
+说明：
 
-本地用户管理。
+- `name-server` 写 dnsmasq 上游；`system dns` 写路由器自身 `/etc/resolv.conf`。
+- 用户创建/删除依赖 `shadow-useradd`/`shadow-chpasswd`；缺失时提交会给出提示。
+- `set system login user ... disable` 可禁用账户。
 
-```
-set system login user admin full-name "Administrator"
-set system login user admin authentication plaintext-password mypass123
-commit
-```
+常用查看：
 
-SSH 公钥：
-
-```
-set system login user admin authentication public-keys laptop key "AAAAB3NzaC1yc2E..."
-set system login user admin authentication public-keys laptop type ssh-rsa
-commit
-```
-
-禁用账号：
-
-```
-set system login user admin disable
-commit
-```
-### Hardware asset
-
-```
-set system hardware vendor "Custom"
-set system hardware model "x86-2L"
-set system hardware serial "E1X16225005023060077"
-commit
+```bash
+show system
+show system uptime
+show system cpu
+show system memory
+show system storage
+show system login user
+show system connections
+show system drift
 ```
 
 ---
 
-## Interfaces
+## 4. 接口
 
-### Ethernet
+### 以太网 / MTU / TCP MSS / VIF
 
-```
-set interfaces ethernet eth0 description WAN
-set interfaces ethernet eth0 address dhcp
-set interfaces ethernet eth0 mtu 1500
-set interfaces ethernet eth0 mac aa:bb:cc:dd:ee:ff
-set interfaces ethernet eth0 duplex auto
-set interfaces ethernet eth0 speed auto
-set interfaces ethernet eth0 vrf default
-set interfaces ethernet eth0 vif 10 address 10.0.0.1/24
-
-set interfaces ethernet eth1 description LAN
-set interfaces ethernet eth1 address 192.168.1.1/24
-set interfaces ethernet eth1 address 192.168.2.1/24
-commit
+```bash
+set interfaces ethernet eth0 address 192.168.1.1/24
+set interfaces ethernet eth0 description LAN
+set interfaces ethernet eth0 mtu 1400
+set interfaces ethernet eth0 tcp-mss 1300
+set interfaces ethernet eth0 vif 100 address 192.168.100.1/24
 ```
 
-### Loopback
+- `mtu` 同时写 UCI 和 `ip link`。
+- 删除 `mtu` 只清 UCI，不现场改链路（避免管理口/WAN 失联）；重启/ifup 后恢复默认。
+- `tcp-mss` 写 `/etc/nftables.d/20-vyos-mss.nft`，由 fw4 include 在 mangle 优先级生效。
 
-```
-set interfaces loopback lo address 10.255.0.1/32
-set interfaces loopback lo description router-id
-commit
-```
+### 桥 / dummy / loopback
 
-### Dummy
-
-```
-set interfaces dummy dum10 address 10.255.255.1/32
-set interfaces dummy dum10 description "loopback test"
-commit
-```
-
-### Tunnel (GRE/IPIP)
-
-```
-set interfaces tunnel tun10 encapsulation gre
-set interfaces tunnel tun10 source-address 192.168.1.1
-set interfaces tunnel tun10 remote 10.0.0.2
-set interfaces tunnel tun10 address 10.10.10.1/30
-set interfaces tunnel tun10 description "site-a to site-b"
-set interfaces tunnel tun10 mtu 1476
-commit
-```
-
-### Interface role
-
-```
-set interfaces lan device eth1
-set interfaces wan device eth0
-commit
-```
-
-### Wireless
-
-```
-set interfaces wireless wlan0 mode ap
-set interfaces wireless wlan0 ssid "MyWiFi"
-set interfaces wireless wlan0 security wpa2
-set interfaces wireless wlan0 passphrase "password123"
-commit
-```
-
-### Bridge
-
-#### 普通桥接 + STP
-
-```
+```bash
 set interfaces bridge br0 member eth1
 set interfaces bridge br0 member eth2
-set interfaces bridge br0 address 192.168.1.1/24
-set interfaces bridge br0 stp true
-set interfaces bridge br0 priority 32768
-set interfaces bridge br0 forwarding-delay 14
-set interfaces bridge br0 hello-time 2
-set interfaces bridge br0 max-age 20
-set interfaces bridge br0 aging 300
-commit
-```
-
-#### 透明桥接（bump-in-the-wire）
-
-串接在 PC 和网关之间，设备像一根透明网线，插上即用。
-
-```
-set interfaces bridge br100 mac-rebinding
-set interfaces bridge br100 mac cc:d3:9d:92:30:bd
-set interfaces bridge br100 member interface eth0
-set interfaces bridge br100 member interface eth1
-set interfaces bridge br100 address 192.168.1.2/24
-commit
-```
-
-| 配置 | 说明 |
-|---|---|
-| mac-rebinding | 启用透明桥接模式 |
-| mac | 桥接口 MAC 地址（用于劫持流量） |
-| member interface eth0 | WAN 侧（接网关） |
-| member interface eth1 | LAN 侧（接 PC） |
-| address | 设备管理 IP（和网关同网段） |
-
-##### 工作原理
-
-1. **网关发现**：自动探测 WAN 侧网关 MAC/IP
-2. **二层劫持**：PC 发往网关的包，目的 MAC 改成 br100 的 MAC，交给本机处理
-3. **流量伪装**：本机发出去的包，源 MAC 改回 PC 的 MAC，网关以为是 PC 直接发的
-
-##### 拓扑
-
-```
-PC ---- eth1 [OpenWrt br100] eth0 ---- 网关 ---- 互联网
-```
-
-PC 和网关都以为对方在直接通信，不知道中间串了台 OpenWrt。
-
-##### bypass 保护
-
-设备断电/故障时，eth0/eth1 物理直连，流量自动透传，不影响客户上网。
-### Dummy
-
-##### Trunk 多 VLAN
-
-如果上行是 trunk 多 VLAN，开启 VLAN 感知：
-
-```
-set interfaces bridge br100 vlan-aware true
-set interfaces bridge br100 vlan 100 untagged eth1
-set interfaces bridge br100 vlan 100 tagged eth0
-set interfaces bridge br100 vlan 200 untagged eth1
-set interfaces bridge br100 vlan 200 tagged eth0
-commit
-```
-
-| 配置 | 说明 |
-|---|---|
-| vlan-aware | 开启 VLAN 过滤 |
-| untagged eth1 | eth1 接 PC，无标签 |
-| tagged eth0 | eth0 接网关，trunk 带标签 |
-
-```
-set interfaces dummy dum0 address 10.255.0.1/32
-commit
-```
-
-### Tunnel (GRE / IPIP)
-
-```
-set interfaces tunnel tun0 mode gre
-set interfaces tunnel tun0 local-ip 1.1.1.1
-set interfaces tunnel tun0 remote-ip 2.2.2.2
-set interfaces tunnel tun0 address 10.0.0.1/30
-commit
-```
-
-### VXLAN
-
-```
-set interfaces vxlan vxlan0 vni 100
-set interfaces vxlan vxlan0 remote 239.1.1.1
-set interfaces vxlan vxlan0 address 192.168.100.1/24
-commit
-```
-
----
-
-## Protocols
-
-### Static route
-
-```
-# 普通路由
-set protocols static route 0.0.0.0/0 next-hop 192.168.1.1
-
-# 黑洞（静默丢弃）
-set protocols static route 192.168.99.0/24 blackhole
-
-# 拒绝（ICMP unreachable）
-set protocols static route 10.99.0.0/16 reject
-
-commit
-```
-
-查看：show ip route
-
-### BGP
-
-```
-set protocols bgp local-as 65001
-set protocols bgp router-id 192.168.1.1
-
-set protocols bgp neighbor 10.0.0.2 remote-as 65002
-set protocols bgp neighbor 10.0.0.2 description "ISP-A"
-
-set protocols bgp network 192.168.1.0/24
-commit
-```
-
-
-#### Community-list + Route-map
-
-按 BGP community 分流到不同下一跳：
-
-```
-# community-list
-set policy community-list 80 rule 10 action permit
-set policy community-list 80 rule 10 description to_hk
-set policy community-list 80 rule 10 regex 65000:9939
-
-# route-map match community
-set protocols route-map bgp-from-RSVR permit 100 description to_hk
-set protocols route-map bgp-from-RSVR permit 100 match community community-list 80
-set protocols route-map bgp-from-RSVR permit 100 set ip-next-hop 10.70.124.121
-set protocols route-map bgp-from-RSVR permit 100 set local-preference 200
-
-# peer-group
-set protocols bgp peer-group RSVR remote-as 65000
-set protocols bgp peer-group RSVR update-source 10.20.182.144
-set protocols bgp peer-group RSVR route-map-import bgp-from-RSVR
-set protocols bgp peer-group RSVR soft-reconfiguration inbound
-
-# neighbor 加入 peer-group
-set protocols bgp neighbor 10.10.99.160 peer-group RSVR
-commit
-```
----
-
-## Service
-
-### SSH
-
-```
-set service ssh port 22
-set service ssh root-login true
-commit
-
-# 关闭
-set service ssh disable
-commit
-
-# 恢复
-delete service ssh disable
-commit
-```
-
-### DHCP
-### DHCP Server
-
-#### 基本配置
-
-```
-set service dhcp-server shared-network-name vlan2 subnet 192.168.2.0/24
-set service dhcp-server shared-network-name vlan2 interface br2
-set service dhcp-server shared-network-name vlan2 gateway 192.168.2.1
-set service dhcp-server shared-network-name vlan2 dns 192.168.2.1
-set service dhcp-server shared-network-name vlan2 domain vlan2.fnet.org
-commit
-```
-
-#### 地址池
-
-```
-set service dhcp-server shared-network-name vlan2 range 0 start 192.168.2.20
-set service dhcp-server shared-network-name vlan2 range 0 stop 192.168.2.200
-commit
-```
-
-#### MAC-IP 静态绑定
-
-可绑定 DHCP 范围外的 IP：
-
-```
-set service dhcp-server shared-network-name vlan2 static-mapping 201 ip-address 192.168.2.201
-set service dhcp-server shared-network-name vlan2 static-mapping 201 mac-address a4:ae:12:f7:91:16
-commit
-```
-
-#### Domain Search
-
-自动在主机名后加域名后缀：
-
-```
-set service dhcp-server shared-network-name dhcp_wlan1 domain-search fnetlink.com
-commit
-```
-
-#### WPAD（option 252）
-
-自动下发 Web 代理发现 URL：
-
-```
-set service dhcp-server shared-network-name dhcp_wlan1 wpad-url http://192.168.9.1:8080
-commit
-```
-
-Windows / 苹果手机自动生效，安卓需手动设置代理。
-
-查看租约：`show dhcp lease`
-### DNS Forwarding
-
-基于 dnsmasq 的 DNS 转发器。
-
-#### 上游 DNS
-
-```
-# 全局上游
-set service dnsmasq name-server 223.5.5.5
-set service dnsmasq name-server 8.8.8.8
-
-# 按域名转发（split-horizon）
-set service dnsmasq domain internal.corp name-server 10.0.0.1
-commit
-```
-
-#### 监听地址和端口
-
-```
-set service dnsmasq listen-address 192.168.1.1
-set service dnsmasq port 53
-commit
-```
-
-#### 允许查询的客户端
-
-```
-set service dnsmasq allow-from 192.168.1.0/24
-commit
-```
-
-#### 缓存
-
-```
-set service dnsmasq cache-size 10000
-set service dnsmasq negative-ttl 3600
-commit
-```
-
-#### DNSSEC
-
-```
-set service dnsmasq dnssec validate
-# 可选：off | process-no-validate | process | log-fail | validate
-commit
-```
-
-### SmartDNS
+set interfaces bridge br0 address 10.0.0.1/24
 
-高性能 DNS 转发，支持按域名测速选最快上游。
-
-```
-set service smartdns enabled true
-set service smartdns port 5333
-set service smartdns listen-address 127.0.0.1
-set service smartdns forbid-aaaa true
-
-set service smartdns server aliyun ip 223.5.5.5
-set service smartdns server google ip 8.8.8.8
-
-# 域名列表 / 分流
-set service smartdns domain-set ads domain ads.example.com
-set service smartdns domain-rule cn domain-set ads forward aliyun
-commit
-```
-
-### AdGuardHome
-
-带广告过滤的 DNS。
-
-```
-set service adguard enabled true
-set service adguard port 53
-set service adguard listen-address 127.0.0.1
-set service adguard web-port 3000
-commit
-```
-
-Web UI：`http://<router-ip>:3000`
-
-### DNS 冲突保护
-
-commit 时自动检测 dnsmasq/smartdns/adguard 的 IP:端口冲突，冲突直接拒掉。
-
-### Console Server
-
-串口控制台服务器，远程管理多台设备。基于 conserver + dropbear 多实例。
-
-#### USB 驱动
-
-```
-opkg update
-opkg list-installed *usb-serial*
-opkg list *usb-serial*
-
-# 按芯片装驱动
-opkg install kmod-usb-serial-pl2303    # Prolific PL2303
-opkg install kmod-usb-serial-ftdi      # FTDI FT232/FT4232
-```
-
-查看设备：
-
-```
-show hardware usb
-lsusb
-ls -lsh /dev/ttyUSB*
-```
-
-#### 配置
-
-```
-set service console-server device usb0 description "core-sw-1"
-set service console-server device usb0 speed 115200
-set service console-server device usb0 data-bits 8
-set service console-server device usb0 parity none
-set service console-server device usb0 stop-bits 1
-set service console-server device usb0 ssh-port 2201
-commit
-```
-
-#### commit 后
-
-1. 自动 `opkg install conserver`
-2. 写 `/etc/conserver/conserver.cf`
-3. 起 conserver 服务
-4. 每个串口起一个 dropbear 实例：
-   ```
-   /usr/sbin/dropbear -j -k -r /etc/dropbear/dropbear_rsa_host_key \
-     -c 'console usb0' -P /var/run/vyoscli-console-usb0.pid -p 2201
-   ```
-
-#### 远程访问
-
-```
-ssh root@<router-ip> -p 2201
-```
-
-#### 快捷键
-
-- `Ctrl+E c ?` 帮助
-- `Ctrl+E c .` 断开
-- `Ctrl+E c f` 强制接管
-- `Ctrl+E c b` 广播消息
-
-#### 强制下线占用会话
-
-```
-show console-server ports
-fuser -k /dev/ttyUSB0
-```
-
-#### 本地串口工具
-
-```
-# picocom
-opkg install picocom
-picocom -b 115200 /dev/ttyUSB0    # Ctrl+A Ctrl+X 退出
-
-# screen
-opkg install screen
-screen -S console /dev/ttyUSB0 115200   # Ctrl+A D 退出
-screen -ls
-screen -r <pid>
-```
-### Crontab
-
-```
-set service crontab update-domains schedule "0 3 * * *"
-set service crontab update-domains command /etc/vyoscli/scripts/update-domains.sh
-commit
-```
-
-
-### SQM
-
-智能队列管理，解决 bufferbloat，游戏低延迟。
-
-```
-set service sqm interface eth0
-set service sqm download 100000
-set service sqm upload 10000
-set service sqm qdisc cake
-commit
-```
-
-| qdisc | 说明 |
-|---|---|
-| cake | 现代 AQM，自动公平分配带宽（推荐） |
-| fq_codel | 经典队列管理 |
-### TCP Accelerate
-
-BBR / Hybla 拥塞控制 + fq_codel 队列，优化高丢包跨境链路。
-
+set interfaces dummy dum0 address 10.10.10.1/24
+set interfaces loopback lo address 10.10.10.1/32
 ```
-set service tcp-accelerate congestion-control bbr
-set service tcp-accelerate fq-codel true
-commit
-```
-
-| congestion-control | 适用场景 |
-|---|---|
-| bbr | 高丢包跨境链路（推荐） |
-| hybla | 卫星链路 |
-| cubic | 默认 |
-
-### KCP Accelerate
-
-kcptun UDP 隧道，配合 OpenVPN over TCP 使用，高丢包链路加速。
-
-#### CE 端（客户端）
-
-```
-set service kcp acc1 mode c
-set service kcp acc1 local-ip 192.168.144.201
-set service kcp acc1 local-port 22222
-set service kcp acc1 remote-ip 192.168.144.202
-set service kcp acc1 remote-port 9991
-set service kcp acc1 kcp-mode fast3
-commit
-```
-
-#### PE 端（服务端）
-
-```
-set service kcp acc1 mode s
-set service kcp acc1 local-ip 192.168.144.202
-set service kcp acc1 local-port 9991
-set service kcp acc1 remote-ip 192.168.144.202
-set service kcp acc1 remote-port 10064
-set service kcp acc1 kcp-mode fast3
-commit
-```
-
-| kcp-mode | 效果 |
-|---|---|
-| fast2 | 10% 重发，延迟低 |
-| fast3 | 20% 重发，丢包补偿（推荐） |
-| normal | 标准模式 |
-## VPN
-
-### IPsec Site-to-Site
-
-基于 strongswan 的站点间 VPN。
-
-#### Phase 1 (IKE)
-
-```
-set vpn ipsec ike-group IKE lifetime 28800
-set vpn ipsec ike-group IKE proposal 10 encryption aes256
-set vpn ipsec ike-group IKE proposal 10 hash sha256
-set vpn ipsec ike-group IKE proposal 10 dh-group 14
-```
-
-#### Phase 2 (ESP)
-
-```
-set vpn ipsec esp-group ESP lifetime 3600
-set vpn ipsec esp-group ESP proposal 10 encryption aes256
-set vpn ipsec esp-group ESP proposal 10 hash sha256
-```
-
-#### Peer
-
-```
-set vpn ipsec site-to-site peer 10.0.2.2 local-address 10.0.1.2
-set vpn ipsec site-to-site peer 10.0.2.2 remote-address 10.0.2.2
-set vpn ipsec site-to-site peer 10.0.2.2 local-id 10.0.1.2
-set vpn ipsec site-to-site peer 10.0.2.2 remote-id 10.0.2.2
-set vpn ipsec site-to-site peer 10.0.2.2 secret mysecret
-set vpn ipsec site-to-site peer 10.0.2.2 ike-group IKE
-set vpn ipsec site-to-site peer 10.0.2.2 esp-group ESP
-set vpn ipsec site-to-site peer 10.0.2.2 tunnel 0 local-prefix 192.168.1.0/24
-set vpn ipsec site-to-site peer 10.0.2.2 tunnel 0 remote-prefix 192.168.2.0/24
-commit
-```
-
-#### commit 后
-
-1. 自动 `opkg install strongswan-minimal`
-2. 写 `/etc/ipsec.conf` + `/etc/ipsec.secrets`
-3. `/etc/init.d/ipsec restart`
-
-#### 查看
-
-```
-show ipsec sa
-```
----
-
-## Firewall
-
-### Zone
-
-```
-set firewall zone lan network br0
-set firewall zone lan input ACCEPT
-set firewall zone lan output ACCEPT
-set firewall zone lan forward ACCEPT
-
-set firewall zone wan network eth0
-set firewall zone wan input DROP
-set firewall zone wan output ACCEPT
-set firewall zone wan forward DROP
-commit
-```
-
-### Forwarding
-
-```
-set firewall forwarding lan-wan src lan
-set firewall forwarding lan-wan dest wan
-commit
-```
-
-### Rule
-
-```
-set firewall rule 10 name "allow-ssh"
-set firewall rule 10 src wan
-set firewall rule 10 dest-port 22
-set firewall rule 10 target ACCEPT
-commit
-```
-
----
-
-## NAT
-
-### Source NAT
-
-```
-set nat source rule 10 out-interface wan
-set nat source rule 10 translation masquerade
-commit
-```
-
-### Destination NAT
-
-```
-set nat destination rule 20 in-interface wan
-set nat destination rule 20 port 80
-set nat destination rule 20 to 192.168.1.10
-commit
-```
-
----
 
 ### WireGuard
 
-```
-set interfaces wireguard wg0 address 10.0.10.1/24
-set interfaces wireguard wg0 private-key "xxxxbase64xxxx"
+```bash
+set interfaces wireguard wg0 address 10.99.0.1/24
+set interfaces wireguard wg0 private-key 'BASE64'
 set interfaces wireguard wg0 listen-port 51820
-
-set interfaces wireguard wg0 peer abcpublickey allowed-ips 10.0.10.2/32
-set interfaces wireguard wg0 peer abcpublickey endpoint 1.2.3.4:51820
-commit
+set interfaces wireguard wg0 peer 'PEER_PUBLIC_KEY' endpoint 1.2.3.4:51820
+set interfaces wireguard wg0 peer 'PEER_PUBLIC_KEY' allowed-ips 10.99.0.2/32
 ```
+
+依赖 `kmod-wireguard`、`wireguard-tools`。运行时装包后 netifd 可能还没加载
+proto，重启一次 network 即可。
+
+### Tunnel / VXLAN
+
+```bash
+set interfaces tunnel tun0 encapsulation gre
+set interfaces tunnel tun0 source-address 192.0.2.1
+set interfaces tunnel tun0 remote 198.51.100.1
+set interfaces tunnel tun0 address 10.0.0.1/30
+
+set interfaces vxlan vx0 vni 42
+set interfaces vxlan vx0 remote 198.51.100.2
+```
+
+---
+
+## 5. 路由
+
+### 静态路由
+
+```bash
+set protocols static route 10.0.0.0/8 next-hop 192.168.1.1
+set protocols static table 110 route 0.0.0.0/0 next-hop 192.168.1.1
+```
+
+`show ip route static` 在 FRR 无静态路由时回退到内核 `proto static`，显示 `S>*`。
+
+### BGP（VyOS 1.5 ASN 实例）
+
+```bash
+set protocols bgp 65000 parameters router-id 192.168.75.241
+set protocols bgp 65000 timers holdtime 15
+set protocols bgp 65000 timers keepalive 5
+
+set protocols bgp 65000 address-family ipv4-unicast maximum-paths ibgp 4
+set protocols bgp 65000 address-family ipv4-unicast redistribute connected
+
+set protocols bgp 65000 neighbor 192.168.5.2 remote-as 65002
+set protocols bgp 65000 neighbor 192.168.5.2 local-as 65001
+set protocols bgp 65000 neighbor 192.168.5.2 address-family ipv4-unicast route-map export med100
+set protocols bgp 65000 neighbor 192.168.5.2 address-family ipv4-unicast soft-reconfiguration inbound
+set protocols bgp 65000 neighbor 192.168.5.2 bfd check-control-plane-failure
+
+set protocols bfd peer 192.168.5.2 echo-mode
+```
+
+- 每次 BGP 配置提交会重启 FRR 以加载 `frr.conf`，邻居会短暂重建。
+- `show ip bgp summary`、`show ip bgp neighbors <ip> received-routes` 查看路由。
+- 多出口优先级用 route-map 设置 MED：`set metric 100/200`，数值小优先。
+
+### OSPF / RIP / BFD
+
+```bash
+set protocols ospf router-id 192.168.1.1
+set protocols ospf area 0 network 192.168.1.0/24
+
+set protocols rip version 2
+set protocols rip network 192.168.1.0/24
+
+set protocols bfd interval 300
+set protocols bfd min-rx 300
+set protocols bfd multiplier 3
+```
+
+---
+
+## 6. 策略路由
+
+### route-map / community-list（VyOS 语法）
+
+```bash
+set policy community-list 80 rule 10 action permit
+set policy community-list 80 rule 10 regex '65000:9939'
+
+set policy route-map RM rule 100 action permit
+set policy route-map RM rule 100 description to_hk
+set policy route-map RM rule 100 match community community-list 80
+set policy route-map RM rule 100 set ip-next-hop 10.10.57.1
+set policy route-map RM rule 100 set local-preference 50
+```
+
+驱动会把 `rule` 归一化为 FRR 的 `permit/deny` 条目，并映射
+`ip-next-hop -> next-hop`。
+
+### 本地策略路由
+
+```bash
+set policy local-route rule 6600 source 192.168.1.1
+set policy local-route rule 6600 set table 110
+set protocols static table 110 route 0.0.0.0/0 next-hop 192.168.75.1
+```
+
+生成 `ip rule from 192.168.1.1 lookup 110` 和 table 110。
+
+---
+
+## 7. 防火墙与 NAT
+
+```bash
+# 过滤规则（inet vyos_fw, priority -10）
+set firewall ipv4 input filter rule 100 action accept
+set firewall ipv4 input filter rule 100 protocol tcp
+set firewall ipv4 input filter rule 100 destination port 8080
+
+# 组
+set firewall group address-group AG address 203.0.113.0/24
+set firewall group port-group PG port 8080
+set firewall group interface-group IG interface eth0
+
+# source NAT
+set nat source rule 100 out-interface eth0
+set nat source rule 100 translation address masquerade
+
+# destination NAT
+set nat destination rule 100 inbound-interface eth0
+set nat destination rule 100 destination port 8080
+set nat destination rule 100 translation address 10.0.0.10
+```
+
+- VyOS 规则表在 fw4 之前，`drop/reject` 可提前生效；`accept` 仍继续走 fw4 zone。
+- NAT 使用独立 `inet vyos_nat` 表，先于 fw4 zone masquerade。
+- 每次 apply 前会重建表，删除组/规则后不会残留旧 set。
+
+---
+
+## 8. DHCP / DNS
+
+```bash
+set service dhcp-server shared-network-name LAN interface lan
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 default-router 192.168.1.1
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 name-server 192.168.1.1
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 lease 3600
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 range R1 start 192.168.1.100
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 range R1 stop 192.168.1.150
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 static-mapping printer ip-address 192.168.1.50
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 static-mapping printer mac-address aa:bb:cc:dd:ee:ff
+```
+
+- `interface` 填 **UCI 网络名**（`lan`/`wan`），不是 `br-lan`/`eth1`。
+- 后端写 dnsmasq 的 `vyos_dhcp_*` 段；删除共享网络会清理对应段。
+
+验证：
+
+```bash
+show dhcp server
+show dhcp server pools
+show dhcp server leases
+show dhcp server static
+```
+
+完整隔离测试见 [DHCP-TEST.md](DHCP-TEST.md)。
+
+DNS：
+
+```bash
+set service dnsmasq port 53
+set service smartdns server aliyun ip 223.5.5.5
+set service adguard enabled true
+```
+
+---
+
+## 9. 容器（VyOS 结构）
+
+```bash
+# 虚拟网络
+set container network vnet prefix 10.89.7.0/24
+set container network vnet gateway 10.89.7.1
+
+# host 网络
+set container name c1 image docker.io/library/nginx:alpine
+set container name c1 allow-host-networks
+
+# 虚拟网络
+set container name c2 image docker.io/library/busybox:latest
+set container name c2 network vnet
+set container name c2 volume conf source /config/c2/conf destination /app/conf
+set container name c2 environment TZ value Asia/Shanghai
+set container name c2 restart no
+set container name c2 privileged
+set container name c2 capability net-admin
+set container name c2 device tun source /dev/net/tun destination /dev/net/tun
+```
+
+- `container network <name>` 不存在时驱动会自动 `podman network create`。
+- 默认 netavark 需要 iptables/conntrack/addrtype 模块；缺模块时用
+  `allow-host-networks` 或补齐依赖。
+- 镜像拉取失败时先用 `add container image <img>` 或使用本地镜像。
+
+查看：
+
+```bash
+show container
+show container image
+```
+
+---
+
+## 10. VPN
+
+### L2TP
+
+```bash
+set vpn l2tp local-ip 10.99.9.1
+set vpn l2tp pool-start 10.99.9.100
+set vpn l2tp pool-end 10.99.9.150
+set vpn l2tp user test password '***'
+```
+
+依赖 `xl2tpd`、`ppp-mod-pppol2tp`。
+
+### IPsec
+
+```bash
+set vpn ipsec ike-group IKE1 proposal 10 encryption aes256
+set vpn ipsec ike-group IKE1 proposal 10 hash sha256
+set vpn ipsec esp-group ESP1 proposal 10 encryption aes256
+set vpn ipsec esp-group ESP1 proposal 10 hash sha256
+```
+
+依赖 `strongswan-ipsec`、`strongswan-charon`、aes/sha2 插件。
 
 ### OpenVPN
 
+```bash
+set interfaces openvpn vtun9 mode server
+set interfaces openvpn vtun9 proto udp
+set interfaces openvpn vtun9 port 11999
+set interfaces openvpn vtun9 dev tun
 ```
-set interfaces openvpn vtun0 mode client
-set interfaces openvpn vtun0 proto udp
-set interfaces openvpn vtun0 dev tun
-set interfaces openvpn vtun0 ca /etc/vyoscli/openvpn/ca.crt
-set interfaces openvpn vtun0 cert /etc/vyoscli/openvpn/client.crt
-set interfaces openvpn vtun0 key /etc/vyoscli/openvpn/client.key
-commit
-```
+
+删除实例会清理 UCI、`/etc/openvpn/<name>.conf` 并重启服务。
 
 ---
 
-## Container
+## 11. 服务
 
-基于 Podman 的容器引擎。
+```bash
+set service ssh port 22
+set service ssh password-auth true
+set service ssh acl permit 192.168.75.0/24
 
-### 镜像 Image
+set service ntp server pool.ntp.org
+set service lldp interface eth0
 
-```
-# 指定镜像
-set container nginx image nginx:alpine
-
-# 指定仓库 registry
-set container nginx image quay.io/nginx:alpine
-commit
-```
-
-### 网络 Network
-
-```
-# 加入已有 podman 网络
-set container nginx network podman
-
-# 静态 IP
-set container nginx network podman address 10.89.0.10
-commit
+set service mtr t1 target 1.1.1.1
+set service mtr t1 count 10
+set service mtr t1 interval 60
 ```
 
-### 端口映射 Port
-
-```
-# 主机 8080 -> 容器 80
-set container nginx port 8080:80
-commit
-```
-
-### 卷挂载 Volume
-
-```
-# 配置文件挂载（只读）
-set container nginx volume /etc/nginx/conf.d:/etc/nginx/conf.d:ro
-commit
-```
-
-### 环境变量 Environment
-
-```
-set container mysql environment MYSQL_ROOT_PASSWORD value 'secret'
-set container mysql environment MYSQL_DATABASE value 'appdb'
-commit
-```
-
-### 重启策略 Restart
-
-```
-set container nginx restart always
-# 可选：always | on-failure | no
-commit
-```
-
-### 资源限制 Resource
-
-```
-set container nginx memory 256
-set container nginx cpu-quota 0.5
-commit
-```
-
-### 禁用 Disable
-
-```
-set container nginx disable
-commit
-```
-
-### 操作命令 Operations
-
-```
-show container                       # 运行中容器
-show container image                 # 本地镜像
-add container image nginx:alpine    # pull
-delete container image nginx:alpine # rmi
-restart container nginx             # 重启
-```
-
-### 完整示例 Example
-
-```
-set container mysql image mysql:8.0
-set container mysql network podman
-set container mysql environment MYSQL_ROOT_PASSWORD value 'rootpwd'
-set container mysql environment MYSQL_DATABASE value 'appdb'
-set container mysql restart always
-
-set container nginx image nginx:alpine
-set container nginx network podman
-set container nginx port 8080:80
-set container nginx restart always
-commit
-```
+- `service ssh acl permit` 是 allow-list；添加前确保包含当前管理网段。
+- `service mtr` 后台任务，日志在 `/etc/vyoscli/mtr/<name>.log`，
+  `show service mtr` 查看最近跳数/丢失/中断。
+- LLDP 依赖 `lldpd`。
 
 ---
 
-## Traffic Policy
+## 12. 诊断
 
-route-map：
-
-```
-set protocols route-map FROM-ISP permit 10 set local-preference 200
-set protocols route-map FROM-ISP permit 10 set med 50
-set protocols route-map FROM-ISP permit 10 set community 65001:100
-set protocols bgp neighbor 10.0.0.2 route-map-in FROM-ISP
-commit
-```
-
----
-
-## 运维
-
-```
-show version
-show interface
-show configuration
-show configuration commands
-show system
+```bash
+show interfaces
+show interfaces ethernet eth0
 show ip route
-show container
-show dhcp lease
-
-restart service ssh
-reload service firewall
+show ip route static
+show ip bgp summary
+show ip bgp neighbors 192.168.5.2 received-routes
+show arp
+show system connections
+show system login user
+show login
+show service mtr
 ```
 
-备份：
+```bash
+ping 1.1.1.1                  # 交互式长 ping，Ctrl+C 结束；非 TTY 只发 4 个
+ping tcp 1.1.1.1 443
+ping tcp ip 1.1.1.1 port 443
+ping udp 1.1.1.1 53
+```
 
+`ping tcp/udp` 在 TTY 下每秒重复探测并输出 `[seq]`，Ctrl+C 打印
+`sent/ok/failed` 汇总；非 TTY 单次探测，便于脚本。
+
+---
+
+## 13. 故障排查
+
+| 现象 | 排查 |
+|---|---|
+| `set` 提示 `incomplete path` | 路径不在树中；用 Tab/`?` 看当前层候选 |
+| commit 有 `... apply failed` | 缺依赖包或参数不合法；按提示装包/改值 |
+| 配置改了没生效 | `compare`、`show system drift`；BGP 需等 FRR 重启 |
+| 改 WAN 后失联 | 用 `commit confirmed`；console 下 `ifup wan` 或恢复 `/etc/config/network` |
+| BGP 邻居 Active | 检查 `remote-as`、`local-as`、更新源、路由可达；`vtysh -c 'show bgp summary'` |
+| DHCP 不分配 | `show dhcp server`、`netstat -lunp \| grep :67`；interface 必须是 UCI 名 |
+| 容器网络失败 | 检查 netavark/iptables 模块；改用 `allow-host-networks` |
+| Tab 无候选 | 确认层级/拼写；`?` 查看 `Possible completions:` |
+
+日志：
+
+```bash
+show log
+logread -f
+vtysh -c 'show bgp summary'
 ```
-tar czf /tmp/vyoscli.tgz -C /etc vyoscli/
-```
+
+---
+
+## 14. 已知限制
+
+- DHCP relay 的 `dhcp-fwd` 仍会退出，暂不可用。
+- container 默认网络依赖较多内核模块；host 网络已验证。
+- IPsec 仅验证 ike/esp 组与服务启动，site-to-site/证书未端到端。
+- wireless 依赖硬件，未做端到端。
+- commit 非原子：某段失败其余段仍执行并返回说明。
+- BGP 提交会重启 FRR，邻居短暂重建。
+
+更多测试记录与修复历史见 [AUDIT.md](AUDIT.md)。
