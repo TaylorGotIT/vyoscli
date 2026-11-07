@@ -1634,10 +1634,9 @@ class ConfigStore:
         var_lib = os.environ.get("VYOSCLI_VAR_LIB", "/var/lib")
         chroot_dir = os.path.join(var_lib, "dhcp-fwd")
         os.makedirs(chroot_dir, exist_ok=True)
+        # OpenWrt's dhcp-fwd cannot query interfaces from a chroot/non-root
+        # jail (ioctl: No such device), so run it in the root namespace.
         lines = [
-            "user dhcp-fwd",
-            "group dhcp-fwd",
-            f"chroot {chroot_dir}",
             "logfile /var/log/dhcp-fwd.log",
             "pidfile " + pidfile,
             "",
@@ -2065,12 +2064,42 @@ class ConfigStore:
                 # Do not touch the live link here: resetting MTU on the
                 # management/WAN port can drop DHCP and lock us out.
                 # netifd applies the default at the next reload/reboot.
+            old_vifs = (old_eth.get(ifname) or {}).get("vif") or {}
+            new_vifs = cfg.get("vif") or {}
+            for vid in set(old_vifs) - set(new_vifs):
+                sec = f"{ifname}_{vid}"
+                try:
+                    self._uci("delete", f"network.{sec}")
+                except subprocess.CalledProcessError:
+                    pass
+                subprocess.run(["ip", "link", "del", f"{ifname}.{vid}"],
+                               capture_output=True, text=True, timeout=10)
+            for vid, vcfg in new_vifs.items():
+                if not isinstance(vcfg, dict):
+                    continue
+                sec = f"{ifname}_{vid}"
+                self._uci("set", f"network.{sec}=interface")
+                self._uci("set", f"network.{sec}.device={ifname}.{vid}")
+                self._uci("set", f"network.{sec}.proto=static")
+                try:
+                    self._uci("delete", f"network.{sec}.ipaddr")
+                except subprocess.CalledProcessError:
+                    pass
+                for a in _as_list(vcfg.get("address")):
+                    self._uci("add_list", f"network.{sec}.ipaddr={a}")
+                subprocess.run(["ip", "link", "add", "link", str(ifname),
+                                "name", f"{ifname}.{vid}", "type", "vlan",
+                                "id", str(vid)], capture_output=True,
+                               text=True, timeout=10)
+                subprocess.run(["ip", "link", "set", f"{ifname}.{vid}",
+                                "up"], capture_output=True, text=True,
+                               timeout=10)
             addrs = _as_list(cfg.get("address"))
             # No address means "stop managing this port": restore a taken-over
             # section, or drop our own vyos_* interface.
-            if not addrs:
+            if not addrs and not cfg.get("vif"):
                 # Only release when this port previously had an address;
-                # mtu/description-only nodes must not tear the WAN down.
+                # mtu/description/vif-only nodes must not tear it down.
                 if (isinstance(old_eth.get(ifname), dict)
                         and old_eth[ifname].get("address")):
                     self._release_iface(ifname, mapping, notes)
