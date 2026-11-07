@@ -93,10 +93,8 @@ def _op_show_container_image(ctx: Any, value: Any) -> str:
     if not runtime:
         return ("no container runtime installed "
                 "(podman/docker/nerdctl)")
-    fmt = ("table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t"
-           "{{.CreatedSince}}\t{{.Size}}")
     try:
-        out = subprocess.run([runtime, "images", "--format", fmt],
+        out = subprocess.run([runtime, "images"],
                              capture_output=True, text=True, timeout=15)
         text = (out.stdout or "").strip()
         return text or (out.stderr or "").strip() or "(no images)"
