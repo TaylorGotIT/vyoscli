@@ -1638,3 +1638,66 @@ def _op_show_ip_route_bgp(ctx: Any, value: Any) -> str:
 def _op_show_ip_route_summary(ctx: Any, value: Any) -> str:
     return _vtysh_route("show ip route summary",
                         lambda: _ip_route_fallback("all"))
+
+
+def _ip6_route_fallback(kind: str = "all") -> str:
+    import subprocess
+    args = ["ip", "-6", "route", "show"]
+    if kind == "static":
+        args += ["proto", "static"]
+    elif kind == "connected":
+        args += ["proto", "kernel"]
+    elif kind == "bgp":
+        args += ["proto", "bgp"]
+    try:
+        return subprocess.run(args, capture_output=True, text=True,
+                              timeout=10).stdout.strip() or "n/a"
+    except Exception:
+        return "n/a"
+
+
+def _vtysh_route6(command: str, kind: str = "all") -> str:
+    import shutil
+    import subprocess
+    if shutil.which("vtysh"):
+        try:
+            r = subprocess.run(["vtysh", "-c", command], capture_output=True,
+                               text=True, timeout=20)
+            out = (r.stdout or "").strip()
+            if out and "failed to connect" not in out and "Exiting:" not in out:
+                return out
+        except Exception:
+            pass
+    return _ip6_route_fallback(kind)
+
+
+def _op_show_ipv6_route(ctx: Any, value: Any) -> str:
+    if value:
+        return _vtysh_route6(f"show ipv6 route {value}", "all")
+    return _vtysh_route6("show ipv6 route", "all")
+
+
+def _op_show_ipv6_route_static(ctx: Any, value: Any) -> str:
+    return _vtysh_route6("show ipv6 route static", "static")
+
+
+def _op_show_ipv6_route_connected(ctx: Any, value: Any) -> str:
+    return _vtysh_route6("show ipv6 route connected", "connected")
+
+
+def _op_show_ipv6_route_bgp(ctx: Any, value: Any) -> str:
+    return _vtysh_route6("show ipv6 route bgp", "bgp")
+
+
+def _op_show_ipv6_route_summary(ctx: Any, value: Any) -> str:
+    return _vtysh_route6("show ipv6 route summary", "all")
+
+
+def _op_show_ipv6_route_kernel(ctx: Any, value: Any) -> str:
+    return _ip6_route_fallback("all")
+
+
+def _op_show_ipv6_route_table(ctx: Any, value: Any) -> str:
+    if not value:
+        return "table: table ID required"
+    return _vtysh_route6(f"show ipv6 route table {value}", "all")

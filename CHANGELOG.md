@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1 (2026-11-17)
+
+### 新增
+
+- show ipv6 route：支持 gp、connected、static、summary、
+  kernel/orward、	able <id>，以及 show ipv6 route <prefix>；
+  Tab 会列出子命令和 <h:h:h:h:h:h:h:h/x> 提示。
+
 ## 0.2.0 (2026-11-07)
 
 ### 新增

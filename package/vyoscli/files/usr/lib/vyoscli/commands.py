@@ -74,6 +74,13 @@ from .op_show import (
     _op_show_ip_route_connected,
     _op_show_ip_route_summary,
     _op_show_ip_route_bgp,
+    _op_show_ipv6_route,
+    _op_show_ipv6_route_static,
+    _op_show_ipv6_route_connected,
+    _op_show_ipv6_route_bgp,
+    _op_show_ipv6_route_summary,
+    _op_show_ipv6_route_kernel,
+    _op_show_ipv6_route_table,
 )
 
 # ---------- ping ----------
@@ -327,6 +334,31 @@ def build_tree(store: Any) -> CommandTree:
                         action=_op_show_ip_route_bgp))
     show_route.action = _op_show_ip_route
     show_ip.add(show_route)
+    show_ipv6 = Node(name="ipv6", help="IPv6 information")
+    show_route6 = Node(name="route", help="IPv6 routing table")
+    show_route6.add(Node(name="static", help="Statically configured routes",
+                         action=_op_show_ipv6_route_static))
+    show_route6.add(Node(name="connected", help="Connected routes",
+                         action=_op_show_ipv6_route_connected))
+    show_route6.add(Node(name="bgp", help="Border Gateway Protocol (BGP)",
+                         action=_op_show_ipv6_route_bgp))
+    show_route6.add(Node(name="summary", help="Summary of all routes",
+                         action=_op_show_ipv6_route_summary))
+    show_route6.add(Node(name="kernel", help="Show kernel IPv6 route table",
+                         action=_op_show_ipv6_route_kernel))
+    show_route6.add(Node(name="forward", help="Show kernel IPv6 route table",
+                         action=_op_show_ipv6_route_kernel))
+    show_route6.add(Node(name="table", help="Table to display",
+                         value_type="int",
+                         action=_op_show_ipv6_route_table))
+    show_route6.action = _op_show_ipv6_route
+    show_route6._completion = lambda: [
+        ("<h:h:h:h:h:h:h:h/x>",
+         "Show IPv6 routes of given address or prefix"),
+    ]
+    show_ipv6.add(show_route6)
+    tree.op_root.children["show"].add(show_ipv6)
+
     show_bgp = Node(name="bgp", help="BGP information")
     show_bgp.add(Node(name="summary", help="Show BGP summary",
                       action=_op_show_bgp_summary))

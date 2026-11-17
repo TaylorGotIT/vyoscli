@@ -26,6 +26,15 @@ class HelpTest(unittest.TestCase):
         text = self.cli._help_text("set interfaces bridge ")
         self.assertIn("<br-name>", text)
 
+    def test_ipv6_route_completion(self):
+        self.cli.ctx.mode = "op"
+        pairs = dict(self.cli._matches_with_help(
+            ["show", "ipv6", "route", ""]))
+        self.assertIn("static", pairs)
+        self.assertIn("bgp", pairs)
+        self.assertIn("table", pairs)
+        self.assertIn("<h:h:h:h:h:h:h:h/x>", pairs)
+
     def test_enum_hint_lists_choices(self):
         pairs = dict(self.cli._matches_with_help(
             ["set", "nat", "source", "rule", "10", "protocol", ""]))

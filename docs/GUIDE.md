@@ -659,6 +659,10 @@ show interfaces
 show interfaces ethernet eth0
 show ip route
 show ip route static
+show ipv6 route
+show ipv6 route bgp
+show ipv6 route 2001:db8::/32
+show ipv6 route table 254
 show ip bgp summary
 show ip bgp neighbors 192.168.5.2 received-routes
 show arp

@@ -16,7 +16,7 @@ Tab/`?` 补全、`show` 分页、配置快照与漂移检测。
 `container name/network` 等。纯 Python，不依赖 UCI 之外的框架；
 没有 UCI 对应项时才退化为 `ip`/`nft`/`tc`/FRR 等原生命令。
 
-**当前版本：0.2.0**（变更见 [CHANGELOG.md](CHANGELOG.md)）。
+**当前版本：0.2.1**（变更见 [CHANGELOG.md](CHANGELOG.md)）。
 
 - 完整命令参考：[docs/COMMANDS.md](docs/COMMANDS.md)（593 条，自动生成）
 - 操作/配置指南：[docs/GUIDE.md](docs/GUIDE.md)
@@ -461,6 +461,10 @@ show service mtr
 ```bash
 show interfaces
 show ip route static
+show ipv6 route
+show ipv6 route bgp
+show ipv6 route 2001:db8::/32
+show ipv6 route table 254
 show ip bgp summary
 show ip bgp neighbors 192.168.5.2 received-routes
 show system uptime
