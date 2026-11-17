@@ -248,6 +248,12 @@ class Cli:
             if names and state == 0:
                 self._print_candidates(names, dict(matches))
             return None
+        if len(filtered) > 1:
+            # Do not let readline insert a common prefix here: its redraw
+            # interacts badly with our list and duplicates the suffix.
+            if state == 0:
+                self._print_candidates(filtered, dict(matches))
+            return None
         if state >= len(filtered):
             return None
         # if unique match and it's a leaf, append space
@@ -370,8 +376,13 @@ class Cli:
         width = max(len(m) for m in matches)
         for m in matches:
             print(f"  {m.ljust(width + 2)}{help_map.get(m, '')}")
-        sys.stdout.write(self._prompt() + buf)
+        # Ask readline to redraw the line with the common prefix it has
+        # inserted; drawing prompt+buf manually duplicated the suffix.
         sys.stdout.flush()
+        try:
+            readline.redisplay()
+        except Exception:
+            pass
 
     # ------------ prompt ------------
     def _prompt(self) -> str:
