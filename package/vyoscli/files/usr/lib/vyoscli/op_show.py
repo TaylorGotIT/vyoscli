@@ -268,6 +268,15 @@ def _op_show_interfaces(ctx: Any, value: Any) -> str:
     return "\n".join(lines)
 
 
+def _list_ethernet_ifaces() -> list:
+    import os
+    try:
+        names = os.listdir("/sys/class/net")
+    except OSError:
+        return []
+    return sorted(n for n in names if n.startswith(("eth", "en")))
+
+
 def _op_show_interface_detail(ctx: Any, value: Any) -> str:
     import subprocess
     if not value:
@@ -276,7 +285,19 @@ def _op_show_interface_detail(ctx: Any, value: Any) -> str:
         r = subprocess.run(["ip", "addr", "show", value], capture_output=True, text=True, timeout=5)
         out = r.stdout.strip()
         if not out:
-            return f"Interface {value} not found."
+            msg = f"Interface {value} not found."
+            try:
+                available = _list_ethernet_ifaces()
+            except Exception:
+                available = []
+            if available:
+                import difflib
+                close = difflib.get_close_matches(value, available, n=1,
+                                                  cutoff=0.4)
+                if close:
+                    msg += f"\nDid you mean {close[0]}?"
+                msg += "\nAvailable: " + ", ".join(available)
+            return msg
         # append only the statistics section; the full ip -s link output
         # repeats the interface header/addresses already shown above.
         try:

@@ -7,6 +7,8 @@
 - show ipv6 route：支持 gp、connected、static、summary、
   kernel/orward、	able <id>，以及 show ipv6 route <prefix>；
   Tab 会列出子命令和 <h:h:h:h:h:h:h:h/x> 提示。
+- show interfaces ethernet <name> 拼错时给出 Did you mean 和可用接口列表。
+- Tab 前缀无匹配时仍列出当前层候选，不再静默。
 
 ## 0.2.0 (2026-11-07)
 
