@@ -26,6 +26,7 @@ except ImportError:  # Windows / minimal python3 without readline
     readline = None  # type: ignore
     _HAVE_READLINE = False
 
+from . import __version__
 from .config import ConfigStore
 from .tree import CommandTree, Node, VALUE_TYPES, coerce_value, validate_value
 
@@ -634,8 +635,8 @@ class Cli:
     # ------------ main loop ------------
     def cmdloop(self) -> None:
         # set terminal title
-        print("\033]0;vyoscli - OpenWrt\007", end="")
-        print("Welcome to vyoscli (a VyOS-style CLI for OpenWrt). Type 'exit' to return to shell.")
+        print(f"\033]0;vyoscli {__version__} - OpenWrt\007", end="")
+        print(f"Welcome to vyoscli {__version__} (a VyOS-style CLI for OpenWrt). Type 'exit' to return to shell.")
         while self.running:
             try:
                 line = input(self._prompt()).strip()

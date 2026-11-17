@@ -129,7 +129,9 @@ def _op_show_version(ctx: Any, value: Any) -> str:
     else:
         openwrt_ver = uname.release
 
+    from . import __version__
     return (
+        f"vyoscli version:   {__version__}\n"
         f"Hostname:          {host}\n"
         f"OS:                {openwrt_ver}\n"
         f"Kernel:            {uname.release} {uname.machine}\n"

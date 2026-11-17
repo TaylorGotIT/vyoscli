@@ -3,6 +3,7 @@ import os
 import time
 import json
 
+from . import __version__
 from .cli import main
 from .config import ConfigStore
 
@@ -35,6 +36,8 @@ if __name__ == "__main__":
     if "--rollback-wait" in args:
         i = args.index("--rollback-wait")
         _rollback_wait(int(args[i + 1]), args[i + 2])
+    elif "--version" in args or "-V" in args:
+        print(f"vyoscli {__version__}")
     elif "--sync" in args:
         # Boot-time reconcile: no-op when the last commit's UCI sections still
         # match, otherwise re-apply just the drifted ones.
