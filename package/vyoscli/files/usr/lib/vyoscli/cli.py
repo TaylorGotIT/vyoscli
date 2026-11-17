@@ -222,6 +222,16 @@ class Cli:
     def postloop(self) -> None:
         self._save_history()
 
+    def _print_candidates(self, names, help_map) -> None:
+        import sys
+        width = max((len(n) for n in names), default=0)
+        sys.stdout.write("\r\x1b[K")
+        print("Possible completions:")
+        for name in names:
+            print(f"  {name.ljust(width + 2)}{help_map.get(name, '')}")
+        sys.stdout.write(self._prompt() + readline.get_line_buffer())
+        sys.stdout.flush()
+
     def _completer(self, text: str, state: int) -> Optional[str]:
         if not _HAVE_READLINE:
             return None
@@ -232,6 +242,12 @@ class Cli:
         matches = self._matches_with_help(tokens)
         names = [n for n, _ in matches]
         filtered = [n for n in names if n.startswith(text)]
+        if not filtered:
+            # No prefix match (usually a typo): show every candidate instead
+            # of doing nothing, but never insert a wrong completion.
+            if names and state == 0:
+                self._print_candidates(names, dict(matches))
+            return None
         if state >= len(filtered):
             return None
         # if unique match and it's a leaf, append space
@@ -241,13 +257,7 @@ class Cli:
             # A placeholder such as <x.x.x.x> is not a completion: print it
             # on its own line (VyOS style) and leave the buffer unchanged.
             if name.startswith(("<", "{", "[")):
-                import sys
-                width = max((len(n) for n in names), default=len(name))
-                sys.stdout.write("\r\x1b[K")
-                print("Possible completions:")
-                print(f"  {name.ljust(width)}  {help_map.get(name, '')}")
-                sys.stdout.write(self._prompt() + buf)
-                sys.stdout.flush()
+                self._print_candidates([name], help_map)
                 return None
             if help_map.get(name) in ("value", "") or name == "<Enter>":
                 return name + " "
