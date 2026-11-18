@@ -567,8 +567,13 @@ class Cli:
         return f"cfg: unknown verb '{head}'"
 
     def _apply_set_delete(self, verb: str, path_tokens: List[str]) -> str:
+        # VyOS accepts `member interface eth0`; store it as `member eth0`.
+        pt = list(path_tokens)
+        if (len(pt) >= 6 and pt[0] == "interfaces" and pt[1] == "bridge"
+                and pt[3] == "member" and pt[4] == "interface"):
+            pt = pt[:4] + pt[5:]
         # Prepend current cfg_path so edit/next sessions compose.
-        full = self.ctx.cfg_path + path_tokens
+        full = self.ctx.cfg_path + pt
         # Walk the cfg tree; canonical names are what gets stored, so
         # abbreviated input ("set syst host-name x") lands in the right node.
         node, remaining, _matched, canon = self.tree.cfg_root.walk([verb] + full)

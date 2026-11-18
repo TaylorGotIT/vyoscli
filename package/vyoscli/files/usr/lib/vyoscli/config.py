@@ -795,6 +795,7 @@ class ConfigStore:
             ("snmp", self._apply_snmp),
             ("router-advert", self._apply_router_advert),
             ("lldp", self._apply_lldp),
+            ("tph", self._apply_tph),
             ("name-servers", self._apply_name_servers),
             ("system-dns", self._apply_system_dns),
             ("login", self._apply_login),
@@ -1710,6 +1711,52 @@ while True:
             f.write(str(proc.pid))
         return [f"failover: {len(data)} route(s) monitored"]
 
+    def _apply_tph(self, old, new):
+        old_t = ((old.get("service") or {}).get("tph") or {})
+        new_t = ((new.get("service") or {}).get("tph") or {})
+        if old_t == new_t:
+            return []
+        run_dir = os.path.join(self.base_dir, "run")
+        os.makedirs(run_dir, exist_ok=True)
+        pidfile = os.path.join(run_dir, "tph.pid")
+        conf = "/run/tph.json"
+
+        def stop():
+            try:
+                with open(pidfile, encoding="utf-8") as f:
+                    pid = int(f.read().strip())
+                os.kill(pid, 15)
+            except (OSError, ValueError):
+                pass
+            try:
+                os.remove(pidfile)
+            except OSError:
+                pass
+
+        stop()
+        br_if = new_t.get("bridge-interface") or ""
+        if not br_if:
+            subprocess.run(["nft", "delete", "table", "bridge", "tph_shield"],
+                           capture_output=True, text=True, timeout=10)
+            try:
+                os.remove(conf)
+            except OSError:
+                pass
+            return ["tph: stopped"]
+        nets = _as_list(new_t.get("network"))
+        with open(conf, "w", encoding="utf-8") as f:
+            json.dump({"br_if": br_if, "hijack_nets": nets}, f, indent=2)
+        script = os.path.join(os.path.dirname(__file__), "tph_monitor.py")
+        if not os.path.exists(script):
+            return ["tph: monitor script missing"]
+        log_path = os.path.join(self.base_dir, "tph.log")
+        log = open(log_path, "a", encoding="utf-8")
+        proc = subprocess.Popen(["python3", script], stdout=log, stderr=log,
+                                start_new_session=True)
+        with open(pidfile, "w", encoding="utf-8") as f:
+            f.write(str(proc.pid))
+        return [f"tph: bridge {br_if}, {len(nets)} hijack network(s)"]
+
     def _apply_dhcp_relay(self, old, new):
         old_r = (old.get("service") or {}).get("dhcp-relay") or {}
         new_r = (new.get("service") or {}).get("dhcp-relay") or {}
@@ -2312,13 +2359,24 @@ while True:
                 except subprocess.CalledProcessError:
                     pass
             self._uci("set", f"network.{iface_sec}.device={brname}")
-            self._uci("set", f"network.{iface_sec}.proto=static")
-            try:
-                self._uci("delete", f"network.{iface_sec}.ipaddr")
-            except subprocess.CalledProcessError:
-                pass
-            for addr in _as_list(brcfg.get("address")):
-                self._uci("add_list", f"network.{iface_sec}.ipaddr={addr}")
+            if brcfg.get("mac"):
+                self._uci("set", f"network.{dev_sec}.macaddr={brcfg['mac']}")
+            addrs = _as_list(brcfg.get("address"))
+            dhcp = any(str(a).lower() == "dhcp" for a in addrs)
+            if dhcp:
+                self._uci("set", f"network.{iface_sec}.proto=dhcp")
+                try:
+                    self._uci("delete", f"network.{iface_sec}.ipaddr")
+                except subprocess.CalledProcessError:
+                    pass
+            else:
+                self._uci("set", f"network.{iface_sec}.proto=static")
+                try:
+                    self._uci("delete", f"network.{iface_sec}.ipaddr")
+                except subprocess.CalledProcessError:
+                    pass
+                for addr in addrs:
+                    self._uci("add_list", f"network.{iface_sec}.ipaddr={addr}")
 
             old_vlans = (old_br.get(brname) or {}).get("vlan") or {}
             for vid in set(old_vlans) - set(brcfg.get("vlan") or {}):

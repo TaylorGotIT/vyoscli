@@ -150,7 +150,7 @@
 | `interfaces bonding <name> member` | Member interface | `interfaces bonding <name> member text` |
 | `interfaces bonding <name> mode` | 802.3ad \| active-backup \| balance-rr \| ... | `interfaces bonding <name> mode text` |
 | `interfaces bonding <name> mtu` | MTU | `interfaces bonding <name> mtu 100` |
-| `interfaces bridge <br-name> address` | IP address/prefix | `interfaces bridge <br-name> address 192.0.2.1/24` |
+| `interfaces bridge <br-name> address` | IP address/prefix | `interfaces bridge <br-name> address <value>` |
 | `interfaces bridge <br-name> aging` | MAC aging interval (default 300) | `interfaces bridge <br-name> aging 100` |
 | `interfaces bridge <br-name> description` | Description | `interfaces bridge <br-name> description text` |
 | `interfaces bridge <br-name> disable` | Administratively disable | `interfaces bridge <br-name> disable true` |
@@ -577,6 +577,8 @@
 | `service ssh root-login` | Allow root SSH login (true/false) | `service ssh root-login true` |
 | `service tcp-accelerate congestion-control` | bbr/cubic/hybla | `service tcp-accelerate congestion-control bbr` |
 | `service tcp-accelerate fq-codel` | Enable fq_codel qdisc | `service tcp-accelerate fq-codel true` |
+| `service tph bridge-interface` | Bridge interface (e.g. br100) | `service tph bridge-interface text` |
+| `service tph network` | Source network to hijack | `service tph network 192.0.2.1/24` |
 
 ## set system
 

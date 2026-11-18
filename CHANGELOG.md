@@ -9,6 +9,9 @@
   uptime 不重置。
 - 仅当新增/删除 FRR daemon（如启用 ospfd/ripd/bfdd）时才后台重启。
 - 新增依赖 rr-pythontools（提供 frr-reload.py）。
+- 新增 service tph 透明网桥劫持：FDB 自动识别 WAN/LAN、同步网桥 MAC、
+  二层防风暴与指定网段劫持；桥支持 mac、ddress dhcp、
+  member interface ...，member 改为可重复列表。
 
 ## 0.2.1 (2026-11-17)
 

@@ -119,6 +119,7 @@ python3 scripts/make-ipk.py                  # 带完整 Depends
 | L2TP | xl2tpd、ppp-mod-pppol2tp |
 | 容器 | podman、netavark、iptables/conntrack 模块 |
 | LLDP | lldpd |
+| 透明网桥 TPH | bridge、ethtool、iputils-arping |
 | 用户管理 | shadow-useradd、shadow-chpasswd |
 | 路径监测 | mtr、mtr-json |
 
@@ -455,6 +456,22 @@ set service mtr t1 count 10
 set service mtr t1 interval 60
 show service mtr
 ```
+
+### 透明网桥 TPH
+
+```bash
+set interfaces bridge br100 mac cc:d3:9d:93:d0:5e
+set interfaces bridge br100 member interface eth0
+set interfaces bridge br100 member interface eth1
+set interfaces bridge br100 address dhcp
+
+set service tph bridge-interface br100
+set service tph network 192.168.10.0/24
+```
+
+`service tph` 会监视网桥 FDB，按网关 MAC 自动识别 WAN/LAN 口，同步网桥 MAC，
+并下发二层防风暴 + 透明劫持 nftables 规则。需要 `bridge`、`ethtool`、
+`iputils-arping`。
 
 ### 运维/诊断
 

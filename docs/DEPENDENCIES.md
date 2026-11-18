@@ -56,6 +56,7 @@ Install missing packages with:
 | 容器 | `podman`、`netavark`、`iptables-nft`、`ip6tables-nft`、`kmod-ipt-nat`、`iptables-mod-nat-extra`、`kmod-ipt-conntrack`、`iptables-mod-conntrack-extra`、`kmod-ipt-extra`、`iptables-mod-extra` |
 | LLDP | `lldpd` |
 | MTR | `mtr` |
+| 透明网桥 TPH | `bridge`、`ethtool`、`iputils-arping`、nftables |
 | DNS | `dnsmasq`（通常已装） |
 | smartdns | `smartdns` |
 | AdGuard | `adguardhome` |

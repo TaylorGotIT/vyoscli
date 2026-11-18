@@ -632,6 +632,24 @@ show service mtr t1
 - `count` 是每轮探针数，`interval` 是两轮间隔秒数。
 - `disable` 停止任务；`delete service mtr t1` 删除并停进程。
 
+### 透明网桥 TPH
+
+```bash
+set interfaces bridge br100 mac cc:d3:9d:93:d0:5e
+set interfaces bridge br100 member interface eth0
+set interfaces bridge br100 member interface eth1
+set interfaces bridge br100 address dhcp
+
+set service tph bridge-interface br100
+set service tph network 192.168.10.0/24
+```
+
+- 后台 `tph_monitor.py` 每 10 秒读取 `/run/tph.json`；
+- 根据默认网关 MAC 在网桥 FDB 中的位置自动识别 WAN/LAN 口；
+- 将网桥 MAC 同步为 WAN 口物理 MAC；
+- 下发 `bridge tph_shield`：二层防风暴 + 指定源网段透明劫持；
+- 依赖 `bridge`、`ethtool`、`iputils-arping`、nftables。
+
 ### 服务状态与重启（操作模式）
 
 ```bash

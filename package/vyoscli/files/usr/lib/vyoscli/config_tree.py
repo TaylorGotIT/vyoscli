@@ -891,7 +891,7 @@ TREE = json.loads(r'''[
 {
 "name": "address",
 "help": "IP address/prefix",
-"type": "ipv4net"
+"type": "bridge-address"
 },
 {
 "name": "aging",
@@ -941,7 +941,8 @@ TREE = json.loads(r'''[
 {
 "name": "member",
 "help": "Bridge member interfaces",
-"type": "str"
+"type": "str",
+"repeatable": true
 },
 {
 "name": "mtu",
@@ -3393,6 +3394,23 @@ TREE = json.loads(r'''[
 "name": "disable",
 "help": "Stop the task",
 "type": "bool"
+}
+]
+},
+{
+"name": "tph",
+"help": "Transparent bridge hijack",
+"children": [
+{
+"name": "bridge-interface",
+"help": "Bridge interface (e.g. br100)",
+"type": "str"
+},
+{
+"name": "network",
+"help": "Source network to hijack",
+"type": "ipv4net",
+"repeatable": true
 }
 ]
 }

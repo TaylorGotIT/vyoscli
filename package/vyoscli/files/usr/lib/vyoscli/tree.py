@@ -29,13 +29,14 @@ VALUE_TYPES = {
     "integer": "<0-4294967295>",
     "int": "<0-4294967295>",
     "table": "<1-4294967295>",
+    "bridge-address": "<x.x.x.x/xx|dhcp>",
     "boolean": "<true|false>",
     "bool": "<true|false>",
 }
 
 _SCALAR_TYPES = {"ipv4", "ipv4net", "ipv4_cidr", "ipv6", "ipv6net",
-                 "port", "integer", "int", "table", "boolean", "bool",
-                 "host"}
+                 "port", "integer", "int", "table", "bridge-address",
+                 "boolean", "bool", "host"}
 
 
 def validate_value(value_type: Optional[str], value: str) -> Optional[str]:
@@ -80,6 +81,13 @@ def validate_value(value_type: Optional[str], value: str) -> Optional[str]:
             return "not a routing table ID"
         if not 1 <= int(value) <= 4294967295:
             return "table out of range 1-4294967295"
+    elif vt == "bridge-address":
+        if value.lower() == "dhcp":
+            return None
+        try:
+            ipaddress.IPv4Network(value, strict=False)
+        except ValueError:
+            return "expected an IPv4 prefix or dhcp"
     elif vt in ("boolean", "bool"):
         if value.lower() not in ("true", "false"):
             return "expected true or false"
