@@ -16,11 +16,13 @@ Log = logging.getLogger("tph")
 CONFIG_FILE = Path("/run/tph.json")
 NFT_CONF_FILE = Path("/run/tph/tph.nft")
 
-DEFAULT_CONFIG = {"br_if": "", "hijack_nets": []}
-
 
 def run_cmd(cmd: str) -> str:
-    res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    try:
+        res = subprocess.run(cmd, shell=True, capture_output=True, text=True,
+                             timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return ""
     return res.stdout.strip()
 
 
@@ -134,15 +136,16 @@ table bridge tph_shield {{
 
 
 def main() -> None:
-    bypass = "/usr/bin/bypass1168"
-    if Path(bypass).exists():
-        run_cmd(f"{bypass} --set pwon 0 1 0")
+    # Transparent bridge traffic must not be re-injected into iptables; the
+    # tph rules themselves live in the bridge family and do not need it.
     run_cmd("sysctl -w net.bridge.bridge-nf-call-iptables=0")
     last_state = None
     while True:
         try:
-            cfg = (json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-                   if CONFIG_FILE.exists() else DEFAULT_CONFIG)
+            if not CONFIG_FILE.exists():
+                time.sleep(5)
+                continue
+            cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
             br_if = cfg.get("br_if", "")
             hijack_nets = sorted(cfg.get("hijack_nets", []))
             if not br_if:
