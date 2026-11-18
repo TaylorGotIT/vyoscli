@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.2 (2026-11-18)
+
+### 改进
+
+- BGP 配置改为 **FRR 热加载**：使用 rr-reload.py --reload 应用
+  frr.conf，路由/邻居/route-map 变更不再重启 FRR，已有邻居保持 Established，
+  uptime 不重置。
+- 仅当新增/删除 FRR daemon（如启用 ospfd/ripd/bfdd）时才后台重启。
+- 新增依赖 rr-pythontools（提供 frr-reload.py）。
+
 ## 0.2.1 (2026-11-17)
 
 ### 新增

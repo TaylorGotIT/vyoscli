@@ -16,7 +16,7 @@ Tab/`?` 补全、`show` 分页、配置快照与漂移检测。
 `container name/network` 等。纯 Python，不依赖 UCI 之外的框架；
 没有 UCI 对应项时才退化为 `ip`/`nft`/`tc`/FRR 等原生命令。
 
-**当前版本：0.2.1**（变更见 [CHANGELOG.md](CHANGELOG.md)）。
+**当前版本：0.2.2**（变更见 [CHANGELOG.md](CHANGELOG.md)）。
 
 - 完整命令参考：[docs/COMMANDS.md](docs/COMMANDS.md)（593 条，自动生成）
 - 操作/配置指南：[docs/GUIDE.md](docs/GUIDE.md)
@@ -110,7 +110,7 @@ python3 scripts/make-ipk.py                  # 带完整 Depends
 | 功能 | 依赖 |
 |---|---|
 | CLI | python3、python3-readline、ip-full |
-| BGP/OSPF/RIP/BFD | frr、frr-ospfd、frr-ripd、frr-bfdd |
+| BGP/OSPF/RIP/BFD | frr、frr-ospfd、frr-ripd、frr-bfdd、frr-pythontools |
 | DHCP/DNS | dnsmasq、smartdns、adguardhome |
 | 防火墙/NAT | fw4、nftables、iptables-nft、kmod-ipt-* |
 | WireGuard | kmod-wireguard、wireguard-tools |
@@ -519,7 +519,8 @@ python3 scripts/gen-command-reference.py
 - **IPsec**：已能生成 ike/esp 组和启动 strongSwan，site-to-site/证书场景未做端到端。
 - **Wireless**：依赖射频硬件，未做端到端验证。
 - **commit 非原子**：某段下发失败时其余段仍会执行并返回说明。
-- **FRR 重启**：BGP 配置提交会重启 FRR，邻居会短暂重建。
+- **FRR 热加载**：BGP 配置提交通过 `frr-reload.py` 热加载，不重启 FRR；
+  仅新增/删除 daemon（ospfd/ripd/bfdd）时才后台重启。
 - VyOS 风格防火墙/NAT 使用独立 nft 表，`accept` 仍会继续走 fw4 zone 策略。
 
 更细的测试记录、修复历史与差距见 [docs/AUDIT.md](docs/AUDIT.md) 和

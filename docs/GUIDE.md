@@ -253,7 +253,8 @@ set protocols bgp 65000 neighbor 192.168.5.2 bfd check-control-plane-failure
 set protocols bfd peer 192.168.5.2 echo-mode
 ```
 
-- 每次 BGP 配置提交会重启 FRR 以加载 `frr.conf`，邻居会短暂重建。
+- BGP 配置提交通过 `frr-reload.py` 热加载，邻居保持 Established，不会短暂重建；
+  只有新增/删除 FRR daemon（如 ospfd/ripd/bfdd）时才后台重启。
 - `show ip bgp summary`、`show ip bgp neighbors <ip> received-routes` 查看路由。
 - 多出口优先级用 route-map 设置 MED：`set metric 100/200`，数值小优先。
 
@@ -715,6 +716,6 @@ vtysh -c 'show bgp summary'
 - IPsec 仅验证 ike/esp 组与服务启动，site-to-site/证书未端到端。
 - wireless 依赖硬件，未做端到端。
 - commit 非原子：某段失败其余段仍执行并返回说明。
-- BGP 提交会重启 FRR，邻居短暂重建。
+- BGP 配置默认热加载；仅 FRR daemon 集变化时才后台重启。
 
 更多测试记录与修复历史见 [AUDIT.md](AUDIT.md)。

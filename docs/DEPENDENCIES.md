@@ -48,7 +48,7 @@ Install missing packages with:
 
 | 功能 | 包 |
 |---|---|
-| BGP / OSPF / RIP / BFD | `frr`、`frr-ospfd`、`frr-ripd`、`frr-bfdd` |
+| BGP / OSPF / RIP / BFD | `frr`、`frr-ospfd`、`frr-ripd`、`frr-bfdd`、`frr-pythontools` |
 | WireGuard | `kmod-wireguard`、`wireguard-tools` |
 | OpenVPN | `openvpn-openssl` |
 | IPsec | `strongswan-ipsec`、`strongswan-charon`、`strongswan-mod-aes`、`strongswan-mod-sha2` |
@@ -82,7 +82,7 @@ Package/vyoscli
   DEPENDS:=+python3 +python3-readline +ip-full
 
 Package/vyoscli-full
-  DEPENDS:=vyoscli +frr +frr-ospfd +frr-ripd +frr-bfdd \
+  DEPENDS:=vyoscli +frr +frr-ospfd +frr-ripd +frr-bfdd +frr-pythontools +frr-pythontools \
            +wireguard-tools +kmod-wireguard +openvpn-openssl \
            +strongswan-ipsec +strongswan-charon \
            +strongswan-mod-aes +strongswan-mod-sha2 \

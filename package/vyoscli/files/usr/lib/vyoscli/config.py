@@ -3647,17 +3647,34 @@ while True:
             with open("/etc/frr/frr.conf", "w", encoding="utf-8") as f:
                 f.write(text)
             os.chmod("/etc/frr/frr.conf", 0o640)
-            self._set_frr_daemons(bool(new_b.get("local-as")),
-                                  bool(ospf), bool(rip), bool(bfd))
-            # frr reads frr.conf at daemon start; a plain start is a no-op
-            # when it is already running, so restart to apply changes.
-            # procd restart can take longer than the CLI timeout; run it
-            # detached so the commit returns and BGP reconnects in background.
-            subprocess.Popen(["/etc/init.d/frr", "restart"],
-                             stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL,
-                             start_new_session=True)
-            notes.append("bgp: frr restarting to apply config")
+            daemons_changed = self._set_frr_daemons(
+                bool(new_b.get("local-as")), bool(ospf), bool(rip), bool(bfd))
+            applied = False
+            if not daemons_changed:
+                reloader = "/usr/lib/frr/frr-reload.py"
+                if os.path.exists(reloader):
+                    try:
+                        r = subprocess.run(
+                            ["python3", reloader, "--reload",
+                             "/etc/frr/frr.conf"],
+                            capture_output=True, text=True, timeout=90)
+                        if r.returncode == 0:
+                            notes.append("bgp: hot-reloaded (no FRR restart)")
+                            applied = True
+                        else:
+                            notes.append(
+                                "bgp: hot reload failed, restarting FRR: "
+                                + (r.stderr or r.stdout or "").strip()[:120])
+                    except Exception as e:  # noqa: BLE001
+                        notes.append(f"bgp: hot reload error: {e}")
+            if not applied:
+                # New/removed daemons need a real restart; do it detached so
+                # the commit returns and FRR reconnects in background.
+                subprocess.Popen(["/etc/init.d/frr", "restart"],
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL,
+                                 start_new_session=True)
+                notes.append("bgp: frr restarting to apply daemon changes")
             subprocess.run(["vtysh", "-b"], capture_output=True,
                            text=True, timeout=30)
             if new_b.get("local-as"):
