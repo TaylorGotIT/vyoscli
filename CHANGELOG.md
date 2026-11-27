@@ -13,6 +13,13 @@
   二层防风暴与指定网段劫持；桥支持 mac、ddress dhcp、
   member interface ...，member 改为可重复列表。
 
+### 打包
+
+- 完整依赖包：dist/vyoscli_0.2.2-r1_all-full.ipk
+  - SHA256：32BF3F2A68E0A797861C6995F66AC6EEAE285E840A64E3E0DB6AB4B1D544E8C6
+- 最小依赖包：dist/vyoscli_0.2.2-r1_all-minimal.ipk
+  - SHA256：A8B30A5EBAFF2368446BC2F68834466220D04D3DE4BE2FAFFBB118ECDAD77327
+
 ## 0.2.1 (2026-11-17)
 
 ### 新增
