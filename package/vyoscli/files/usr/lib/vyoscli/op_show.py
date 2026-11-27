@@ -1053,9 +1053,10 @@ def _udp_payload(port: int, extra: str):
                 return b"\x00", "custom"
         return extra.encode(), "custom"
     if port == 53:
-        # DNS query: version.bind CH TXT (any response proves it is open).
-        name = b"\x07version\x04bind\x00"
-        question = name + struct.pack("!HH", 16, 3)
+        # Standard recursive A query; CHAOS version.bind is often ignored by
+        # public resolvers (1.1.1.1, 223.5.5.5), which looked like packet loss.
+        name = b"\x07example\x03com\x00"
+        question = name + struct.pack("!HH", 1, 1)
         header = struct.pack("!HHHHHH", 0x1234, 0x0100, 1, 0, 0, 0)
         return header + question, "dns"
     if port == 123:
