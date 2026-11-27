@@ -83,6 +83,7 @@ from .op_show import (
     _op_show_ipv6_route_table,
     _op_iperf3,
     _op_iperf,
+    _op_tc,
 )
 
 # ---------- ping ----------
@@ -316,6 +317,15 @@ def build_tree(store: Any) -> CommandTree:
             value_type="str", action=_op_iperf3)
     tree.op("iperf", help="iPerf2 bandwidth test (client or server)",
             value_type="str", action=_op_iperf)
+    tc_node = tree.op("tc", help="Traffic control (tc ...)",
+                       value_type="str", action=_op_tc)
+    tc_node._completion = lambda: [
+        ("qdisc", "Queueing discipline"),
+        ("class", "Traffic classes"),
+        ("filter", "Traffic filters"),
+        ("link", "Link layer settings"),
+        ("-s", "Show statistics"),
+    ]
     tcp_ping = tree.op("ping tcp",
                        help="TCP port check: ping tcp ip <x.x.x.x> port <1-65535>",
                        action=_op_ping_tcp)

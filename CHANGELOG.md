@@ -14,6 +14,7 @@
 - route-map set extcommunity bandwidth 与
   parameters bestpath bandwidth default-weight-for-missing。
 - 操作模式新增 iperf / iperf3 测速命令，支持客户端与服务端模式。
+- 操作模式新增 	c 命令，透传 qdisc/class/filter 查询，便于网络测试。
 
 ## 0.2.2 (2026-11-18)
 

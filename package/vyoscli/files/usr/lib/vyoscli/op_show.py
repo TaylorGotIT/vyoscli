@@ -19,6 +19,7 @@ FEATURE_DEPS = [
     ("mtr", ["mtr"]),
     ("iperf", ["iperf"]),
     ("iperf3", ["iperf3"]),
+    ("tc", ["tc"]),
     ("dns", ["dnsmasq"]),
     ("smartdns", ["smartdns"]),
     ("adguard", ["adguardhome"]),
@@ -1833,3 +1834,28 @@ def _op_iperf3(ctx: Any, value: Any) -> str:
 
 def _op_iperf(ctx: Any, value: Any) -> str:
     return _op_iperf_run(ctx, value, "iperf")
+
+
+def _op_tc(ctx: Any, value: Any) -> str:
+    import shlex
+    import shutil
+    import subprocess
+    if not value:
+        return ("Usage: tc <object> <command> [args]\n"
+                "  tc qdisc show dev eth1\n"
+                "  tc -s qdisc show dev eth1\n"
+                "  tc class show dev eth1")
+    if shutil.which("tc") is None:
+        return "tc not installed (opkg install tc)"
+    try:
+        args = shlex.split(str(value))
+    except ValueError as e:
+        return f"tc: {e}"
+    try:
+        r = subprocess.run(["tc"] + args, capture_output=True, text=True,
+                           timeout=15)
+    except subprocess.TimeoutExpired:
+        return "tc: timed out"
+    except OSError as e:
+        return f"tc: {e}"
+    return (r.stdout or "") + (r.stderr or "")

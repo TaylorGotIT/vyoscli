@@ -708,6 +708,9 @@ iperf3 192.0.2.10 -t 10      # iPerf3 客户端
 iperf3 server 5201            # iPerf3 服务端
 iperf 192.0.2.10 -t 10       # iPerf2 客户端
 iperf server 5001             # iPerf2 服务端
+
+tc qdisc show dev eth1        # 出口队列
+tc -s qdisc show dev eth1     # 队列统计
 ```
 
 `ping tcp/udp` 在 TTY 下每秒重复探测并输出 `[seq]`，Ctrl+C 打印
