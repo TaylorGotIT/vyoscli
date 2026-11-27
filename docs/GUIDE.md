@@ -234,22 +234,28 @@ set protocols failover route 1.1.1.1/32 next-hop 192.168.75.1 metric 10
 
 `show ip route static` 在 FRR 无静态路由时回退到内核 `proto static`，显示 `S>*`。
 
-### BGP（VyOS 1.5 ASN 实例）
+### BGP（VyOS 1.5 system-as）
 
 ```bash
-set protocols bgp 65000 parameters router-id 192.168.75.241
-set protocols bgp 65000 timers holdtime 15
-set protocols bgp 65000 timers keepalive 5
+set protocols bgp system-as 65000
+set protocols bgp parameters router-id 192.168.75.241
+set protocols bgp timers holdtime 15
+set protocols bgp timers keepalive 5
 
-set protocols bgp 65000 address-family ipv4-unicast maximum-paths ibgp 4
-set protocols bgp 65000 address-family ipv4-unicast redistribute connected
+set protocols bgp address-family ipv4-unicast maximum-paths ibgp 4
+set protocols bgp address-family ipv4-unicast maximum-paths ebgp 3
+set protocols bgp address-family ipv4-unicast redistribute connected
+set protocols bgp parameters bestpath bandwidth default-weight-for-missing
 
-set protocols bgp 65000 neighbor 192.168.5.2 remote-as 65002
-set protocols bgp 65000 neighbor 192.168.5.2 local-as 65001
-set protocols bgp 65000 neighbor 192.168.5.2 address-family ipv4-unicast route-map export med100
-set protocols bgp 65000 neighbor 192.168.5.2 address-family ipv4-unicast soft-reconfiguration inbound
-set protocols bgp 65000 neighbor 192.168.5.2 bfd check-control-plane-failure
+set protocols bgp neighbor 192.168.5.2 remote-as 65002
+set protocols bgp neighbor 192.168.5.2 local-as 65001
+set protocols bgp neighbor 192.168.5.2 address-family ipv4-unicast route-map export med100
+set protocols bgp neighbor 192.168.5.2 address-family ipv4-unicast soft-reconfiguration inbound
+set protocols bgp neighbor 192.168.5.2 bfd
 
+set protocols bfd peer 192.168.5.2 interval transmit 300
+set protocols bfd peer 192.168.5.2 interval receive 300
+set protocols bfd peer 192.168.5.2 interval multiplier 3
 set protocols bfd peer 192.168.5.2 echo-mode
 ```
 

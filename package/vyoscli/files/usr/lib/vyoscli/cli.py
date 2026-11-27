@@ -601,6 +601,13 @@ class Cli:
                     self.store.set_value(structural, new_value)
                 return ""
             if node.children:
+                # set ... address-family ipv4-unicast is an activation
+                # command without a value in VyOS; store an empty node.
+                if (not value_tokens and structural
+                        and structural[-1] in ("address-family",
+                                               "ipv4-unicast")):
+                    self.store.create_node(structural)
+                    return ""
                 return ("set: incomplete path. expected one of: "
                         + ", ".join(sorted(node.children.keys())))
             # Structural leaf with no value_type: create an empty node.

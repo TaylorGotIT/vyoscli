@@ -800,6 +800,7 @@ class ConfigStore:
             ("system-dns", self._apply_system_dns),
             ("login", self._apply_login),
             ("interfaces", self._apply_interfaces),
+            ("multipath", self._apply_multipath),
             ("pppoe", self._apply_pppoe),
             ("virtual-ifaces", self._apply_virtual_ifaces),
             ("bonding", self._apply_bonding),
@@ -1756,6 +1757,36 @@ while True:
         with open(pidfile, "w", encoding="utf-8") as f:
             f.write(str(proc.pid))
         return [f"tph: bridge {br_if}, {len(nets)} hijack network(s)"]
+
+    def _apply_multipath(self, old, new):
+        old_m = (((old.get("system") or {}).get("ip") or {})
+                 .get("multipath") or {})
+        new_m = (((new.get("system") or {}).get("ip") or {})
+                 .get("multipath") or {})
+        if old_m == new_m:
+            return []
+        enabled = bool(new_m.get("layer4-hashing"))
+        value = "1" if enabled else "0"
+        notes = []
+        for key in ("net.ipv4.fib_multipath_hash_policy",
+                    "net.ipv6.fib_multipath_hash_policy"):
+            try:
+                subprocess.run(["sysctl", "-w", f"{key}={value}"],
+                               capture_output=True, text=True, timeout=5)
+            except (OSError, subprocess.SubprocessError) as e:
+                notes.append(f"multipath: {key} failed ({e})")
+        # Best effort persistence on OpenWrt's sysctl.d.
+        conf = "/etc/sysctl.d/99-vyoscli-multipath.conf"
+        try:
+            os.makedirs("/etc/sysctl.d", exist_ok=True)
+            with open(conf, "w", encoding="utf-8") as f:
+                f.write("net.ipv4.fib_multipath_hash_policy=" + value + "\n")
+                f.write("net.ipv6.fib_multipath_hash_policy=" + value + "\n")
+        except OSError:
+            pass
+        notes.append("multipath: layer4-hashing " +
+                     ("enabled" if enabled else "disabled"))
+        return notes
 
     def _apply_dhcp_relay(self, old, new):
         old_r = (old.get("service") or {}).get("dhcp-relay") or {}
@@ -3365,6 +3396,11 @@ while True:
             lines.append(f"router bgp {asn}")
             if bgp.get("router-id"):
                 lines.append(f" bgp router-id {bgp['router-id']}")
+            if bgp.get("bestpath-bandwidth"):
+                lines.append(" bgp bestpath bandwidth "
+                             f"{bgp['bestpath-bandwidth']}")
+            if bgp.get("multipath-relax"):
+                lines.append(" bgp bestpath as-path multipath-relax")
             timers = bgp.get("timers") or {}
             if timers.get("keepalive") and timers.get("holdtime"):
                 lines.append(f" timers bgp {timers['keepalive']} {timers['holdtime']}")
@@ -3422,6 +3458,8 @@ while True:
                     lines.append(f"  neighbor {name} activate")
                 if bgp.get("maximum-paths-ibgp"):
                     lines.append(f"  maximum-paths ibgp {bgp['maximum-paths-ibgp']}")
+                if bgp.get("maximum-paths-ebgp"):
+                    lines.append(f"  maximum-paths {bgp['maximum-paths-ebgp']}")
                 if bgp.get("redistribute-connected"):
                     lines.append("  redistribute connected")
                 lines.append(" exit-address-family")
@@ -3492,6 +3530,13 @@ while True:
                 if not isinstance(pcfg, dict):
                     continue
                 lines.append(f" peer {peer}")
+                interval = pcfg.get("interval") or {}
+                if interval.get("transmit"):
+                    lines.append(f"  transmit-interval {interval['transmit']}")
+                if interval.get("receive"):
+                    lines.append(f"  receive-interval {interval['receive']}")
+                if interval.get("multiplier"):
+                    lines.append(f"  detect-multiplier {interval['multiplier']}")
                 if pcfg.get("echo-mode"):
                     lines.append("  echo-mode")
             lines.append("!")
@@ -3565,7 +3610,12 @@ while True:
                         else:
                             lines.append(f" match {key} {value}")
                     for key, value in (rbody.get("set") or {}).items():
-                        lines.append(f" set {key} {value}")
+                        if key == "extcommunity" and isinstance(value, dict):
+                            for inner, inner_value in value.items():
+                                lines.append(f" set extcommunity {inner} "
+                                             f"{inner_value}")
+                        else:
+                            lines.append(f" set {key} {value}")
         lines.append("!")
         return lines
 
@@ -3602,48 +3652,73 @@ while True:
                 return {}
             if raw.get("local-as"):
                 return raw
-            for asn, body in raw.items():
-                if not (str(asn).isdigit() and isinstance(body, dict)):
-                    continue
+
+            def norm_nb(nb):
+                n = dict(nb)
+                naf = ((nb.get("address-family") or {}).get("ipv4-unicast") or {})
+                rm = naf.get("route-map") or {}
+                if rm.get("import"):
+                    n["route-map-in"] = rm["import"]
+                if rm.get("export"):
+                    n["route-map-out"] = rm["export"]
+                if (naf.get("soft-reconfiguration") or {}).get("inbound"):
+                    n["soft-reconfiguration"] = {"inbound": True}
+                bfd = nb.get("bfd")
+                if bfd is True or (isinstance(bfd, dict) and bfd.get(
+                        "check-control-plane-failure")):
+                    n["bfd"] = True
+                return n
+
+            def norm_pg(pg):
+                g = dict(pg)
+                gaf = ((pg.get("address-family") or {}).get("ipv4-unicast") or {})
+                grm = gaf.get("route-map") or {}
+                if grm.get("import"):
+                    g["route-map-import"] = grm["import"]
+                if grm.get("export"):
+                    g["route-map-export"] = grm["export"]
+                if (gaf.get("soft-reconfiguration") or {}).get("inbound"):
+                    g["soft-reconfiguration"] = {"inbound": True}
+                bfd = pg.get("bfd")
+                if bfd is True or (isinstance(bfd, dict) and bfd.get(
+                        "check-control-plane-failure")):
+                    g["bfd"] = True
+                return g
+
+            def norm_body(asn, body):
                 out = {"local-as": int(asn), "neighbor": {}, "peer-group": {}}
                 params = body.get("parameters") or {}
                 out["router-id"] = params.get("router-id") or body.get("router-id")
                 out["timers"] = body.get("timers") or {}
+                bandwidth = (params.get("bestpath") or {}).get("bandwidth")
+                if bandwidth:
+                    out["bestpath-bandwidth"] = bandwidth
                 af = ((body.get("address-family") or {}).get("ipv4-unicast") or {})
+                networks = _as_list(af.get("network")) + _as_list(
+                    body.get("network"))
+                if networks:
+                    out["network"] = networks
+                maxpaths = af.get("maximum-paths") or {}
+                if maxpaths.get("ibgp"):
+                    out["maximum-paths-ibgp"] = maxpaths["ibgp"]
+                if maxpaths.get("ebgp"):
+                    out["maximum-paths-ebgp"] = maxpaths["ebgp"]
+                    out["multipath-relax"] = True
                 if (af.get("redistribute") or {}).get("connected"):
                     out["redistribute-connected"] = True
-                maxpaths = (af.get("maximum-paths") or {}).get("ibgp")
-                if maxpaths:
-                    out["maximum-paths-ibgp"] = maxpaths
                 for ip, nb in (body.get("neighbor") or {}).items():
-                    if not isinstance(nb, dict):
-                        continue
-                    n = dict(nb)
-                    naf = ((nb.get("address-family") or {}).get("ipv4-unicast") or {})
-                    rm = naf.get("route-map") or {}
-                    if rm.get("import"):
-                        n["route-map-in"] = rm["import"]
-                    if rm.get("export"):
-                        n["route-map-out"] = rm["export"]
-                    if (naf.get("soft-reconfiguration") or {}).get("inbound"):
-                        n["soft-reconfiguration"] = {"inbound": True}
-                    if (nb.get("bfd") or {}).get("check-control-plane-failure"):
-                        n["bfd"] = True
-                    out["neighbor"][ip] = n
+                    if isinstance(nb, dict):
+                        out["neighbor"][ip] = norm_nb(nb)
                 for name, pg in (body.get("peer-group") or {}).items():
-                    if not isinstance(pg, dict):
-                        continue
-                    g = dict(pg)
-                    gaf = ((pg.get("address-family") or {}).get("ipv4-unicast") or {})
-                    grm = gaf.get("route-map") or {}
-                    if grm.get("import"):
-                        g["route-map-import"] = grm["import"]
-                    if grm.get("export"):
-                        g["route-map-export"] = grm["export"]
-                    if (gaf.get("soft-reconfiguration") or {}).get("inbound"):
-                        g["soft-reconfiguration"] = {"inbound": True}
-                    out["peer-group"][name] = g
+                    if isinstance(pg, dict):
+                        out["peer-group"][name] = norm_pg(pg)
                 return out
+
+            if raw.get("system-as"):
+                return norm_body(raw["system-as"], raw)
+            for asn, body in raw.items():
+                if str(asn).isdigit() and isinstance(body, dict):
+                    return norm_body(asn, body)
             return raw
 
         new_b = norm_bgp((new.get("protocols") or {}).get("bgp") or {})

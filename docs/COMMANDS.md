@@ -388,6 +388,7 @@
 | `policy route-map <name> rule <id> match prefix-list` | Match an IPv4 prefix-list | `policy route-map <name> rule <id> match prefix-list text` |
 | `policy route-map <name> rule <id> match tag` | Match route tag | `policy route-map <name> rule <id> match tag 100` |
 | `policy route-map <name> rule <id> set community` | BGP community (e.g. 65001:100) | `policy route-map <name> rule <id> set community text` |
+| `policy route-map <name> rule <id> set extcommunity bandwidth` | Bandwidth (Mbps) | `policy route-map <name> rule <id> set extcommunity bandwidth text` |
 | `policy route-map <name> rule <id> set ip-next-hop` | BGP next-hop | `policy route-map <name> rule <id> set ip-next-hop 192.0.2.1` |
 | `policy route-map <name> rule <id> set local-preference` | BGP local-preference | `policy route-map <name> rule <id> set local-preference 100` |
 | `policy route-map <name> rule <id> set med` | BGP MED | `policy route-map <name> rule <id> set med 100` |
@@ -407,27 +408,34 @@
 | `protocols bfd min-rx` | Minimum receive interval (ms) | `protocols bfd min-rx 100` |
 | `protocols bfd multiplier` | Detection multiplier | `protocols bfd multiplier 100` |
 | `protocols bfd peer <ip> echo-mode` | Echo mode | `protocols bfd peer <ip> echo-mode true` |
-| `protocols bgp <name> address-family ipv4-unicast maximum-paths ibgp` | iBGP multipath count | `protocols bgp <name> address-family ipv4-unicast maximum-paths ibgp 100` |
-| `protocols bgp <name> address-family ipv4-unicast redistribute connected` | Redistribute connected | `protocols bgp <name> address-family ipv4-unicast redistribute connected true` |
-| `protocols bgp <name> neighbor <name> address-family ipv4-unicast route-map export` | Export route-map | `protocols bgp <name> neighbor <name> address-family ipv4-unicast route-map export text` |
-| `protocols bgp <name> neighbor <name> address-family ipv4-unicast route-map import` | Import route-map | `protocols bgp <name> neighbor <name> address-family ipv4-unicast route-map import text` |
-| `protocols bgp <name> neighbor <name> address-family ipv4-unicast soft-reconfiguration inbound` | Inbound soft reconfiguration | `protocols bgp <name> neighbor <name> address-family ipv4-unicast soft-reconfiguration inbound true` |
-| `protocols bgp <name> neighbor <name> bfd check-control-plane-failure` | BFD check control plane | `protocols bgp <name> neighbor <name> bfd check-control-plane-failure true` |
-| `protocols bgp <name> neighbor <name> description` | Neighbor description | `protocols bgp <name> neighbor <name> description text` |
-| `protocols bgp <name> neighbor <name> local-as` | Local AS override | `protocols bgp <name> neighbor <name> local-as 100` |
-| `protocols bgp <name> neighbor <name> peer-group` | Peer group | `protocols bgp <name> neighbor <name> peer-group text` |
-| `protocols bgp <name> neighbor <name> remote-as` | Peer AS number | `protocols bgp <name> neighbor <name> remote-as 100` |
-| `protocols bgp <name> network` | Network to advertise | `protocols bgp <name> network 203.0.113.0/24` |
-| `protocols bgp <name> parameters router-id` | Router ID | `protocols bgp <name> parameters router-id 192.0.2.1` |
-| `protocols bgp <name> peer-group <name> address-family ipv4-unicast route-map export` | Export route-map | `protocols bgp <name> peer-group <name> address-family ipv4-unicast route-map export text` |
-| `protocols bgp <name> peer-group <name> address-family ipv4-unicast route-map import` | Import route-map | `protocols bgp <name> peer-group <name> address-family ipv4-unicast route-map import text` |
-| `protocols bgp <name> peer-group <name> address-family ipv4-unicast soft-reconfiguration inbound` | Inbound soft reconfiguration | `protocols bgp <name> peer-group <name> address-family ipv4-unicast soft-reconfiguration inbound true` |
-| `protocols bgp <name> peer-group <name> bfd check-control-plane-failure` | BFD check control plane | `protocols bgp <name> peer-group <name> bfd check-control-plane-failure true` |
-| `protocols bgp <name> peer-group <name> description` | Description | `protocols bgp <name> peer-group <name> description text` |
-| `protocols bgp <name> peer-group <name> remote-as` | Peer AS number | `protocols bgp <name> peer-group <name> remote-as 100` |
-| `protocols bgp <name> peer-group <name> update-source` | Update source | `protocols bgp <name> peer-group <name> update-source 192.0.2.1` |
-| `protocols bgp <name> timers holdtime` | Hold time | `protocols bgp <name> timers holdtime 100` |
-| `protocols bgp <name> timers keepalive` | Keepalive | `protocols bgp <name> timers keepalive 100` |
+| `protocols bfd peer <ip> interval multiplier` | Detect multiplier | `protocols bfd peer <ip> interval multiplier 100` |
+| `protocols bfd peer <ip> interval receive` | Receive interval (ms) | `protocols bfd peer <ip> interval receive 100` |
+| `protocols bfd peer <ip> interval transmit` | Transmit interval (ms) | `protocols bfd peer <ip> interval transmit 100` |
+| `protocols bgp address-family ipv4-unicast maximum-paths ebgp` | eBGP multipath count | `protocols bgp address-family ipv4-unicast maximum-paths ebgp 100` |
+| `protocols bgp address-family ipv4-unicast maximum-paths ibgp` | iBGP multipath count | `protocols bgp address-family ipv4-unicast maximum-paths ibgp 100` |
+| `protocols bgp address-family ipv4-unicast network` | Network to advertise | `protocols bgp address-family ipv4-unicast network 203.0.113.0/24` |
+| `protocols bgp address-family ipv4-unicast redistribute connected` | Redistribute connected | `protocols bgp address-family ipv4-unicast redistribute connected true` |
+| `protocols bgp neighbor <name> address-family ipv4-unicast route-map export` | Export route-map | `protocols bgp neighbor <name> address-family ipv4-unicast route-map export text` |
+| `protocols bgp neighbor <name> address-family ipv4-unicast route-map import` | Import route-map | `protocols bgp neighbor <name> address-family ipv4-unicast route-map import text` |
+| `protocols bgp neighbor <name> address-family ipv4-unicast soft-reconfiguration inbound` | Inbound soft reconfiguration | `protocols bgp neighbor <name> address-family ipv4-unicast soft-reconfiguration inbound true` |
+| `protocols bgp neighbor <name> bfd` | Enable BFD for this neighbor | `protocols bgp neighbor <name> bfd true` |
+| `protocols bgp neighbor <name> description` | Neighbor description | `protocols bgp neighbor <name> description text` |
+| `protocols bgp neighbor <name> local-as` | Local AS override | `protocols bgp neighbor <name> local-as 100` |
+| `protocols bgp neighbor <name> peer-group` | Peer group | `protocols bgp neighbor <name> peer-group text` |
+| `protocols bgp neighbor <name> remote-as` | Peer AS number | `protocols bgp neighbor <name> remote-as 100` |
+| `protocols bgp network` | Network to advertise | `protocols bgp network 203.0.113.0/24` |
+| `protocols bgp parameters bestpath bandwidth` | Bestpath bandwidth (default-weight-for-missing) | `protocols bgp parameters bestpath bandwidth text` |
+| `protocols bgp parameters router-id` | Router ID | `protocols bgp parameters router-id 192.0.2.1` |
+| `protocols bgp peer-group <name> address-family ipv4-unicast route-map export` | Export route-map | `protocols bgp peer-group <name> address-family ipv4-unicast route-map export text` |
+| `protocols bgp peer-group <name> address-family ipv4-unicast route-map import` | Import route-map | `protocols bgp peer-group <name> address-family ipv4-unicast route-map import text` |
+| `protocols bgp peer-group <name> address-family ipv4-unicast soft-reconfiguration inbound` | Inbound soft reconfiguration | `protocols bgp peer-group <name> address-family ipv4-unicast soft-reconfiguration inbound true` |
+| `protocols bgp peer-group <name> bfd` | Enable BFD for this peer-group | `protocols bgp peer-group <name> bfd true` |
+| `protocols bgp peer-group <name> description` | Description | `protocols bgp peer-group <name> description text` |
+| `protocols bgp peer-group <name> remote-as` | Peer AS number | `protocols bgp peer-group <name> remote-as 100` |
+| `protocols bgp peer-group <name> update-source` | Update source | `protocols bgp peer-group <name> update-source 192.0.2.1` |
+| `protocols bgp system-as` | Local AS number | `protocols bgp system-as 100` |
+| `protocols bgp timers holdtime` | Hold time | `protocols bgp timers holdtime 100` |
+| `protocols bgp timers keepalive` | Keepalive | `protocols bgp timers keepalive 100` |
 | `protocols failover route <prefix> next-hop <name> check interface` | Interface to use | `protocols failover route <prefix> next-hop <name> check interface text` |
 | `protocols failover route <prefix> next-hop <name> check target` | Address to check | `protocols failover route <prefix> next-hop <name> check target 192.0.2.1` |
 | `protocols failover route <prefix> next-hop <name> check vrf` | VRF instance name | `protocols failover route <prefix> next-hop <name> check vrf text` |
@@ -607,6 +615,7 @@
 | `system hardware serial` | Hardware serial number (S/N) | `system hardware serial text` |
 | `system hardware vendor` | Hardware vendor name | `system hardware vendor text` |
 | `system host-name` | System hostname | `system host-name edge-1` |
+| `system ip multipath layer4-hashing` | Hash on L3+L4 for ECMP | `system ip multipath layer4-hashing true` |
 | `system language` | System locale (e.g. zh_cn, en) | `system language text` |
 | `system login user <username> authentication encrypted-password` | Encrypted password | `system login user <username> authentication encrypted-password text` |
 | `system login user <username> authentication plaintext-password` | Plain password | `system login user <username> authentication plaintext-password text` |

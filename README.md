@@ -16,7 +16,7 @@ Tab/`?` 补全、`show` 分页、配置快照与漂移检测。
 `container name/network` 等。纯 Python，不依赖 UCI 之外的框架；
 没有 UCI 对应项时才退化为 `ip`/`nft`/`tc`/FRR 等原生命令。
 
-**当前版本：0.2.2**（变更见 [CHANGELOG.md](CHANGELOG.md)）。
+**当前版本：0.2.3**（变更见 [CHANGELOG.md](CHANGELOG.md)）。
 
 - 完整命令参考：[docs/COMMANDS.md](docs/COMMANDS.md)（593 条，自动生成）
 - 操作/配置指南：[docs/GUIDE.md](docs/GUIDE.md)
@@ -268,22 +268,28 @@ set interfaces wireguard wg0 peer 'PEER_PUBKEY' allowed-ips 10.99.0.2/32
 安装 `kmod-wireguard`/`wireguard-tools` 后如果 netifd 不识别新 proto，
 重启一次 network（`/etc/init.d/network restart`）即可。
 
-### BGP（VyOS 1.5 ASN 实例）
+### BGP（VyOS 1.5 system-as）
 
 ```bash
-set protocols bgp 65000 parameters router-id 192.168.75.241
-set protocols bgp 65000 timers holdtime 15
-set protocols bgp 65000 timers keepalive 5
+set protocols bgp system-as 65000
+set protocols bgp parameters router-id 192.168.75.241
+set protocols bgp timers holdtime 15
+set protocols bgp timers keepalive 5
 
-set protocols bgp 65000 address-family ipv4-unicast maximum-paths ibgp 4
-set protocols bgp 65000 address-family ipv4-unicast redistribute connected
+set protocols bgp address-family ipv4-unicast maximum-paths ibgp 4
+set protocols bgp address-family ipv4-unicast maximum-paths ebgp 3
+set protocols bgp address-family ipv4-unicast redistribute connected
+set protocols bgp parameters bestpath bandwidth default-weight-for-missing
 
-set protocols bgp 65000 neighbor 192.168.5.2 remote-as 65002
-set protocols bgp 65000 neighbor 192.168.5.2 local-as 65001
-set protocols bgp 65000 neighbor 192.168.5.2 address-family ipv4-unicast route-map export med100
-set protocols bgp 65000 neighbor 192.168.5.2 address-family ipv4-unicast soft-reconfiguration inbound
-set protocols bgp 65000 neighbor 192.168.5.2 bfd check-control-plane-failure
+set protocols bgp neighbor 192.168.5.2 remote-as 65002
+set protocols bgp neighbor 192.168.5.2 local-as 65001
+set protocols bgp neighbor 192.168.5.2 address-family ipv4-unicast route-map export med100
+set protocols bgp neighbor 192.168.5.2 address-family ipv4-unicast soft-reconfiguration inbound
+set protocols bgp neighbor 192.168.5.2 bfd
 
+set protocols bfd peer 192.168.5.2 interval transmit 300
+set protocols bfd peer 192.168.5.2 interval receive 300
+set protocols bfd peer 192.168.5.2 interval multiplier 3
 set protocols bfd peer 192.168.5.2 echo-mode
 ```
 
@@ -317,8 +323,8 @@ set policy route-map med200 rule 10 action permit
 set policy route-map med200 rule 10 set metric 200
 
 # 无线/电台网 -> MED 100，卫星网 -> MED 200
-set protocols bgp 65000 neighbor 192.168.4.2 address-family ipv4-unicast route-map export med100
-set protocols bgp 65000 neighbor 192.168.75.218 address-family ipv4-unicast route-map export med200
+set protocols bgp neighbor 192.168.4.2 address-family ipv4-unicast route-map export med100
+set protocols bgp neighbor 192.168.75.218 address-family ipv4-unicast route-map export med200
 ```
 
 MED 数值小优先：eth5(0) → eth4(100) → eth0(200)。

@@ -2205,6 +2205,17 @@ TREE = json.loads(r'''[
 "name": "ip-next-hop",
 "help": "BGP next-hop",
 "type": "ipv4"
+},
+{
+"name": "extcommunity",
+"help": "Extended community",
+"children": [
+{
+"name": "bandwidth",
+"help": "Bandwidth (Mbps)",
+"type": "str"
+}
+]
 }
 ]
 }
@@ -2221,9 +2232,12 @@ TREE = json.loads(r'''[
 {
 "name": "bgp",
 "help": "BGP routing (FRR)",
-"dyn": true,
-"tpl_help": "BGP ASN",
 "children": [
+{
+"name": "system-as",
+"help": "Local AS number",
+"type": "int"
+},
 {
 "name": "parameters",
 "help": "BGP parameters",
@@ -2232,6 +2246,17 @@ TREE = json.loads(r'''[
 "name": "router-id",
 "help": "Router ID",
 "type": "ipv4"
+},
+{
+"name": "bestpath",
+"help": "Best path selection",
+"children": [
+{
+"name": "bandwidth",
+"help": "Bestpath bandwidth (default-weight-for-missing)",
+"type": "str"
+}
+]
 }
 ]
 },
@@ -2242,14 +2267,12 @@ TREE = json.loads(r'''[
 {
 "name": "holdtime",
 "help": "Hold time",
-"type": "int",
-"default": 90
+"type": "int"
 },
 {
 "name": "keepalive",
 "help": "Keepalive",
-"type": "int",
-"default": 30
+"type": "int"
 }
 ]
 },
@@ -2262,12 +2285,23 @@ TREE = json.loads(r'''[
 "help": "IPv4 unicast",
 "children": [
 {
+"name": "network",
+"help": "Network to advertise",
+"type": "ipv4_cidr",
+"repeatable": true
+},
+{
 "name": "maximum-paths",
 "help": "Maximum paths",
 "children": [
 {
 "name": "ibgp",
 "help": "iBGP multipath count",
+"type": "int"
+},
+{
+"name": "ebgp",
+"help": "eBGP multipath count",
 "type": "int"
 }
 ]
@@ -2315,14 +2349,8 @@ TREE = json.loads(r'''[
 },
 {
 "name": "bfd",
-"help": "BFD",
-"children": [
-{
-"name": "check-control-plane-failure",
-"help": "BFD check control plane",
+"help": "Enable BFD for this neighbor",
 "type": "bool"
-}
-]
 },
 {
 "name": "address-family",
@@ -2388,14 +2416,8 @@ TREE = json.loads(r'''[
 },
 {
 "name": "bfd",
-"help": "BFD",
-"children": [
-{
-"name": "check-control-plane-failure",
-"help": "BFD check control plane",
+"help": "Enable BFD for this peer-group",
 "type": "bool"
-}
-]
 },
 {
 "name": "address-family",
@@ -2633,6 +2655,27 @@ TREE = json.loads(r'''[
 "name": "echo-mode",
 "help": "Echo mode",
 "type": "bool"
+},
+{
+"name": "interval",
+"help": "BFD interval",
+"children": [
+{
+"name": "transmit",
+"help": "Transmit interval (ms)",
+"type": "int"
+},
+{
+"name": "receive",
+"help": "Receive interval (ms)",
+"type": "int"
+},
+{
+"name": "multiplier",
+"help": "Detect multiplier",
+"type": "int"
+}
+]
 }
 ]
 }
@@ -3812,6 +3855,23 @@ TREE = json.loads(r'''[
 "type": "port"
 }
 ]
+}
+]
+}
+]
+},
+{
+"name": "ip",
+"help": "IP settings",
+"children": [
+{
+"name": "multipath",
+"help": "Multipath settings",
+"children": [
+{
+"name": "layer4-hashing",
+"help": "Hash on L3+L4 for ECMP",
+"type": "bool"
 }
 ]
 }

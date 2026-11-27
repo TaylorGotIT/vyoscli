@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.3 (2026-11-28)
+
+### 新增
+
+- BGP 恢复 VyOS 1.5 system-as 结构，支持 parameters、	imers、
+  ddress-family（network、maximum-paths ibgp/ebgp、redistribute）、
+  neighbor/peer-group 的 BFD、route-map import/export、soft-reconfiguration。
+- protocols bfd peer <ip> interval transmit/receive/multiplier 毫秒级检测。
+- eBGP ECMP：maximum-paths ebgp N 渲染为 FRR maximum-paths N +
+  gp bestpath as-path multipath-relax。
+- system ip multipath layer4-hashing：L3+L4 ECMP 哈希（IPv4/IPv6 sysctl）。
+- route-map set extcommunity bandwidth 与
+  parameters bestpath bandwidth default-weight-for-missing。
+
 ## 0.2.2 (2026-11-18)
 
 ### 改进
