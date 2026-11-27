@@ -81,6 +81,8 @@ from .op_show import (
     _op_show_ipv6_route_summary,
     _op_show_ipv6_route_kernel,
     _op_show_ipv6_route_table,
+    _op_iperf3,
+    _op_iperf,
 )
 
 # ---------- ping ----------
@@ -310,6 +312,10 @@ def build_tree(store: Any) -> CommandTree:
     tree.op_root.children["show"].add(show_sys)
 
     tree.op("ping", help="Ping a host", value_type="host", action=_op_ping)
+    tree.op("iperf3", help="iPerf3 bandwidth test (client or server)",
+            value_type="str", action=_op_iperf3)
+    tree.op("iperf", help="iPerf2 bandwidth test (client or server)",
+            value_type="str", action=_op_iperf)
     tcp_ping = tree.op("ping tcp",
                        help="TCP port check: ping tcp ip <x.x.x.x> port <1-65535>",
                        action=_op_ping_tcp)

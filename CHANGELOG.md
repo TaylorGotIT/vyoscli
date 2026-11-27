@@ -13,6 +13,7 @@
 - system ip multipath layer4-hashing：L3+L4 ECMP 哈希（IPv4/IPv6 sysctl）。
 - route-map set extcommunity bandwidth 与
   parameters bestpath bandwidth default-weight-for-missing。
+- 操作模式新增 iperf / iperf3 测速命令，支持客户端与服务端模式。
 
 ## 0.2.2 (2026-11-18)
 

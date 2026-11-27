@@ -703,6 +703,11 @@ ping 1.1.1.1                  # 交互式长 ping，Ctrl+C 结束；非 TTY 只�
 ping tcp 1.1.1.1 443
 ping tcp ip 1.1.1.1 port 443
 ping udp 1.1.1.1 53
+
+iperf3 192.0.2.10 -t 10      # iPerf3 客户端
+iperf3 server 5201            # iPerf3 服务端
+iperf 192.0.2.10 -t 10       # iPerf2 客户端
+iperf server 5001             # iPerf2 服务端
 ```
 
 `ping tcp/udp` 在 TTY 下每秒重复探测并输出 `[seq]`，Ctrl+C 打印

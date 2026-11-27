@@ -17,6 +17,8 @@ FEATURE_DEPS = [
                   "kmod-ipt-extra iptables-mod-extra".split()),
     ("lldp", ["lldpd"]),
     ("mtr", ["mtr"]),
+    ("iperf", ["iperf"]),
+    ("iperf3", ["iperf3"]),
     ("dns", ["dnsmasq"]),
     ("smartdns", ["smartdns"]),
     ("adguard", ["adguardhome"]),
@@ -1724,3 +1726,65 @@ def _op_show_ipv6_route_table(ctx: Any, value: Any) -> str:
     if not value:
         return "table: table ID required"
     return _vtysh_route6(f"show ipv6 route table {value}", "all")
+
+
+def _iperf_args(tool: str, value: str):
+    import shlex
+    try:
+        parts = shlex.split(value or "")
+    except ValueError as e:
+        return None, f"{tool}: {e}"
+    if not parts:
+        return None, f"{tool}: host required (or 'server [port]')"
+    if parts[0] in ("server", "-s"):
+        args = [tool, "-s"]
+        if len(parts) > 1:
+            args += ["-p", parts[1]] + parts[2:]
+        return args, ""
+    return [tool, "-c", parts[0]] + parts[1:], ""
+
+
+def _op_iperf_run(ctx: Any, value: str, tool: str) -> str:
+    import shutil
+    import subprocess
+    import sys
+    if shutil.which(tool) is None:
+        return f"{tool} not installed (opkg install {tool})"
+    args, err = _iperf_args(tool, value)
+    if err:
+        return err
+    server = "-s" in args
+    if not sys.stdin.isatty():
+        if server:
+            return f"{tool}: server mode needs an interactive TTY"
+        try:
+            r = subprocess.run(args, capture_output=True, text=True,
+                               timeout=90)
+            return (r.stdout or "") + (r.stderr or "")
+        except subprocess.TimeoutExpired:
+            return f"{tool}: timed out"
+    try:
+        proc = subprocess.Popen(args, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True)
+    except OSError as e:
+        return f"{tool}: {e}"
+    try:
+        for line in proc.stdout:
+            print(line, end="", flush=True)
+    except KeyboardInterrupt:
+        proc.terminate()
+        print(f"\n--- {tool} stopped ---")
+    finally:
+        try:
+            proc.wait(timeout=2)
+        except Exception:  # noqa: BLE001
+            proc.kill()
+    return ""
+
+
+def _op_iperf3(ctx: Any, value: Any) -> str:
+    return _op_iperf_run(ctx, value, "iperf3")
+
+
+def _op_iperf(ctx: Any, value: Any) -> str:
+    return _op_iperf_run(ctx, value, "iperf")

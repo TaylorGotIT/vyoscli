@@ -498,6 +498,11 @@ show system drift
 
 ping 1.1.1.1                 # 交互式长 ping，Ctrl+C 结束
 ping tcp 1.1.1.1 443         # 或 ping tcp ip 1.1.1.1 port 443
+
+iperf3 192.0.2.10 -t 10     # iPerf3 客户端测速
+iperf3 server 5201           # iPerf3 服务端（Ctrl+C 结束）
+iperf 192.0.2.10 -t 10      # iPerf2 客户端
+iperf server 5001            # iPerf2 服务端
 ping udp 1.1.1.1 53
 
 show service mtr
