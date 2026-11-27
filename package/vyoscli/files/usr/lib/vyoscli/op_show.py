@@ -1736,7 +1736,9 @@ def _iperf_args(tool: str, value: str):
         return None, f"{tool}: {e}"
     if not parts:
         return None, f"{tool}: host required (or 'server [port]')"
-    if parts[0] in ("server", "-s"):
+    if parts[0] in ("-c", "--client", "-s", "--server"):
+        return [tool] + parts, ""
+    if parts[0] == "server":
         args = [tool, "-s"]
         if len(parts) > 1:
             args += ["-p", parts[1]] + parts[2:]
@@ -1745,6 +1747,8 @@ def _iperf_args(tool: str, value: str):
 
 
 def _op_iperf_run(ctx: Any, value: str, tool: str) -> str:
+    import os
+    import select
     import shutil
     import subprocess
     import sys
@@ -1753,7 +1757,9 @@ def _op_iperf_run(ctx: Any, value: str, tool: str) -> str:
     args, err = _iperf_args(tool, value)
     if err:
         return err
-    server = "-s" in args
+    server = "-s" in args or "--server" in args
+    if sys.stdin.isatty():
+        print(f"{tool}: {' '.join(args)}", flush=True)
     if not sys.stdin.isatty():
         if server:
             return f"{tool}: server mode needs an interactive TTY"
@@ -1763,18 +1769,57 @@ def _op_iperf_run(ctx: Any, value: str, tool: str) -> str:
             return (r.stdout or "") + (r.stderr or "")
         except subprocess.TimeoutExpired:
             return f"{tool}: timed out"
+
+    # Run under a PTY so iperf flushes "Connecting..." and per-second lines
+    # immediately instead of block-buffering on a pipe.
     try:
-        proc = subprocess.Popen(args, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, text=True)
-    except OSError as e:
-        return f"{tool}: {e}"
+        import pty
+        master, slave = pty.openpty()
+        proc = subprocess.Popen(args, stdin=subprocess.DEVNULL,
+                                stdout=slave, stderr=slave,
+                                close_fds=True)
+        os.close(slave)
+    except (ImportError, OSError):
+        try:
+            proc = subprocess.Popen(args, stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, text=True)
+        except OSError as e:
+            return f"{tool}: {e}"
+        try:
+            for line in proc.stdout:
+                print(line, end="", flush=True)
+        except KeyboardInterrupt:
+            proc.terminate()
+            print(f"\n--- {tool} stopped ---")
+        return ""
+    import time
+    started = time.monotonic()
+    seen_output = False
     try:
-        for line in proc.stdout:
-            print(line, end="", flush=True)
+        while True:
+            ready, _, _ = select.select([master], [], [], 0.5)
+            if ready:
+                try:
+                    data = os.read(master, 4096)
+                except OSError:
+                    break
+                if not data:
+                    break
+                seen_output = True
+                sys.stdout.write(data.decode(errors="replace"))
+                sys.stdout.flush()
+            elif proc.poll() is not None:
+                break
+            elif not seen_output and time.monotonic() - started > 15:
+                print(f"{tool}: no output for 15s (connection not established)",
+                      flush=True)
+                proc.terminate()
+                break
     except KeyboardInterrupt:
         proc.terminate()
         print(f"\n--- {tool} stopped ---")
     finally:
+        os.close(master)
         try:
             proc.wait(timeout=2)
         except Exception:  # noqa: BLE001
