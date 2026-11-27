@@ -1759,7 +1759,7 @@ def _op_iperf_run(ctx: Any, value: str, tool: str) -> str:
         return err
     server = "-s" in args or "--server" in args
     if sys.stdin.isatty():
-        print(f"{tool}: {' '.join(args)}", flush=True)
+        print("Running: " + " ".join(args), flush=True)
     if not sys.stdin.isatty():
         if server:
             return f"{tool}: server mode needs an interactive TTY"
