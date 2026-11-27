@@ -3559,6 +3559,22 @@ TREE = json.loads(r'''[
 "type": "str"
 }
 ]
+},
+{
+"name": "banner",
+"help": "Login banner",
+"children": [
+{
+"name": "pre-login",
+"help": "Banner before login",
+"type": "str"
+},
+{
+"name": "post-login",
+"help": "Banner after login",
+"type": "str"
+}
+]
 }
 ]
 },

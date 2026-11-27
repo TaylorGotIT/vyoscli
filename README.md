@@ -479,6 +479,16 @@ set service tph network 192.168.10.0/24
 并下发二层防风暴 + 透明劫持 nftables 规则。需要 `bridge`、`ethtool`、
 `iputils-arping`。
 
+### SSH 登录 banner
+
+```bash
+set system login banner pre-login "Authorized access only"
+set system login banner post-login "Welcome to OpenWrt"
+```
+
+`pre-login` 显示在认证前（dropbear `-b`），`post-login` 在登录后由
+`/etc/profile.d` 输出。支持 `\n` 换行。
+
 ### 运维/诊断
 
 ```bash

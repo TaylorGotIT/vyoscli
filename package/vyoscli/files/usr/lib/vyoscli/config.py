@@ -837,6 +837,7 @@ class ConfigStore:
             ("ipsec", self._apply_ipsec),
             ("dhcp", self._apply_dhcp),
             ("ssh", self._apply_ssh),
+            ("banner", self._apply_login_banner),
             ("ssh-acl", self._apply_ssh_acl),
             ("adguard", self._apply_adguard),
             ("dnsmasq", self._apply_dnsmasq),
@@ -4268,6 +4269,69 @@ while True:
         if permits:
             return [f"ssh-acl: allow-list {len(permits)} prefix(es)"]
         return [f"ssh-acl: {len(allows) + len(denies)} rule(s)"]
+
+    def _apply_login_banner(self, old: Dict[str, Any],
+                           new: Dict[str, Any]) -> List[str]:
+        old_b = (((old.get("system") or {}).get("login") or {})
+                 .get("banner") or {})
+        new_b = (((new.get("system") or {}).get("login") or {})
+                 .get("banner") or {})
+        if old_b == new_b:
+            return []
+        notes = []
+        base = os.path.join(self.base_dir, "ssh-banner")
+        os.makedirs(self.base_dir, exist_ok=True)
+        pre = str(new_b.get("pre-login") or "")
+        post = str(new_b.get("post-login") or "")
+        if pre:
+            with open(base, "w", encoding="utf-8") as f:
+                f.write(pre.replace("\\n", "\n").rstrip("\n") + "\n")
+            try:
+                self._uci("set",
+                          f"dropbear.@dropbear[0].BannerFile={base}")
+            except Exception:  # noqa: BLE001
+                pass
+            notes.append("banner: pre-login configured")
+        else:
+            try:
+                self._uci("delete", "dropbear.@dropbear[0].BannerFile")
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                os.remove(base)
+            except OSError:
+                pass
+        try:
+            self._uci("commit", "dropbear")
+            subprocess.run(["/etc/init.d/dropbear", "restart"],
+                           capture_output=True, text=True, timeout=10)
+        except Exception as e:  # noqa: BLE001
+            notes.append(f"banner: dropbear reload failed ({e})")
+
+        post_file = os.path.join(self.base_dir, "ssh-post-login")
+        profile = "/etc/profile.d/vyos-login-banner.sh"
+        if post:
+            with open(post_file, "w", encoding="utf-8") as f:
+                f.write(post.replace("\\n", "\n").rstrip("\n") + "\n")
+            try:
+                os.makedirs("/etc/profile.d", exist_ok=True)
+                with open(profile, "w", encoding="utf-8") as f:
+                    f.write("[ -t 1 ] && [ -r " + post_file + " ] && cat "
+                            + post_file + "\n")
+                os.chmod(profile, 0o644)
+            except OSError:
+                pass
+            notes.append("banner: post-login configured")
+        else:
+            try:
+                os.remove(post_file)
+            except OSError:
+                pass
+            try:
+                os.remove(profile)
+            except OSError:
+                pass
+        return notes
 
     def _apply_ssh(self, old: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
         old_s = (old.get("service") or {}).get("ssh") or {}

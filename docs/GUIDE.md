@@ -656,6 +656,16 @@ set service tph network 192.168.10.0/24
 - 下发 `bridge tph_shield`：二层防风暴 + 指定源网段透明劫持；
 - 依赖 `bridge`、`ethtool`、`iputils-arping`、nftables。
 
+### SSH 登录 banner
+
+```bash
+set system login banner pre-login "Authorized access only"
+set system login banner post-login "Welcome to OpenWrt"
+```
+
+`pre-login` 对应 dropbear 的登录前 banner，`post-login` 在登录后由
+`/etc/profile.d` 输出；支持 `\n` 换行。
+
 ### 服务状态与重启（操作模式）
 
 ```bash

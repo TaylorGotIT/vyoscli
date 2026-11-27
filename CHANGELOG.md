@@ -4,47 +4,50 @@
 
 ### 新增
 
-- BGP 恢复 VyOS 1.5 system-as 结构，支持 parameters、	imers、
-  ddress-family（network、maximum-paths ibgp/ebgp、redistribute）、
+- BGP 恢复 VyOS 1.5 `system-as` 结构，支持 `parameters`、`timers`、
+  `address-family`（network、maximum-paths ibgp/ebgp、redistribute）、
   neighbor/peer-group 的 BFD、route-map import/export、soft-reconfiguration。
-- protocols bfd peer <ip> interval transmit/receive/multiplier 毫秒级检测。
-- eBGP ECMP：maximum-paths ebgp N 渲染为 FRR maximum-paths N +
-  gp bestpath as-path multipath-relax。
-- system ip multipath layer4-hashing：L3+L4 ECMP 哈希（IPv4/IPv6 sysctl）。
-- route-map set extcommunity bandwidth 与
-  parameters bestpath bandwidth default-weight-for-missing。
-- 操作模式新增 iperf / iperf3 测速命令，支持客户端与服务端模式。
-- 操作模式新增 	c 命令，透传 qdisc/class/filter 查询，便于网络测试。
+- `protocols bfd peer <ip> interval transmit/receive/multiplier` 毫秒级检测。
+- eBGP ECMP：`maximum-paths ebgp N` 渲染为 FRR `maximum-paths N` +
+  `bgp bestpath as-path multipath-relax`。
+- `system ip multipath layer4-hashing`：L3+L4 ECMP 哈希（IPv4/IPv6 sysctl）。
+- route-map `set extcommunity bandwidth` 与
+  `parameters bestpath bandwidth default-weight-for-missing`。
+- 操作模式新增 `iperf` / `iperf3` 测速命令，支持客户端与服务端模式，
+  兼容 `-c host` 写法并实时输出。
+- 操作模式新增 `tc` 命令，透传 qdisc/class/filter 查询，便于网络测试。
+- 新增 VyOS 风格 SSH banner：`system login banner pre-login/post-login`。
 
 ## 0.2.2 (2026-11-18)
 
 ### 改进
 
-- BGP 配置改为 **FRR 热加载**：使用 rr-reload.py --reload 应用
-  frr.conf，路由/邻居/route-map 变更不再重启 FRR，已有邻居保持 Established，
-  uptime 不重置。
+- BGP 配置改为 **FRR 热加载**：使用 `frr-reload.py --reload` 应用
+  frr.conf，路由/邻居/route-map 变更不再重启 FRR，已有邻居保持
+  Established，uptime 不重置。
 - 仅当新增/删除 FRR daemon（如启用 ospfd/ripd/bfdd）时才后台重启。
-- 新增依赖 rr-pythontools（提供 frr-reload.py）。
-- 新增 service tph 透明网桥劫持：FDB 自动识别 WAN/LAN、同步网桥 MAC、
-  二层防风暴与指定网段劫持；桥支持 mac、ddress dhcp、
-  member interface ...，member 改为可重复列表。
+- 新增依赖 `frr-pythontools`（提供 frr-reload.py）。
+- 新增 `service tph` 透明网桥劫持：FDB 自动识别 WAN/LAN、同步网桥 MAC、
+  二层防风暴与指定网段劫持；桥支持 `mac`、`address dhcp`、
+  `member interface ...`，member 改为可重复列表。
 
 ### 打包
 
-- 完整依赖包：dist/vyoscli_0.2.2-r1_all-full.ipk
-  - SHA256：32BF3F2A68E0A797861C6995F66AC6EEAE285E840A64E3E0DB6AB4B1D544E8C6
-- 最小依赖包：dist/vyoscli_0.2.2-r1_all-minimal.ipk
-  - SHA256：A8B30A5EBAFF2368446BC2F68834466220D04D3DE4BE2FAFFBB118ECDAD77327
+- 完整依赖包：`dist/vyoscli_0.2.2-r1_all-full.ipk`
+  - SHA256：`32BF3F2A68E0A797861C6995F66AC6EEAE285E840A64E3E0DB6AB4B1D544E8C6`
+- 最小依赖包：`dist/vyoscli_0.2.2-r1_all-minimal.ipk`
+  - SHA256：`A8B30A5EBAFF2368446BC2F68834466220D04D3DE4BE2FAFFBB118ECDAD77327`
 
 ## 0.2.1 (2026-11-17)
 
 ### 新增
 
-- show ipv6 route：支持 gp、connected、static、summary、
-  kernel/orward、	able <id>，以及 show ipv6 route <prefix>；
-  Tab 会列出子命令和 <h:h:h:h:h:h:h:h/x> 提示。
-- 启动 banner、show version 和终端标题显示当前版本；yoscli --version 可直接查询。
-- show interfaces ethernet <name> 拼错时给出 Did you mean 和可用接口列表。
+- `show ipv6 route`：支持 `bgp`、`connected`、`static`、`summary`、
+  `kernel`/`forward`、`table <id>`，以及 `show ipv6 route <prefix>`；
+  Tab 会列出子命令和 `<h:h:h:h:h:h:h:h/x>` 提示。
+- 启动 banner、`show version` 和终端标题显示当前版本；
+  `vyoscli --version` 可直接查询。
+- `show interfaces ethernet <name>` 拼错时给出 `Did you mean` 和可用接口列表。
 - Tab 前缀无匹配时仍列出当前层候选，不再静默。
 
 ## 0.2.0 (2026-11-07)

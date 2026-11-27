@@ -617,6 +617,8 @@
 | `system host-name` | System hostname | `system host-name edge-1` |
 | `system ip multipath layer4-hashing` | Hash on L3+L4 for ECMP | `system ip multipath layer4-hashing true` |
 | `system language` | System locale (e.g. zh_cn, en) | `system language text` |
+| `system login banner post-login` | Banner after login | `system login banner post-login text` |
+| `system login banner pre-login` | Banner before login | `system login banner pre-login text` |
 | `system login user <username> authentication encrypted-password` | Encrypted password | `system login user <username> authentication encrypted-password text` |
 | `system login user <username> authentication plaintext-password` | Plain password | `system login user <username> authentication plaintext-password text` |
 | `system login user <username> authentication public-keys <key-id> key` | Public key content | `system login user <username> authentication public-keys <key-id> key text` |
