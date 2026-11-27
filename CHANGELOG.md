@@ -17,6 +17,8 @@
   兼容 `-c host` 写法并实时输出。
 - 操作模式新增 `tc` 命令，透传 qdisc/class/filter 查询，便于网络测试。
 - 新增 VyOS 风格 SSH banner：`system login banner pre-login/post-login`。
+- `ping udp` 改用标准 DNS 查询，支持任意端口自定义文本/`hex:` payload，
+  并区分 ICMP 端口不可达与静默超时。
 
 ## 0.2.2 (2026-11-18)
 

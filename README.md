@@ -517,6 +517,11 @@ iperf server 5001            # iPerf2 服务端
 tc qdisc show dev eth1       # 查看出口队列
 tc -s qdisc show dev eth1    # 队列统计/丢包/requeues
 ping udp 1.1.1.1 53
+ping udp 127.0.0.1 9999 hello       # 任意端口：自定义文本 payload
+ping udp 127.0.0.1 9999 hex:0001    # 任意端口：自定义十六进制 payload
+
+UDP 没有统一应答协议：未指定 payload 时发送 `0x00`，服务不回包会显示
+`no reply`；收到 ICMP port unreachable 时显示 `service closed`。
 
 show service mtr
 set service mtr t1 target 1.1.1.1

@@ -713,6 +713,11 @@ ping 1.1.1.1                  # 交互式长 ping，Ctrl+C 结束；非 TTY 只�
 ping tcp 1.1.1.1 443
 ping tcp ip 1.1.1.1 port 443
 ping udp 1.1.1.1 53
+ping udp 127.0.0.1 9999 hello       # 任意端口：自定义文本 payload
+ping udp 127.0.0.1 9999 hex:0001    # 任意端口：自定义十六进制 payload
+
+UDP 无统一应答：默认发送 `0x00`，服务不回包显示 `no reply`；ICMP 端口不可达
+显示 `service closed`。
 
 iperf3 192.0.2.10 -t 10      # iPerf3 客户端
 iperf3 server 5201            # iPerf3 服务端

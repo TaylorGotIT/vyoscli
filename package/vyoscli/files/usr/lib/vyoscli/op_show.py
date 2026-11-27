@@ -1087,9 +1087,15 @@ def _udp_probe(host: str, port: int, payload: bytes, label: str):
             elapsed = (time.perf_counter() - start) * 1000
             return True, (f"udp {host}:{port}: {label} reply "
                           f"{len(data)} byte(s), time={elapsed:.1f} ms")
-        except (socket.timeout, ConnectionRefusedError):
+        except ConnectionRefusedError:
+            return False, (f"udp {host}:{port}: port unreachable (ICMP), "
+                           f"service closed")
+        except socket.timeout:
+            hint = (" (service may require a protocol payload; pass text "
+                    "or hex:...)" if label == "generic" else "")
             return False, (f"udp {host}:{port}: no reply to {label} probe "
-                           f"(open|filtered, or service does not answer)")
+                           f"(open|filtered, or service does not answer)"
+                           + hint)
         finally:
             sock.close()
     except OSError as e:  # noqa: BLE001
